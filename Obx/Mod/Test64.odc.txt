@@ -1,0 +1,16 @@
+MODULE ObxTest64;
+	TYPE
+		Ptr = POINTER TO Rec;
+		Rec = RECORD next: Ptr; val: INTEGER; name: POINTER TO ARRAY OF CHAR END;
+	VAR
+		head: Ptr;
+		globalStr: POINTER TO ARRAY OF CHAR;
+
+	PROCEDURE Run*;
+	BEGIN
+		NEW(head);
+		head.val := 42;
+		NEW(globalStr, 256)
+	END Run;
+
+END ObxTest64.

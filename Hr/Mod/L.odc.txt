@@ -1,0 +1,2355 @@
+MODULE HrL;	(* L = Low-level code generator *)
+(**
+	project	= "BlackBox"
+	organization	= "www.oberon.ch"
+	contributors	= "Oberon microsystems"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "Docu/BB-License"
+	references	= "http://e-collection.library.ethz.ch/eserv/eth:39386/eth-39386-02.pdf"
+	changes	= ""
+	issues	= ""
+
+**)
+
+	IMPORT SYSTEM, DevCPM, DevCPT, DevCPE,
+		Y := HrSyn, 
+		T := HrT, E := HrE, M := HrM
+		;
+	
+	TYPE
+		Item* = RECORD
+			mode*,  tmode*, form: BYTE;
+			what*: INTEGER;
+			offset*, index*, reg*, scale*: INTEGER; (* adr = offset + index * scale *)
+			typ: DevCPT.Struct;
+			obj: DevCPT.Object;
+			type*: T.Type;
+			o*: T.Object;
+			lit*: T.Literal;	(*  *)
+			flags*: SET;	(* strCon *)	(* without fixups *)
+		END ;
+		
+(* Items:
+
+	 mode	| offset	index		scale		reg     obj
+------------------------------------------------
+ 1 Var	 | adr		 xreg		 scale					  obj  (ea = FP + adr + xreg * scale)
+ 2 VarPar| off     xreg     scale            obj  (ea = [FP + obj.adr] + off + xreg * scale)
+ 3 Con	 | val              (val2)           NIL
+							LONGINT constants: value = offset + ASH(scale, 32)
+   Con   | off                               obj  (val = adr(obj) + off)
+	 Con	 | id														    NIL  (for predefined reals)
+ 6 LProc |                                   obj
+ 7 XProc |                                   obj  T.Proc   for passing to C.Call
+ 9 CProc |                                   obj						
+10 IProc |                                   obj
+13 TProc | mthno						0/1		          obj	(0 = normal / 1 = super call)
+14 Ind	 | off		 xreg		 scale		Reg	      	(ea = Reg + off + xreg * scale)
+15 Abs	 | adr		 xreg		 scale				    NIL  (ea = adr + xreg * scale) 
+   Abs	 | off		 xreg		 scale				    obj  (ea = adr(obj) + off + xreg * scale)
+   Abs   | off     len      0                obj  (for constant strings and reals)
+16 Stk	 |																      	(ea = ESP)
+17 Cond	| CC
+18 Reg	 |				(Reg2)						 Reg
+19 DInd	| off		 xreg		 scale		Reg	      	(ea = [Reg + off + xreg * scale])
+
+	tmode	| record tag     array desc	(* is it 'tag mode'? *)
+-------------------------------------
+  VarPar | [FP + obj.adr + 4]  [FP + obj.adr]
+  Ind    | [Reg - 4]         [Reg + 8]
+  Con    | Adr(typ.strobj)
+
+*)
+
+	CONST
+		processor* = 12; (* for amd64; during development, this changes to reflect OCF format changes
+			!!! Sync with HrOcr.amd64 and A2:AdOcf.amd64 *)
+		NewLbl* = 0;
+
+	TYPE
+		Label* = INTEGER; (* 0: unassigned, > 0: address, < 0: - (linkadr + linktype * 2^24) *)
+		
+	VAR
+		level*: BYTE;
+		one*: T.Real;
+
+	CONST
+		(* item base modes (=object modes) *)
+		Var = 1; VarPar = 2; Con = 3; LProc = 6; XProc = 7; CProc = 9; IProc = 10; TProc = 13;
+	
+		(* item modes for i386 (must not overlap item basemodes,	> 13) *)
+		Ind = 14; Abs = 15; Stk = 16; Cond = 17; Reg = 18; DInd = 19;
+		Xmm = 20;
+	
+		(* structure forms *)
+		Undef = 0; Byte = 1; Bool = 2; Char8 = 3; Int8 = 4; Int16 = 5; Int32 = 6;
+		Real32 = 7; Real64 = 8; Set = 9; String8 = 10; NilTyp = 11; NoTyp = 12;
+		Pointer = 13; ProcTyp = 14; Comp = 15;
+		Char16 = 16; String16 = 17; Int64 = 18; Guid = 23;
+		
+		(* composite structure forms *)
+		Basic = 1; Array = 2; DynArr = 3; Record = 4;
+		
+		(* condition codes *)
+		ccB = 2; ccAE = 3; ccBE = 6; ccA = 7; (* unsigned *)
+		ccL = 12; ccGE = 13; ccLE = 14; ccG = 15; (* signed *)
+		ccE = 4; ccNE = 5; ccS = 8; ccNS = 9; ccO = 0; ccNO = 1;
+		ccAlways = -1; ccNever = -2; ccCall = -3;
+		
+		(* registers *)
+		AX = 0; CX = 1; DX = 2; BX = 3; SP = 4; BP = 5; SI = 6; DI = 7; AH = 4; CH = 5; DH = 6; BH = 7;
+		R8 = 8; R9 = 9;
+		
+		(* fixup types *)
+		absolute = 100; relative = 101; copy = 102; table = 103; tableend = 104; short = 105; 
+		ripBased = 106;	(* for RIP-relative displacement *)
+		ripBased1 = ripBased + 1 (*107*);	(* RIP-based displacement; Disp field to be followed by a 1-byte Imm field *)
+		ripBased2 = ripBased + 2 (*108*);	(* RIP-based displacement; Disp field to be followed by a 2-byte Imm field *)
+		ripBased4 = ripBased + 4 (*110*);	(* RIP-based displacement; Disp field to be followed by a 4-byte Imm field *)
+		ripBased8 = ripBased + 8 (*114*);	(* RIP-based displacement; Disp field to be followed by an 8-byte Imm field *)
+		
+		(* system trap numbers *)
+		withTrap = -1; caseTrap = -2; funcTrap = -3; typTrap = -4;
+		recTrap = -5; ranTrap = -6; inxTrap = -7; copyTrap = -8;
+		
+		doubles* = { T.fInt32, T.fSet };
+		quads* = { T.fInt64 } + T.pointers;
+		words* = { T.fInt16, T.fChar16 };
+		bytes* = { T.fInt8, T.fByte, T.fChar8, T.fBool };
+		
+		REXW = 48H;	(* 64-bit prefix; for easier lookup of locations where it's used *)
+		Rex = BITS(40H); RexW = 3; RexR = 2; RexX = 1; RexB = 0;
+		
+		(* Operation for use in LGenOp... procedures *)
+		fix1 = 11; fix8 = 12; noFixOp = 13; 
+		fixShort = 14; 	(* out the immediate value as 1 byte, if possible, and fix the opcode by 2 in this case. Requires an immediate value - i.e. a constant *)
+		addReg = 4;
+		noReg = 5;	(* the reg field is not a register, but rather an opcode extension in the MRM.reg field *)
+		noRexW = 6;	(* operation defaults to 64-bit operands (i.e. PUSH) *)
+		forceRexW = 7;
+		szPref = 8;
+		op1 = 9;
+		xmm = 15;	(* an XMM instruction *)
+		noMRM = 16;	(* no MRM-SIB bytes; for instructions operating on AX *)
+		(* maybe fix8 <= fix1 & addReg? *)
+		ignored = -9999;
+		XMM0* = 0; XMM1* = 1; XMM2* = 2; XMM3* = 3;
+
+	VAR
+		Size, SSize-: ARRAY 32 OF INTEGER;	(* Size[typ.form] == +/- typ.size *)
+			(* SSize is a duplicate for use with .what rather than .form of Item *)
+			(* i'm undecided on whether it should be exported; used at least in C to check sizes based on .what *)
+		a1, a2: Item;
+		halter: BOOLEAN;
+		MRM, SIB, DISPLEN, DISP: INTEGER;	(* instruction fields *)
+		SIZEPREF, hasMRM, hasSIB, XXMM: BOOLEAN;
+		REX, REXIGNORE: SET;
+		unused: Item;	(** .what = T.fUndef: for use in calls to DoGenOp2 when the imm operand isn't needed *)
+	
+	TYPE 
+		LowLevelCoder* = POINTER TO RECORD END;
+
+	PROCEDURE MakeReg* (VAR x: Item; reg: INTEGER; form: BYTE);
+	BEGIN
+		ASSERT((reg >= 0) & (reg < 8));
+		x.mode := Reg; x.reg := reg; x.form := form
+	END MakeReg;
+	
+	PROCEDURE LMakeReg* (VAR x: Item; reg: INTEGER; what: INTEGER);
+	BEGIN
+		ASSERT((reg >= 0) & (reg < 15));	(* XMM 0..15 => -1..-16; GPR => 0..15 *)(*!*)
+		x.mode := Reg; x.reg := reg; x.what := what
+	END LMakeReg;
+	
+	PROCEDURE MakeConst* (VAR x: Item; val: INTEGER; form: BYTE);
+	BEGIN
+		x.mode := Con; x.offset := val; x.form := form; x.obj := NIL;
+	END MakeConst;
+	
+	PROCEDURE LMakeConst* (VAR x: Item; val: LONGINT; what: INTEGER);
+		VAR tmp, temp: LONGINT;
+	BEGIN
+		x.mode := Con; 
+		IF what IN quads + { T.fType } THEN
+			(*IF (MIN(INTEGER) <= val) & (val <= MAX(INTEGER)) THEN x.offset := SHORT(val); x.scale := 0
+			ELSE*) temp := val MOD 100000000L; x.offset := SHORT(temp); 
+				tmp := val DIV 100000000L; x.scale := SHORT(tmp)
+			(*END*)
+		ELSE (*ASSERT((MIN(INTEGER) <= val) & (val <= MAX(INTEGER)), 20); imho not applicable: at this *)
+			(*IF val > MAX(INTEGER) THEN *)
+			temp := val MOD 100000000L; x.offset := SHORT(temp); x.scale := 0;
+			(*ELSE x.offset := SHORT(val)
+			END;*)
+			(*x.offset := SHORT(ASH(ASH(val, 32), -32))*)
+		END;
+		x.form := -1; x.what := what; x.obj := NIL;
+				(* how about named constants as opposed to anonymous literals? *)
+	END LMakeConst;
+	
+	PROCEDURE AllocConst* (VAR x: Item; con: DevCPT.Const; form: BYTE);
+		VAR r: REAL; short: SHORTREAL;
+	BEGIN
+		IF form IN {Real32, Real64} THEN
+			r := con.realval;
+			IF ABS(r) <= MAX(SHORTREAL) THEN
+				short := SHORT(r);
+				IF short = r THEN form := Real32	(* a shortreal can represent the exact value *)
+				ELSE form := Real64	(* use a real *)
+				END
+			ELSE form := Real64	(* use a real *)
+			END
+		ELSIF form IN {String8, String16, Guid} THEN
+			x.index := con.intval2	(* string length *)
+		END;
+		DevCPE.AllocConst(con, form, x.obj, x.offset);
+		x.form := form; x.mode := Abs; x.scale := 0
+	END AllocConst;
+
+	PROCEDURE LAllocLiteral* (OUT x: Item; lit: T.Literal; what: INTEGER);
+		VAR real: REAL; short: SHORTREAL;
+	BEGIN
+		IF what IN T.reals THEN ASSERT(what = lit.type.what)
+		ELSIF what = Guid THEN HALT(126)
+		ELSIF what IN T.strings + { Guid } THEN
+			x.index := lit(T.StringLit).len + 1	(* string length *)
+		END;
+		E.EAllocLiteral(lit, what, (*x.o, *)x.offset);
+		x.what := what; x.mode := Abs; x.scale := 0; x.lit := lit
+	END LAllocLiteral;
+	
+	(*******************************************************)
+	
+	PROCEDURE BegStat*; (* general-purpose procedure which is called before each statement *)
+	BEGIN
+	END BegStat;
+
+	PROCEDURE LBegStat*; (* general-purpose procedure which is called before each statement *)
+	BEGIN
+	END LBegStat;
+
+	PROCEDURE EndStat*; (* general-purpose procedure which is called after each statement *)
+	BEGIN
+	END EndStat;
+
+	PROCEDURE LEndStat*; (* general-purpose procedure which is called after each statement *)
+	BEGIN
+	END LEndStat;
+
+	(*******************************************************)
+	
+	PROCEDURE SetLabel* (VAR L: Label);
+		VAR link, typ, disp, x: INTEGER;
+	BEGIN
+		ASSERT(L <= 0); link := -L;
+		WHILE link # 0 DO
+			typ := link DIV 1000000H; link := link MOD 1000000H;
+			IF typ = short THEN
+				disp := DevCPE.pc - link - 1; ASSERT(disp < 128);
+				DevCPE.PutByte(link, disp); link := 0
+			ELSIF typ = relative THEN
+				x := DevCPE.ThisWord(link); DevCPE.PutWord(link, DevCPE.pc - link - 4); link := x
+			ELSE
+				x := DevCPE.ThisWord(link); DevCPE.PutWord(link, DevCPE.pc + typ * 1000000H); link := x
+			END
+		END;		
+		L := DevCPE.pc;
+		a1.mode := 0; a2.mode := 0
+	END SetLabel;
+	
+	PROCEDURE LSetLabel* (VAR L: Label);
+		VAR link, typ, disp, x: INTEGER;
+	BEGIN
+		ASSERT(L <= 0); link := -L;
+		WHILE link # 0 DO
+			typ := link DIV 1000000H; link := link MOD 1000000H;
+			IF typ = short THEN
+				disp := E.pc - link - 1; ASSERT(disp < 128);
+				E.PutByte(link, disp); link := 0
+			ELSIF typ = relative THEN
+				x := E.ThisWord(link); E.PutWord(link, E.pc - link - 4); link := x
+			ELSE
+				x := E.ThisWord(link); E.PutWord(link, E.pc + typ * 1000000H); link := x
+			END
+		END;		
+		L := E.pc;
+		a1.mode := 0; a2.mode := 0
+	END LSetLabel;
+	
+
+	(*******************************************************)
+	
+	PROCEDURE GenWord (x: INTEGER);
+	BEGIN
+		E.GenByte(x); E.GenByte(x DIV 256)
+	END GenWord;
+
+	PROCEDURE GenDbl (x: INTEGER);
+	BEGIN
+		E.GenByte(x); E.GenByte(x DIV 256); E.GenByte(x DIV 10000H); E.GenByte(x DIV 1000000H)
+	END GenDbl;
+	
+	PROCEDURE GenQuad (a, b: INTEGER);
+	BEGIN GenDbl(a); GenDbl(b)
+	END GenQuad;
+	
+	PROCEDURE CaseEntry* (tab, from, to: INTEGER);
+		VAR a, e: INTEGER;
+	BEGIN
+		a := tab + 4 * from; e := tab + 4 * to;
+		WHILE a <= e DO
+			DevCPE.PutByte(a, DevCPE.pc);
+			DevCPE.PutByte(a + 1, DevCPE.pc DIV 256);
+			DevCPE.PutByte(a + 2, DevCPE.pc DIV 65536);
+			INC(a, 4)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END CaseEntry;
+
+	PROCEDURE GenLinked (VAR x: Item; type: BYTE);	(** emit reference for a global variable *)
+		VAR link: DevCPT.LinkList;
+	BEGIN
+		IF x.obj = NIL THEN GenDbl(SHORT(x.offset))
+		ELSE
+			link := DevCPE.OffsetLink(x.obj, SHORT(x.offset));
+			IF link # NIL THEN
+				GenDbl(type * 1000000H + link.linkadr MOD 1000000H);
+				link.linkadr := DevCPE.pc - 4
+			ELSE GenDbl(0)
+			END
+		END
+	END GenLinked;
+	
+	PROCEDURE LGenRef (VAR x: Item; pos, type: INTEGER; OUT val: INTEGER);
+	(* type is a bad parameter name: the word usually refers to CP types, here it refers to the kind of bookmark *)
+	(** generate (but don't emit) reference value: base or binding relocation bookmark for a global var/proc; typically used as the machine operation Displacement. pos is the position in the machine text where the reference will be emitted *)
+		VAR link: DevCPT.LinkList; 
+			lit: T.Literal; last: INTEGER; o: T.Object; t: T.Type;
+	BEGIN val := -1;
+		o := x.o;
+		IF o =	(* without fixups *) NIL THEN	(* for literals *)
+			ASSERT(type >= ripBased);
+			IF x.what IN T.strings + T.reals + { T.fInt64, T.fInt32 } THEN 	(* merge braches *)
+				E.BookmarkLiteral2(x.lit, pos, last); val := type * 1000000H + last MOD 1000000H
+			(*ELSIF x.what IN T.reals + T.integers THEN
+				E.BookmarkLiteral2(x.lit, pos, last); val := type * 1000000H + last MOD 1000000H*)
+			ELSIF x.what = T.fType THEN ASSERT(x.type # NIL, 20); ASSERT(x.type IS T.Record, 126);
+				(*IF x.type.typeName # NIL THEN ASSERT(x.type.typeName.imno = 0) END;*)
+				t := x.type; 
+				WITH t: T.Record DO 
+					E.AppendTypeRIP(t, pos, last); val := type * 1000000H + last MOD 1000000H
+				ELSE HALT(126)
+				END
+			ELSE HALT(126)
+				(*(* without fixups: *)
+				val := -(pos + 4 + (type - ripBased)) + x.offset*)
+			END
+		(*not needed since CTyp now requests type descriptors thru .what = T.fType  ELSIF o IS T.TypeName THEN 
+			E.BookmarkType(o(Y.TypeName), pos, last); val := type * 1000000H + last MOD 1000000H*)
+		ELSIF type >= ripBased THEN (* let's assume that the code segment immediately follows the data segment;  *)
+			ASSERT(o.owner.nesting = 0);	(* only global objects *)
+			IF (o IS T.XProc) & (o.imno = 0) & (o(T.XProc).adr > 0) THEN	(* domestic global procedure - out address immediately *)
+				val := o(T.XProc).adr - (pos + 4 + (type - ripBased)) 	(* +4 is the size of Disp field being written *)
+			ELSE 	(* imported global object or domestic global var *)
+				ASSERT((o IS T.XProc) OR (o IS T.GlobVar), 126);
+				E.BookmarkThis(o, x.offset, pos, last);
+				val := type * 1000000H + last MOD 1000000H
+			END
+		ELSE HALT(126);	(* this branch is for non-RIP-relative fixup types *)
+			E.EOutCodeBookmark(x.o, absolute)
+		END
+		;ASSERT(val # -1, 60)
+	END LGenRef;
+	
+	PROCEDURE LGenLinked (VAR x: Item; type: INTEGER);
+		VAR val: INTEGER;
+	BEGIN LGenRef(x, E.pc, type, val); GenDbl(val)
+	END LGenLinked;
+	
+	PROCEDURE CheckSize (form: BYTE; VAR w: INTEGER);
+	BEGIN
+		IF form IN {Int16, Char16} THEN DevCPE.GenByte(66H); w := 1
+		ELSIF form >= Int32 THEN ASSERT(form IN {Int32, Set, NilTyp, Pointer, ProcTyp}); w := 1
+		ELSE w := 0
+		END
+	END CheckSize;
+	
+	PROCEDURE LCheckSize (what: INTEGER; long: BOOLEAN; VAR w, byteLen: INTEGER);
+		(*CONST REXW = 48H;	(* REX prefix with W bit set, to indicate 64-bit operand size *)*)
+	BEGIN
+		HALT(9);	(*deprecated*)
+		IF what IN words THEN E.GenByte(66H); w := 1; byteLen := 2	(* operand size override for 16bit *)
+		ELSIF what IN doubles THEN w := 1; byteLen := 4
+		ELSIF what IN { T.fInt64 } + T.pointers THEN w := 1; byteLen := 4; IF long THEN (*E.GenByte(REXW) *)END
+		ELSIF (*unreachable branch*) what IN quads THEN (*E.GenByte(REXW);*) w := 1; byteLen := 8
+		ELSIF what IN bytes THEN w := 0; byteLen := 1	(* 8-bit operands *)
+		ELSE HALT(20)
+		END
+		(* w = 0 results in 0B0H for MOV, w = 1 results in 0B8H for MOV *)
+	END LCheckSize;
+	(* CheckSize in CP2 generates the operand size override prefix. This is fine in amd64 as long as the extended features like the extra registers (GPR) are used. Because referencig R8..R16 is done thru a bit in the REX prefix; at this point, in CheckSize, this information is not available, thus the proper prefix cannot be written. Some other structure will be required. *)
+	
+	PROCEDURE LCheckPrefix (what: INTEGER; long: BOOLEAN; VAR w, byteLen: INTEGER);
+		CONST REXW = 48H;	(* REX prefix with W bit set, to indicate 64-bit operand size *)
+	BEGIN
+		SIZEPREF := FALSE; REX := {};
+		IF what IN words THEN SIZEPREF := TRUE; w := 1; byteLen := 2	(* operand size override for 16bit *)
+		ELSIF what IN doubles THEN w := 1; byteLen := 4
+		ELSIF what IN { T.fInt64 } + T.pointers THEN w := 1; byteLen := 4; IF long THEN INCL(REX, RexW) END
+		ELSIF (*unreachable branch*) what IN quads THEN INCL(REX, RexW); w := 1; byteLen := 8
+		ELSIF what IN bytes THEN w := 0; byteLen := 1	(* 8-bit operands *)
+		ELSE HALT(20)
+		END
+		(* w = 0 results in 0B0H for MOV, w = 1 results in 0B8H for MOV *)
+	END LCheckPrefix;
+
+	PROCEDURE LCheckPrefixes (what: INTEGER; VAR opts: SET);
+	BEGIN 			(* could INCL op1 in the first place and then exclude it in one case *)
+		IF (what = T.fReal64) & (xmm IN opts) THEN INCL(opts, RexW)
+		ELSIF what IN T.reals THEN
+		ELSIF what IN words THEN opts := opts + { szPref, op1 } 	(* operand size override for 16bit *)
+		ELSIF what IN doubles THEN INCL(opts, op1)
+		ELSIF what IN { T.fInt64, T.fType } + T.pointers THEN opts := opts + { op1, RexW }
+		ELSIF what IN bytes THEN	(* 8-bit operands - op1 not included *)
+		ELSIF what IN { T.fRecord, T.fArray, T.fArrayPtr } + T.strings THEN INCL(opts, RexW)	(* LEA operations? *)
+		ELSE HALT(20)
+		END
+	END LCheckPrefixes;
+
+	PROCEDURE CheckForm (form: BYTE; VAR mf: INTEGER);
+	BEGIN
+		IF form = Real32 THEN mf := 0
+		ELSIF form = Real64 THEN mf := 4
+		ELSIF form = Int32 THEN mf := 2
+		ELSE ASSERT(form = Int16); mf := 6
+		END
+	END CheckForm;
+
+	PROCEDURE LCheckForm (what: INTEGER; VAR mf: INTEGER);
+	BEGIN
+		IF what = T.fReal32 THEN mf := 0
+		ELSIF what = T.fReal64 THEN mf := 4
+		ELSIF what = T.fInt32 THEN mf := 2
+		ELSIF what = T.fChar16 THEN mf := 6	(*experimental, cf. B.CheckCharConv*)
+		ELSE ASSERT(what = T.fInt16); mf := 6
+		END
+	END LCheckForm;
+
+	PROCEDURE LLCheckForm (what: INTEGER): INTEGER;
+	BEGIN
+		IF what = T.fReal32 THEN what := 0
+		ELSIF what = T.fReal64 THEN what := 4
+		ELSIF what = T.fInt32 THEN what := 2
+		ELSIF what = T.fChar16 THEN what := 6	(*experimental, cf. B.CheckCharConv*)
+		ELSE ASSERT(what = T.fInt16); what := 6
+		END;
+		RETURN what
+	END LLCheckForm;
+
+	PROCEDURE FloatOpFix (IN float: Item): INTEGER;
+		VAR what: INTEGER;
+	BEGIN
+		IF float.lit # NIL THEN ASSERT(float.mode IN { Abs, Ind, Stk }); what := float.lit.type.what 
+		ELSE what := float.what 
+		END;
+		IF what = T.fReal32 THEN what := 0
+		ELSIF what = T.fReal64 THEN what := 4
+		ELSIF what = T.fInt32 THEN what := 2
+		ELSIF what = T.fChar16 THEN what := 6	(*experimental, cf. B.CheckCharConv*)
+		ELSE ASSERT(what = T.fInt16); what := 6
+		END;
+		RETURN what
+	END FloatOpFix;
+	
+	PROCEDURE CheckConst (VAR x: Item; VAR s: INTEGER);
+	BEGIN
+		IF (x.form > Int8) & (x.offset >= -128) & (x.offset < 128) & (x.obj = NIL) THEN s := 2
+		ELSE s := 0
+		END 
+	END CheckConst;
+	
+	PROCEDURE LCheckConst (VAR x: Item; VAR s: INTEGER);
+	BEGIN
+		ASSERT(x.what IN T.integers + T.chars + T.booleans + T.sets + T.pointers + T.strings, 126);
+		IF (x.what IN T.integers + { T.fChar16 } + T.sets + T.pointers) & (x.offset >= -128) & (x.offset < 128) & (x.o = NIL)
+		THEN s := 2
+		ELSE s := 0
+		END 
+	END LCheckConst;
+	
+	PROCEDURE DoGenConst (VAR x: Item; short, emit: BOOLEAN; VAR immLen: INTEGER);
+		(** emit code for an immediate value *)
+	BEGIN	ASSERT(x.what IN T.integers + T.chars + { T.fBool, T.fSet} + T.pointers, 20);
+		ASSERT(x.o = NIL, 21);
+		IF (x.what IN bytes) OR (short & (x.offset >= -128) & (x.offset < 128)) THEN
+			immLen := 1; IF emit THEN E.GenByte(x.offset) END
+		ELSIF x.what IN {T.fInt16, T.fChar16} THEN immLen := 2; IF emit THEN GenWord(x.offset) END
+		ELSIF (x.what IN doubles) OR (x.what IN quads) & (short & ((x.scale = 0) OR (x.scale = -1))) THEN 
+			immLen := 4; IF emit THEN GenDbl(x.offset) END
+		ELSIF x.what IN quads THEN immLen := 8; IF emit THEN GenQuad(x.offset, x.scale) END
+		ELSE HALT(22)
+		END
+	END DoGenConst;
+
+	PROCEDURE LCheckImm (IN x: Item; tryShort: BOOLEAN; OUT opFix, immLen: INTEGER);
+	BEGIN	ASSERT(x.what IN T.integers + T.chars + { T.fBool, T.fSet} + T.pointers + T.strings, 20);
+		ASSERT(x.o = NIL, 21);
+		opFix := 0;
+		IF (x.what IN bytes) OR (tryShort & (x.offset >= -128) & (x.offset < 128)) THEN
+			immLen := 1; 
+			IF (x.what IN T.integers + { T.fChar16 } + T.sets + T.pointers) THEN opFix := 2 END
+		ELSIF x.what IN {T.fInt16, T.fChar16} THEN immLen := 2
+		ELSIF (x.what IN doubles) OR (x.what IN quads) & (tryShort & ((x.scale = 0) OR (x.scale = -1))) THEN immLen := 4
+		ELSIF x.what IN quads THEN immLen := 8
+		ELSE HALT(22)
+		END
+	END LCheckImm;
+	
+	PROCEDURE GenConst (VAR x: Item; short: BOOLEAN);	(* emit code for an immediate value *)
+		VAR _: INTEGER;
+	BEGIN 	ASSERT(x.what IN T.integers + T.chars + { T.fBool, T.fSet} + T.pointers + T.strings, 20);
+		IF x.o # NIL THEN LGenLinked(x, ripBased)
+		ELSE DoGenConst(x, short, TRUE, _)
+		END
+	END GenConst;
+	
+	PROCEDURE DoGenConst2 (IN x: Item; len: INTEGER);
+	BEGIN
+		CASE len OF 1: E.GenByte(x.offset) | 2: GenWord(x.offset) | 4: GenDbl(x.offset) | 8: GenQuad(x.offset, x.scale)
+		ELSE HALT(20)
+		END
+	END DoGenConst2;
+
+	PROCEDURE ImmLen (VAR x: Item; short: BOOLEAN): INTEGER;	(** evaluate immediate operand size for x *)
+		VAR res: INTEGER;
+	BEGIN	ASSERT(x.what IN T.integers + T.chars + { T.fBool, T.fSet } + T.pointers, 20); ASSERT(x.o = NIL, 21);
+		DoGenConst(x, short, FALSE, res);
+		RETURN res
+	END ImmLen;
+	
+	PROCEDURE GenCExt (code: INTEGER; VAR x: Item);
+		VAR disp, mod, base, scale: INTEGER;
+	BEGIN
+		ASSERT(x.mode IN {Reg, Ind, Abs, Stk});
+		ASSERT((code MOD 8 = 0) & (code < 64));
+		disp := x.offset; base := x.reg; scale := x.scale;
+		IF x.mode = Reg THEN mod := 0C0H; scale := 0
+		ELSIF x.mode = Stk THEN base := SP; mod := 0; disp := 0; scale := 0
+		ELSIF x.mode = Abs THEN
+			IF scale = 1 THEN base := x.index; mod := 80H; scale := 0
+			ELSE base := BP; mod := 0
+			END
+		ELSIF (disp = 0) & (base # BP) THEN mod := 0
+		ELSIF (disp >= -128) & (disp < 128) THEN mod := 40H
+		ELSE mod := 80H
+		END;
+		IF scale # 0 THEN
+			DevCPE.GenByte(mod + code + 4); base := base + x.index * 8;
+			IF scale = 8 THEN DevCPE.GenByte(0C0H + base);
+			ELSIF scale = 4 THEN DevCPE.GenByte(80H + base);
+			ELSIF scale = 2 THEN DevCPE.GenByte(40H + base);
+			ELSE ASSERT(scale = 1); DevCPE.GenByte(base);
+			END;
+		ELSE
+			DevCPE.GenByte(mod + code + base);
+			IF (base = SP) & (mod <= 80H) THEN DevCPE.GenByte(24H) END
+		END;
+		IF x.mode = Abs THEN GenLinked(x, absolute)
+		ELSIF mod = 80H THEN GenDbl(disp)
+		ELSIF mod = 40H THEN DevCPE.GenByte(disp)
+		END
+	END GenCExt;
+	
+	(*remove*) (*PROCEDURE LGenCExt (code: INTEGER; VAR x: Item; immLen: INTEGER); 	(* GenMRMSIB (regcode, x, imm) *)
+		(** emit the MRM, SIB and displacement bytes. immLen is the number of Imm field bytes that will follow the MRM, SIB and Disp fields. code seems to be the reg field of the MRM byte *)
+		CONST DS = 5;	(* MRM.r/m field = 101b: absolute offset in data segment; same value as BP *)
+			SIB = 4;	(* MRM.r/m field = 100b: SIB should be used instead of reg in ea calculations; same val as SP *)
+			(* mnemonics for MRM.mod field: *)
+			memReg = 00H; 	(* op is [reg] *)
+			memByte = 40H; 	(* op is [reg + disp8] *)
+			memWord = 80H; 	(* op is [reg + disp16/32/64] *)
+			register = 0C0H; 	(* op is reg *)
+		VAR disp, mod, base, scale: INTEGER;
+	BEGIN
+		HALT(9);
+		ASSERT(x.mode IN {Reg, Ind, Abs, Stk});
+		ASSERT((code MOD 8 = 0) & (code < 64));
+		disp := x.offset; base := x.reg; scale := x.scale;
+		IF x.mode = Reg THEN mod := register; scale := 0
+		ELSIF x.mode = Stk THEN base := SIB; mod := 0; disp := 0; scale := 0
+		ELSIF x.mode = Abs THEN 	(* angry: this is cryptic and unclear *)
+			(* Abs is for global vars; they have scale = 0, as far as I can see; that makes base := BP. WHAT? *)
+			(*IF scale = 1 THEN base := x.index; mod := memWord; scale := 0
+				(* for global arrays with elem size = 1 byte, SIB addressing is replaced with [reg + disp16/32] addressing *)
+				(* cannot do this optimisation for domestic arrays *)
+			ELS*)IF scale # 0 THEN (*base := x.reg*) (* for global arrays, base address should already be in register .reg *)
+				mod := memReg
+			ELSE base := DS; mod := memReg
+			END
+		(* all other branches are cases of Ind. This branch not refactored yet *)
+		ELSIF (disp = 0) & (base # BP) THEN mod := 0
+		ELSIF (disp >= -128) & (disp < 128) THEN mod := 40H	(* does the displacement fit into 1 byte? *)
+		ELSE mod := 80H	(* 32bit displacement to follow ↓ *)
+		END;
+		IF scale # 0 THEN	(* encodes scale, x.index and base into the SIB byte *)
+			E.GenByte(mod + code + 4); base := base + x.index * 8;
+			IF scale = 8 THEN E.GenByte(0C0H + base);
+			ELSIF scale = 4 THEN E.GenByte(80H + base);
+			ELSIF scale = 2 THEN E.GenByte(40H + base);
+			ELSE ASSERT(scale = 1); E.GenByte(base);
+			END
+		ELSE
+			E.GenByte(mod + code + base);
+			IF (base = SIB) & (mod <= memWord) THEN E.GenByte(24H) END	(* SIB byte: 24 = [SP]*)
+			(* so, for {Stk} the instruction is MOV [SP], reg, or MOV [SP + disp], reg, or MOV [SP + disp8], reg *)
+		END;
+		(* displacement bytes: *)
+		ASSERT(immLen = 0);
+		IF (x.mode = Abs) & (x.scale >= 1)	(*domestic global array *)	 THEN
+		ELSIF x.mode = Abs THEN LGenLinked(x, ripBased + immLen)	(* MRM.mod = 00b => 'absolute' address*)
+		ELSIF mod = memWord THEN GenDbl(disp)	(* MRM.mod = 10b => 32-bit displacement *)
+		ELSIF mod = memByte THEN E.GenByte(disp)	(* MRM.mod = 01b => 1-byte displacement *)
+		END
+	END LGenCExt;*)
+
+	PROCEDURE LGenMRMSIB (pos, regfld: INTEGER; VAR x: Item; immLen: INTEGER); 	(* GenRMOperands*)
+	(** prepare (but not emit) the MRM, SIB and displacement bytes. immLen is the number of Imm field bytes that will follow the MRM, SIB and Disp fields. code seems to be the regfld field of the MRM byte. pos is the position in machine text where the MRM byte will be emitted.
+	regfld >= 0: register number for the regfld field
+	regfld < 0: -regfld is the regfld field for x87 opcodes
+	 *)
+		CONST DS = 5;	(* MRM.r/m field = 101b: absolute offset in data segment; same value as BP *)
+			sib = 4;	(* MRM.r/m field = 100b: SIB should be used instead of regfld in ea calculations; same val as SP *)
+			(* mnemonics for MRM.mod field: *)
+			memReg = 00H; 	(* op is [regfld] *)
+			memByte = 40H; 	(* op is [regfld + disp8] *)
+			memWord = 80H; 	(* op is [regfld + disp16/32/64] *)
+			register = 0C0H; 	(* op is regfld *)
+		VAR (*DISP, *)mod, base, scale: INTEGER;
+	BEGIN
+		ASSERT(x.mode IN {Reg, Ind, Abs, Stk});
+		(*IF regfld >= 0 THEN ASSERT((0 <= regfld) & (regfld < 16)); 
+			IF regfld >= 8 THEN (*INCL(REX, RexR); this is done earlier in LGenOp2 *)
+				regfld := regfld MOD 8 * 8 
+			ELSE regfld := regfld * 8 
+			END
+		ELSE regfld := -regfld 
+		END;*)
+		DISP := x.offset; base := x.reg; scale := x.scale;
+		IF x.mode = Reg THEN mod := register; scale := 0
+		ELSIF x.mode = Stk THEN base := sib; mod := 0; DISP := 0; scale := 0
+		ELSIF x.mode = Abs THEN 	(* angry: this is cryptic and unclear *)
+			(* Abs is for global vars; they have scale = 0, as far as I can see; that makes base := BP. WHAT? *)
+			(*IF scale = 1 THEN base := x.index; mod := memWord; scale := 0
+				(* for global arrays with elem size = 1 byte, SIB addressing is replaced with [reg + disp16/32] addressing *)
+				(* cannot do this optimisation for domestic arrays *)
+			ELS*)IF scale # 0 THEN (*base := x.reg*) (* for global arrays, base address should already be in register .reg *)
+				mod := memReg
+			ELSE base := DS; mod := memReg
+			END
+		(* all other branches are cases of Ind. This branch not refactored yet *)
+		ELSIF (DISP = 0) & (base # BP) THEN mod := 0
+		ELSIF (DISP >= -128) & (DISP < 128) THEN mod := 40H	(* does the displacement fit into 1 byte? *)
+		ELSE mod := 80H	(* 32bit displacement to follow ↓ *)
+		END;
+		hasMRM := TRUE; INC(pos);
+		IF scale # 0 THEN	(* encodes scale, x.index and base into the SIB byte *)
+			hasSIB := TRUE;
+			MRM := mod + regfld + 4; 
+			IF x.index >= 8 THEN (*done in DoGenOp2*) x.index := x.index MOD 8 END;	(* preserve x.index? *)
+			IF base >= 8 THEN (*done in DoGenOp2*)base := base MOD 8 END;
+			base := base + x.index * 8;
+			IF scale = 8 THEN SIB := 0C0H + base
+			ELSIF scale = 4 THEN SIB := 80H + base
+			ELSIF scale = 2 THEN SIB := 40H + base
+			ELSE ASSERT(scale = 1); SIB := base
+			END
+		ELSE
+			IF base >= 8 THEN (*done in DoGenOp2*)base := base MOD 8 END;
+			MRM := mod + regfld + base;
+			hasSIB := (base = sib) & (mod <= memWord);
+			IF hasSIB THEN SIB := 24H END	(* SIB byte: 24 = [SP]*)
+			(* so, for {Stk} the instruction is MOV [SP], reg, or MOV [SP + DISP], reg, or MOV [SP + disp8], reg *)
+		END;
+		(* displacement field: *)
+		IF hasSIB THEN INC(pos) END;
+		IF (x.mode = Abs) & (x.scale >= 1)	(*domestic global array *)	 THEN DISPLEN := 0
+		ELSIF x.mode = Abs THEN LGenRef(x, pos, ripBased + immLen, DISP); DISPLEN := 4	(* MRM.mod = 00b => 'absolute' address*)
+		ELSIF mod = memWord THEN DISPLEN := 4	(* MRM.mod = 10b => 32-bit displacement *)
+		ELSIF mod = memByte THEN DISPLEN := 1	(* MRM.mod = 01b => 1-byte displacement *)
+		END
+	END LGenMRMSIB;
+	
+	PROCEDURE GenDExt (VAR r, x: Item);
+	BEGIN
+		ASSERT(r.mode = Reg);
+		GenCExt(r.reg * 8, x)
+	END GenDExt;
+	
+	(*PROCEDURE LGenDExt (VAR r, x: Item; immLen: INTEGER);	(* is it ever # 0? *)	(* GenMrmSib (xreg, y, imm) *)
+	BEGIN
+		ASSERT(r.mode = Reg);
+		LGenCExt(r.reg * 8, x, immLen)
+	END LGenDExt;*) (* remove *)
+	
+	(*******************************************************)
+	
+	PROCEDURE GenMove* (VAR from, to: Item);
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(Size[from.form] = Size[to.form]);
+		IF to.mode = Reg THEN
+			IF from.mode = Con THEN
+				IF to.reg = AX THEN
+
+					IF (a1.mode = Con) & (from.offset = a1.offset) & (from.obj = a1.obj) & (from.form = a1.form) THEN
+						RETURN
+					END;
+
+					a1 := from; a2.mode := 0
+				END;
+				CheckSize(from.form, w);
+				IF (from.offset = 0) & (from.obj = NIL) THEN
+					DevCPE.GenByte(30H + w); DevCPE.GenByte(0C0H + 9 * to.reg) (* XOR r,r *)
+				ELSE
+					DevCPE.GenByte(0B0H + w * 8 + to.reg); GenConst(from, FALSE)
+				END;
+			ELSIF (to.reg = AX) & (from.mode = Abs) & (from.scale = 0) THEN
+
+				IF (a1.mode = Abs) & (from.offset = a1.offset) & (from.obj = a1.obj) & (from.form = a1.form)
+					OR (a2.mode = Abs) & (from.offset = a2.offset) & (from.obj = a2.obj) & (from.form = a2.form) THEN
+					RETURN
+				END;
+
+				a1 := from; a2.mode := 0;
+				CheckSize(from.form, w);
+				DevCPE.GenByte(0A0H + w); GenLinked(from, absolute);
+			ELSIF (from.mode # Reg) OR (from.reg # to.reg) THEN
+				IF to.reg = AX THEN
+					IF (from.mode = Ind) & (from.scale = 0) & ((from.reg = BP) OR (from.reg = BX)) THEN
+
+						IF (a1.mode = Ind) & (from.offset = a1.offset) & (from.reg = a1.reg) & (from.form = a1.form)
+							OR (a2.mode = Ind) & (from.offset = a2.offset) & (from.reg = a2.reg) & (from.form = a2.form) THEN
+							RETURN
+						END;
+
+						a1 := from
+					ELSE a1.mode := 0
+					END;
+					a2.mode := 0
+				END;
+				CheckSize(from.form, w);
+				DevCPE.GenByte(8AH + w); GenDExt(to, from)
+			END 
+		ELSE
+			CheckSize(from.form, w);
+			IF from.mode = Con THEN
+				DevCPE.GenByte(0C6H + w); GenCExt(0, to); GenConst(from, FALSE);
+				a1.mode := 0; a2.mode := 0
+			ELSIF (from.reg = AX) & (to.mode = Abs) & (to.scale = 0) THEN
+				DevCPE.GenByte(0A2H + w); GenLinked(to, absolute);
+				a2 := to
+			ELSE
+				DevCPE.GenByte(88H + w); GenDExt(from, to);
+				IF from.reg = AX THEN
+					IF (to.mode = Ind) & (to.scale = 0) & ((to.reg = BP) OR (to.reg = BX)) THEN a2 := to END
+				ELSE a1.mode := 0; a2.mode := 0
+				END
+			END
+		END
+	END GenMove;
+	
+	PROCEDURE ^ LGenAdd* (VAR src, dst: Item; ovflchk: BOOLEAN);	(* check if it can be moved up here *)
+	
+	PROCEDURE LGenOpReg (op, reg: INTEGER);
+	(** Generate instruction with opcode op with reg encoded into op and REX; based on global instruction variables, and reset the latter *)
+	BEGIN
+		IF reg >= 8 THEN INCL(REX, RexB) END;
+		IF REX # {} THEN E.GenByte(40H + ORD(REX)); REX := {} END;
+		IF SIZEPREF THEN E.GenByte(66H); SIZEPREF := FALSE END;
+		IF op < 100H THEN E.GenByte(op) ELSIF op < 10000H THEN GenWord(op) ELSE HALT(20) END;
+		IF hasMRM THEN E.GenByte(MRM); hasMRM := FALSE END;
+		IF hasSIB THEN E.GenByte(SIB); hasSIB := FALSE END;
+		CASE DISPLEN OF
+		| 0:
+		| 1: E.GenByte(DISP)
+		| 4: GenDbl(DISP)
+		ELSE HALT(20)
+		END;
+		DISPLEN := 0
+	END LGenOpReg;
+
+	PROCEDURE LGenOp (op: INTEGER);
+	(** Generate instruction with opcode op based on global instruction variables, and reset the latter *)
+	BEGIN LGenOpReg(op, 0)
+	END LGenOp;
+	
+	PROCEDURE DoGenOp2 (opcode, reg: INTEGER; VAR x, imm: Item; opts: SET);
+	(** Generate an operation. fix in fix1 or noFixOp or other *)
+		CONST rex = { RexW, RexB, RexR, RexX };
+		VAR _, w, opFix, immLen, pos: INTEGER;
+	BEGIN 
+		IF addReg IN opts THEN ASSERT(reg = ignored, 20) END;
+		pos := E.pc; 
+		LCheckPrefixes(x.what, opts); 
+		IF addReg IN opts THEN reg := x.reg; IF (8 <= reg) & (reg < 16) THEN INCL(opts, RexB) END
+		ELSIF ~(noReg IN opts) THEN
+			IF (8 <= reg) & (reg < 16) THEN INCL(opts, RexR) END
+		ELSIF reg = ignored THEN
+		ELSE ASSERT((0 <= reg) & (reg < 8))
+		END;
+		IF (x.mode = Reg) & (8 <= x.reg) & (x.reg < 16) THEN INCL(opts, RexB) END; (*!*)
+		IF forceRexW IN opts THEN INCL(opts, RexW) ELSIF noRexW IN opts THEN EXCL(opts, RexW) END;
+		(* eliminate forceRexW? now RexW can be directly included in opts *)
+		(*REX := REX - REXIGNORE; REXIGNORE := {};*)
+		IF xmm IN opts THEN E.GenByte(66H); INC(pos) END;
+		IF rex * opts # {} THEN INC(pos); E.GenByte(40H + ORD(rex * opts)) END;
+		IF ~(xmm IN opts) & (szPref IN opts) & (fix1 IN opts) THEN E.GenByte(66H); INC(pos) END; 
+		IF op1 IN opts THEN w := 1 ELSE w := 0 END;
+		IF fix1 IN opts THEN (*w := w*) ELSIF fix8 IN opts THEN w := w * 8 ELSE w := 0 END;
+		INC(opcode, w);
+		IF addReg IN opts THEN 	(* reg[0..2] is added to opcode; op operates on that reg and a imm (no MRM) *)
+			INC(opcode, reg MOD 8)
+		ELSIF reg = ignored THEN reg := 0
+		ELSE reg := reg MOD 8 * 8	(* reg -> regfld, shift 3 bits left *)
+		END;
+		
+		IF imm.what # T.fUndef THEN LCheckImm(imm, fixShort IN opts, opFix, immLen) ELSE opFix := 0; immLen := 0 END;
+		IF fixShort IN opts THEN INC(opcode, opFix) END;
+		
+		IF opcode < 0 THEN HALT(20) ELSIF opcode > 0FFFFH THEN HALT(21) END;
+		IF opcode > 0FFH THEN E.GenByte(opcode DIV 100H); INC(pos) END;
+		E.GenByte(opcode); INC(pos);
+		
+		IF imm.what # T.fUndef THEN w := ImmLen(imm, fixShort IN opts) ELSE w := 0 END;
+		IF ~(addReg IN opts) & ~(noMRM IN opts) THEN
+			LGenMRMSIB(pos, reg, x, immLen);	(* => DISP *)
+			IF hasMRM THEN E.GenByte(MRM); hasMRM := FALSE END;
+			IF hasSIB THEN E.GenByte(SIB); hasSIB := FALSE END;
+			CASE DISPLEN OF
+			| 0:
+			| 1: E.GenByte(DISP)
+			| 4: GenDbl(DISP)
+			ELSE HALT(20)
+			END;
+			DISPLEN := 0
+		END;
+		
+		IF imm.what # T.fUndef THEN DoGenConst2(imm, immLen) END
+	END DoGenOp2;
+
+	PROCEDURE LGenOp2 (opcode, fix, reg: INTEGER; VAR x: Item);
+		VAR opts: SET;
+	BEGIN 
+		IF fix = fix1 THEN opts := { fix1 } ELSE opts := {} END;
+		DoGenOp2(opcode, reg, x, unused, opts)
+	END LGenOp2;
+	
+	PROCEDURE LGenOpRMR (opcode, reg: INTEGER; VAR x: Item; opts: SET);
+	(** Generate an operation that takes a register and a reg/mem operands *)
+	BEGIN DoGenOp2(opcode, reg, x, unused, opts)
+	END LGenOpRMR;
+	
+	PROCEDURE LGenOpLong (opcode, fix, reg: INTEGER; VAR x: Item);
+	(** Generate an operation that defaults to 8-byte operands (i.e. no REX.W prefix) and doesn't have imm field *)
+	BEGIN REXIGNORE := { RexW }; LGenOp2(opcode, fix, reg, x); REXIGNORE := {}
+		;HALT(125);
+	END LGenOpLong;
+	
+	PROCEDURE LGenOpConst (opcode, fix: INTEGER; VAR const: Item);
+	(** Generate an operation that doesn't have MRMSIB bytes: one of it's operands is encoded in opcode, and the other is the constant *)
+		VAR w: INTEGER;
+	BEGIN
+		IF (fix # noFixOp) & ~(const.what IN bytes) THEN w := fix ELSE w := 0 END;
+		E.GenByte(opcode + w); GenConst(const, FALSE)
+	END LGenOpConst;
+	
+	PROCEDURE LGenOpImm (opcode, regfld: INTEGER; VAR x, const: Item; opts: SET);
+	(* Generate an operation opcode with an operand x, an immediate operand const and REG field regfld in the MRM byte taking into account options opts (IN fix1, short). short IN opts => generate a 1-byte imm operand  *)
+	BEGIN
+		DoGenOp2(opcode, regfld, x, const, opts)
+	END LGenOpImm;
+
+	PROCEDURE LGenMove* (VAR from, to: Item);
+		CONST i64ptrs = { T.fInt64 } + T.pointers;
+		VAR w, bytes: INTEGER; vv: T.Object; second, dbl: BOOLEAN; z, four, base: Item;
+	BEGIN 
+		ASSERT(SSize[from.what] = SSize[to.what]);
+		IF to.mode = Reg THEN
+			IF from.mode = Con THEN
+				IF to.reg = AX THEN
+					IF (a1.mode = Con) & (from.offset = a1.offset) & (from.obj = a1.obj) & (from.what = a1.what) THEN
+						RETURN
+					END;
+					a1 := from; a2.mode := 0
+				END;
+				IF (from.offset = 0) & (from.what IN doubles) OR (from.what IN quads) & (from.offset = 0) & (from.scale = 0)
+				& (from.obj = NIL) THEN	(* ? zero literal? *)
+					LGenOpRMR(32H, to.reg, to, { fix1 })	 (* XOR r,r *)
+				ELSE
+					DoGenOp2(0B0H, ignored, to, from, { fix8, addReg })	(* MOV reg8-64, imm8-64 *)
+				END;
+			ELSIF (to.reg = AX) & (from.mode = Abs) & (from.scale = 0)(*?non-index*) THEN
+				IF (a1.mode = Abs) & (from.offset = a1.offset) & (from.obj = a1.obj) & (from.what = a1.what)
+					OR (a2.mode = Abs) & (from.offset = a2.offset) & (from.obj = a2.obj) & (from.what = a2.what) THEN
+					RETURN
+				END;
+				a1 := from; a2.mode := 0;
+				LGenOpRMR(8AH, to.reg, from, { fix1 }); 	(* MOV reg, reg/mem *)
+			ELSIF (from.mode # Reg) OR (from.reg # to.reg) THEN
+				IF to.reg = AX THEN
+					IF (from.mode = Ind) & (from.scale = 0) & ((from.reg = BP) OR (from.reg = BX)) THEN
+						IF (a1.mode = Ind) & (from.offset = a1.offset) & (from.reg = a1.reg) & (from.what = a1.what)
+							OR (a2.mode = Ind) & (from.offset = a2.offset) & (from.reg = a2.reg) & (from.what = a2.what) THEN
+							RETURN
+						END;
+						a1 := from
+					ELSE a1.mode := 0
+					END;
+					a2.mode := 0
+				END;
+				LGenOpRMR(8AH, to.reg, from, { fix1 })	(* MOV reg, reg/mem *)
+			END 
+		ELSE	(* to.mode # Reg *) 
+			IF from.mode = Con THEN	(* MOV reg/mem, imm1 opcode C6/C7 *)
+				dbl := from.what IN { T.fInt64 } + T.pointers; IF dbl THEN from.what := T.fInt32 END;
+				second := dbl &~((from.scale = 0) & (from.offset >= 0)); IF second THEN to.what := T.fInt32 END;
+				DoGenOp2(0C6H, ignored, to, from, { fix1 });
+				IF second THEN 
+					ASSERT(to.o IS T.Var, 126);
+					IF to.scale = 0 THEN INC(to.offset, 4) 
+					ELSE LMakeConst(four, 4, T.fInt64); LMakeReg(base, to.reg, T.fInt64); LGenAdd(four, base, FALSE)
+					END;
+					from.offset := from.scale;
+					DoGenOp2(0C6H, ignored, to, from, { fix1 });
+				END;
+				a1.mode := 0; a2.mode := 0
+			ELSIF (from.reg = AX) & (to.mode = Abs) & (to.scale = 0) THEN
+				LGenOpRMR(88H, from.reg, to, { fix1 });	(* MOV r/m, reg *) 
+				a2 := to
+			ELSE
+				LGenOpRMR(88H, from.reg, to, { fix1 });	(* MOV r/m, reg *) 
+				IF from.reg = AX THEN
+					IF (to.mode = Ind) & (to.scale = 0) & ((to.reg = BP) OR (to.reg = BX)) THEN a2 := to END
+				ELSE a1.mode := 0; a2.mode := 0
+				END
+			END
+		END
+	END LGenMove;
+	
+	
+	
+	PROCEDURE GenExtMove* (VAR from, to: Item);
+		VAR op: INTEGER;
+	BEGIN
+		ASSERT(from.mode # Con);
+		IF from.form IN {Byte, Char8, Char16} THEN op := 0B6H (* MOVZX *)
+		ELSE op := 0BEH (* MOVSX *)
+		END;
+		IF from.form IN {Int16, Char16} THEN INC(op) END;
+		DevCPE.GenByte(0FH); DevCPE.GenByte(op); GenDExt(to, from);
+		IF to.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+	END GenExtMove;
+	
+	PROCEDURE LGenExtMove* (VAR from, to: Item);	(** move with sign or zero extension *)
+		CONST REXW = 48H;
+		VAR op: INTEGER;
+	BEGIN	(* wow... this procedure needs to be reviewed for a more regular structure *)
+		ASSERT(from.mode # Con);
+		
+		IF from.what IN doubles THEN op := 63H 	(* MOVSXD *)
+		ELSE
+			IF from.what IN {T.fByte, T.fChar8, T.fChar16} THEN op := 0FB6H (* MOVZX *) 
+			ELSE op := 0FBEH (* MOVSX *)
+			END;
+			IF ~(from.what IN bytes) THEN INC(op) END
+		END;
+		from.what := to.what; LGenOpRMR(op, to.reg, from, {});
+		IF to.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+	END LGenExtMove;
+	
+	PROCEDURE GenSignExt* (VAR from, to: Item);
+	BEGIN
+		ASSERT(to.mode = Reg);
+		IF (from.mode = Reg) & (from.reg = AX) & (to.reg = DX) THEN
+			DevCPE.GenByte(99H)	(* cdq *)
+		ELSE
+			GenMove(from, to);	(* mov to, from *)
+			DevCPE.GenByte(0C1H); GenCExt(38H, to); DevCPE.GenByte(31)	(* sar to, 31 *)
+		END
+	END GenSignExt;
+	
+	PROCEDURE GenLoadAdr* (VAR from, to: Item);
+	BEGIN
+		ASSERT(to.form IN {Int32, Pointer, ProcTyp});
+		IF (from.mode = Abs) & (from.scale = 0) THEN
+			DevCPE.GenByte(0B8H + to.reg); GenLinked(from, absolute)
+		ELSIF from.mode = Stk THEN
+			DevCPE.GenByte(89H); GenCExt(SP * 8, to)
+		ELSIF (from.mode # Ind) OR (from.offset # 0) OR (from.scale # 0) THEN
+			DevCPE.GenByte(8DH); GenDExt(to, from)	(* LEA *)
+		ELSIF from.reg # to.reg THEN
+			DevCPE.GenByte(89H); GenCExt(from.reg * 8, to)
+		ELSE RETURN
+		END;
+		IF to.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+	END GenLoadAdr;
+
+	PROCEDURE LGenLoadAdr* (VAR from, to: Item);
+	BEGIN
+		ASSERT(to.what IN {T.fInt64 } + T.pointers - { T.fNil });
+		IF (from.what = T.fProcedure) & (from.o.imno > 0) THEN 	(* imported procedures *)
+			HALT(126);
+			E.GenByte(REXW); E.GenByte(0B8H + to.reg); LGenLinked(from, absolute)	
+		(*ELSIF (from.what = T.fType) THEN
+			IF from.type.typeName # NIL THEN ASSERT(from.type.typeName.imno = 0) END; 
+			LGenOpRMR(8DH, to.reg, from, { forceRexW })	(* LEA *)*)
+		ELSIF (from.mode = Abs) (*& (from.scale = 0)*) THEN
+			(* now domestic globals use RIP-relative addressing, and their addresses are loaded with LEA *)
+			LGenOpRMR(8DH, to.reg, from, { forceRexW })	(* LEA *)
+		ELSIF from.mode = Stk THEN
+			LGenOpRMR(89H, SP, to, {})
+			(*IF to.what IN quads THEN E.GenByte(48H) END; E.GenByte(89H); LGenCExt(SP * 8, to, 0)*)
+		ELSIF (from.mode # Ind) OR (from.offset # 0) OR (from.scale # 0) THEN
+			LGenOpRMR(8DH, to.reg, from, { forceRexW });	(* LEA *)
+		ELSIF from.reg # to.reg THEN
+			LGenOpRMR(89H, from.reg, to, {})
+		ELSE RETURN
+		END;
+		IF to.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+	END LGenLoadAdr;
+
+	PROCEDURE GenPush* (VAR src: Item);
+		VAR s: INTEGER;
+	BEGIN
+		IF src.mode = Con THEN
+			ASSERT(src.form >= Int32);
+			CheckConst(src, s); DevCPE.GenByte(68H + s); GenConst(src, TRUE)
+		ELSIF src.mode = Reg THEN
+			ASSERT((src.form >= Int16) OR (src.reg < 4));
+			DevCPE.GenByte(50H + src.reg)
+		ELSE
+			ASSERT(src.form >= Int32);
+			DevCPE.GenByte(0FFH); GenCExt(30H, src)
+		END
+	END GenPush;
+
+	PROCEDURE LGenPush* (VAR src: Item);	(** pushes values with natural (processor) alignment *)
+		VAR s: INTEGER;
+	BEGIN
+		IF (src.mode = Con) & (src.lit = NIL) THEN 
+			(*ASSERT(src.what IN doubles + quads (*+ T.strings*));*)
+			(*IF src.what IN quads THEN
+				E.GenWord(04EC8348H);	(* SUB RSP, 4 *)
+				E.GenByte(0C7H); E.GenByte(04H); E.GenByte(24H);	(* MOV DWORD PTR [RSP], *)
+				GenDbl(src.scale);
+				E.GenWord(04EC8348H);	(* SUB RSP, 4 *)
+				E.GenByte(0C7H); E.GenByte(04H); E.GenByte(24H);	(* MOV DWORD PTR [RSP], *)
+				GenDbl(src.offset);
+			ELSE*) LCheckConst(src, s); E.GenByte(68H + s); GenConst(src, TRUE)
+				(*LGenOpRMR(68H, unfinished*) (*!*)
+			(*END*)
+		ELSIF src.mode = Reg THEN 
+			ASSERT((src.what IN words + quads + doubles) OR (src.reg < 4)); 
+			E.GenByte(50H + src.reg)
+		ELSE
+			ASSERT((src.what IN T.reals + quads + doubles + words) OR (src.lit # NIL) & (src.what IN T.strings)); 
+			IF (src.mode = Con) & (src.what = T.fInt64) THEN 	(* int64 literals outside of INTEGER range should be represented as allocated literals (.lit # NIL, .mode = Abs) in order to be pushed *)
+				ASSERT((src.lit # NIL) OR (src.scale = 0) & (src.offset >= 0) OR (src.scale = -1) & (src.offset < 0))
+			END;
+			LGenOpRMR(0FFH, 6, src, { noReg, noRexW })
+		END
+	END LGenPush;
+	
+	(*PROCEDURE SubRSP (delta: INTEGER);
+	BEGIN E.GenByte(48H); E.GenByte(83H); E.GenByte(0ECH); E.GenByte(delta) (* SUB RSP, delta *) 
+	END SubRSP;
+	
+	PROCEDURE WasLGenPush* (VAR src: Item);
+		VAR i, s: INTEGER; val: INTEGER; sp: Item;
+	BEGIN 
+		HALT(9);
+		IF src.mode = Con THEN
+			ASSERT(src.what IN doubles + quads);
+			IF src.what IN quads THEN
+				IF (src.scale = 0) OR (src.scale = -1) THEN
+					E.GenByte(68H); GenDbl(src.offset)	(* PUSH imm32 ;push a sign-extended 32-bit value *)
+				ELSE SubRSP(8);
+					(* MOV [RSP + 4], src.scale *)
+					E.GenByte(0C7H); E.GenByte(44H); E.GenByte(24H); E.GenByte(4); GenDbl(src.scale);	
+					(* MOV [RSP], src.offset *)
+					E.GenByte(0C7H); E.GenByte(4); E.GenByte(24H); GenDbl(src.offset)
+				END
+			ELSE (*doubles*) SubRSP(4); (* MOV [RSP], imm32 *) 
+				E.GenByte(0C7H); E.GenByte(4); E.GenByte(24H); GenDbl(src.offset)
+				
+			END
+		ELSIF src.mode = Reg THEN ASSERT(src.what IN words + quads + doubles); 
+			(*ASSERT((src.form >= Int16) OR (src.reg < 4));*)	(* what's it about? unclear *)
+			IF src.what IN words THEN SubRSP(2); E.GenByte(66H); E.GenByte(50H + src.reg)	(* PUSH reg16 *)
+			ELSIF src.what IN doubles THEN SubRSP(4);
+				(* MOV [RSP - 4], src. Not using PUSH, 'cause it pushes 64 bits *)
+				E.GenByte(89H); E.GenByte(src.reg * 8 + 4); E.GenByte(24H);
+				
+			ELSE E.GenByte(50H + src.reg)
+			END
+		ELSE 
+			ASSERT(src.what IN doubles + quads);	(* PUSH src *)
+			E.GenByte(0FFH); LGenCExt(30H, src, 0)
+		END
+	END WasLGenPush;*)
+	
+	PROCEDURE GenPop* (VAR dst: Item);
+	BEGIN
+		IF dst.mode = Reg THEN
+			ASSERT((dst.form >= Int16) OR (dst.reg < 4));
+			DevCPE.GenByte(58H + dst.reg);
+			IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+		ELSE
+			DevCPE.GenByte(08FH); GenCExt(0, dst) 
+		END
+	END GenPop;
+	
+	PROCEDURE LGenPop* (VAR dst: Item);
+	BEGIN
+		IF dst.mode = Reg THEN
+			ASSERT(dst.what IN quads + doubles);
+			(*ASSERT((dst.form >= Int16) OR (dst.reg < 4));*)	(* what's it about? unclear *)
+			E.GenByte(58H + dst.reg);
+			IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+		ELSE
+			HALT(126);
+			DevCPE.GenByte(08FH); GenCExt(0, dst) 
+		END
+	END LGenPop;
+	
+	PROCEDURE GenConOp (op: INTEGER; VAR src, dst: Item);
+		VAR w, s: INTEGER;
+	BEGIN
+		ASSERT(Size[src.form] = Size[dst.form]);
+		CheckSize(src.form, w);
+		CheckConst(src, s);
+		IF (dst.mode = Reg) & (dst.reg = AX) & (s = 0) THEN
+			DevCPE.GenByte(op + 4 + w); GenConst(src, FALSE)
+		ELSE
+			DevCPE.GenByte(80H + s + w); GenCExt(op, dst); GenConst(src, TRUE)
+		END
+	END GenConOp;
+	
+	PROCEDURE LGenConOp (op: INTEGER; VAR src, dst: Item);	(* Generate operation with a constant *)
+		VAR s: INTEGER; 
+	BEGIN
+		ASSERT(SSize[src.what] = SSize[dst.what]);
+		(*LCheckSize(src.what, TRUE, w, _);*)	(* LCheckPrefixes is later called from LGenOp2. Is this optimizable? *)
+		LCheckConst(src, s);
+		IF src.what IN quads THEN ASSERT((src.scale = 0) OR (src.scale = -1) OR (src.mode = Reg)) END;
+		IF (dst.mode = Reg) & (dst.reg = AX) & (s = 0) THEN
+			LGenOpImm(op DIV 8 + 4, ignored, src, src, { fix1, noMRM })
+		ELSE
+			LGenOpImm(80H, op DIV 8, dst, src, { fix1, fixShort })
+		END
+	END LGenConOp;
+	
+	PROCEDURE GenDirOp (op: INTEGER; VAR src, dst: Item);
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(Size[src.form] = Size[dst.form]);
+		CheckSize(src.form, w);
+		IF dst.mode = Reg THEN
+			DevCPE.GenByte(op + 2 + w); GenDExt(dst, src)
+		ELSE
+			DevCPE.GenByte(op + w); GenDExt(src, dst)
+		END
+	END GenDirOp;
+
+	PROCEDURE LGenDirOp (op: INTEGER; VAR src, dst: Item);
+		VAR _, w: INTEGER;
+	BEGIN
+		ASSERT(SSize[src.what] = SSize[dst.what]);
+		(*LCheckSize(src.what, TRUE, w, _);*)
+		IF dst.mode = Reg THEN
+			LGenOpRMR(op + 2, dst.reg, src, { fix1 })
+		ELSE
+			LGenOpRMR(op, src.reg, dst, { fix1 })
+		END
+	END LGenDirOp;
+	
+	PROCEDURE LGenAdd* (VAR src, dst: Item; ovflchk: BOOLEAN);	(** dst := dst + src *)
+		VAR _, bytes, w: INTEGER;
+	BEGIN 
+		ASSERT(SSize[src.what] = SSize[dst.what]);
+		IF src.mode = Con THEN
+			IF src.o = NIL THEN
+				IF src.offset = 1 THEN
+					(*IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(40H + dst.reg) (* inc *)
+					ELSE *)	(* 40H opcode is REX prefix in 64-bit mode, so can't be used as INC *)
+					LGenOpRMR(0FEH, 0, dst, { fix1, noReg });
+					(*LCheckPrefix(dst.what, dst.what IN quads, w, _); LGenMRMSIB(0, dst, 0); LGenOp(0FEH + w);*)
+					(*END*)
+				ELSIF src.offset = -1 THEN
+					(*IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(48H + dst.reg) (* dec *)
+					ELSE*)	(* 48H opcode is REX prefix in 64-bit mode, so can't be used as DEC *)
+					LGenOpRMR(0FEH, 1, dst, { fix1, noReg })
+					(*END*)
+				ELSIF src.offset # 0 THEN
+					LGenConOp(0, src, dst)
+				ELSE RETURN
+				END
+			ELSE
+				LGenConOp(0, src, dst)
+			END
+		ELSE
+			LGenDirOp(0, src, dst)
+		END;
+		IF ovflchk THEN E.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenAdd;
+	
+	PROCEDURE GenAdd* (VAR src, dst: Item; ovflchk: BOOLEAN);
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(Size[src.form] = Size[dst.form]);
+		IF src.mode = Con THEN
+			IF src.obj = NIL THEN
+				IF src.offset = 1 THEN
+					IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(40H + dst.reg) (* inc *)
+					ELSE CheckSize(dst.form, w); DevCPE.GenByte(0FEH + w); GenCExt(0, dst)
+					END
+				ELSIF src.offset = -1 THEN
+					IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(48H + dst.reg) (* dec *)
+					ELSE CheckSize(dst.form, w); DevCPE.GenByte(0FEH + w); GenCExt(8, dst)
+					END
+				ELSIF src.offset # 0 THEN
+					GenConOp(0, src, dst)
+				ELSE RETURN
+				END
+			ELSE
+				GenConOp(0, src, dst)
+			END
+		ELSE
+			GenDirOp(0, src, dst)
+		END;
+		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenAdd;
+	
+	PROCEDURE GenAddC* (VAR src, dst: Item; first, ovflchk: BOOLEAN);
+		VAR op: INTEGER;
+	BEGIN
+		ASSERT(Size[src.form] = Size[dst.form]);
+		IF first THEN op := 0 ELSE op := 10H END;
+		IF src.mode = Con THEN GenConOp(op, src, dst)
+		ELSE GenDirOp(op, src, dst)
+		END;
+		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenAddC;
+	
+	PROCEDURE GenSub* (VAR src, dst: Item; ovflchk: BOOLEAN);
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(Size[src.form] = Size[dst.form]);
+		IF src.mode = Con THEN
+			IF src.obj = NIL THEN
+				IF src.offset = 1 THEN
+					IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(48H + dst.reg) (* dec *)
+					ELSE CheckSize(dst.form, w); DevCPE.GenByte(0FEH + w); GenCExt(8, dst)
+					END
+				ELSIF src.offset = -1 THEN
+					IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(40H + dst.reg) (* inc *)
+					ELSE CheckSize(dst.form, w); DevCPE.GenByte(0FEH + w); GenCExt(0, dst)
+					END
+				ELSIF src.offset # 0 THEN
+					GenConOp(28H, src, dst)
+				ELSE RETURN
+				END
+			ELSE
+				GenConOp(28H, src, dst)
+			END
+		ELSE
+			GenDirOp(28H, src, dst)
+		END;
+		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenSub;
+
+	PROCEDURE LGenSub* (VAR src, dst: Item; ovflchk: BOOLEAN);
+		VAR immLen, w: INTEGER;
+	BEGIN
+		ASSERT(SSize[src.what] = SSize[dst.what]);
+		IF src.mode = Con THEN
+			IF src.o = NIL THEN
+				IF (src.offset = 1) & (src.scale = 0) THEN LGenOp2(0FEH, fix1, 1, dst)
+				ELSIF (src.offset = -1) & (src.scale = -1) THEN LGenOp2(0FEH, fix1, 0, dst)
+				ELSIF src.offset # 0 THEN
+					LGenConOp(28H, src, dst)
+				ELSE RETURN
+				END
+			ELSE
+				LGenConOp(28H, src, dst)
+			END
+		ELSE
+			LGenDirOp(28H, src, dst)
+		END;
+		IF ovflchk THEN E.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenSub;
+
+	PROCEDURE GenSubC* (VAR src, dst: Item; first, ovflchk: BOOLEAN);
+		VAR op: INTEGER;
+	BEGIN
+		ASSERT(Size[src.form] = Size[dst.form]);
+		IF first THEN op := 28H ELSE op := 18H END;
+		IF src.mode = Con THEN GenConOp(op, src, dst)
+		ELSE GenDirOp(op, src, dst)
+		END;
+		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenSubC;
+
+	PROCEDURE GenComp* (VAR src, dst: Item);
+		VAR w: INTEGER;
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.offset = 0) & (src.obj = NIL) & (dst.mode = Reg) THEN 
+				CheckSize(dst.form, w); DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * dst.reg) (* or r,r *)
+			ELSE GenConOp(38H, src, dst)
+			END
+		ELSE
+			GenDirOp(38H, src, dst)
+		END
+	END GenComp;
+	
+	PROCEDURE LGenComp* (VAR src, dst: Item);
+		VAR _, w: INTEGER; 
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.offset = 0) & (src.obj = NIL) & (dst.mode = Reg) THEN 
+				LGenOpRMR(8, dst.reg, dst, { fix1 } )	 (* or r,r *)
+			ELSE LGenConOp(38H, src, dst)
+			END
+		ELSE
+			LGenDirOp(38H, src, dst)
+		END
+	END LGenComp;
+	
+	PROCEDURE GenAnd* (VAR src, dst: Item);
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.obj # NIL) OR (src.offset # -1) THEN GenConOp(20H, src, dst) END
+		ELSE GenDirOp(20H, src, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenAnd;
+	
+	PROCEDURE LGenAnd* (VAR src, dst: Item);
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.obj # NIL) OR (src.offset # -1) THEN LGenConOp(20H, src, dst) END
+		ELSE LGenDirOp(20H, src, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenAnd;
+	
+	PROCEDURE GenOr* (VAR src, dst: Item);
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.obj # NIL) OR (src.offset # 0) THEN GenConOp(8H, src, dst) END
+		ELSE GenDirOp(8H, src, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenOr;
+	
+	PROCEDURE LGenOr* (VAR src, dst: Item);
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.obj # NIL) OR (src.offset # 0) THEN LGenConOp(8H, src, dst) END
+		ELSE LGenDirOp(8H, src, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenOr;
+	
+	PROCEDURE GenXor* (VAR src, dst: Item);
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.obj # NIL) OR (src.offset # 0) THEN GenConOp(30H, src, dst) END
+		ELSE GenDirOp(30H, src, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenXor;
+	
+	PROCEDURE LGenXor* (VAR src, dst: Item);
+	BEGIN
+		IF src.mode = Con THEN
+			IF (src.obj # NIL) OR (src.offset # 0) THEN LGenConOp(30H, src, dst) END
+		ELSE LGenDirOp(30H, src, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenXor;
+	
+	PROCEDURE GenTest* (VAR x, y: Item);
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(Size[x.form] = Size[y.form]);
+		CheckSize(x.form, w);
+		IF x.mode = Con THEN
+			IF (x.mode = Reg) & (x.reg = AX) THEN
+				DevCPE.GenByte(0A8H + w); GenConst(x, FALSE)
+			ELSE
+				DevCPE.GenByte(0F6H + w); GenCExt(0, y); GenConst(x, FALSE)
+			END
+		ELSE
+			DevCPE.GenByte(84H + w);
+			IF y.mode = Reg THEN GenDExt(y, x) ELSE GenDExt(x, y) END
+		END
+	END GenTest;
+
+	PROCEDURE LGenTest* (VAR x, y: Item);
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(Size[x.what] = Size[y.what]);
+		(*CheckSize(x.form, w);*)
+		IF x.mode = Con THEN
+			IF (x.mode = Reg) & (x.reg = AX) THEN
+				LGenOpConst(0A8H, fix1, x)
+			ELSE
+				LGenOp2(0F6H, fix1, 0, y); GenConst(x, FALSE)
+			END
+		ELSE
+			IF y.mode = Reg THEN LGenOp2(84H, fix1, y.reg, x) ELSE LGenOp2(84H, fix1, x.reg, y) END
+		END
+	END LGenTest;
+	
+	PROCEDURE GenNeg* (VAR dst: Item; ovflchk: BOOLEAN);
+		VAR w: INTEGER;
+	BEGIN
+		CheckSize(dst.form, w); DevCPE.GenByte(0F6H + w); GenCExt(18H, dst);
+		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenNeg;
+	
+	PROCEDURE LGenNeg* (VAR dst: Item; ovflchk: BOOLEAN);
+		VAR _, w: INTEGER;
+	BEGIN
+		LGenOpRMR(0F6H, 3, dst, { noReg, fix1 });
+		IF ovflchk THEN E.GenByte(0CEH) END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenNeg;
+	
+	PROCEDURE GenNot* (VAR dst: Item);
+		VAR w: INTEGER;
+	BEGIN
+		CheckSize(dst.form, w); DevCPE.GenByte(0F6H + w); GenCExt(10H, dst);
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenNot;
+	
+	PROCEDURE LGenNot* (VAR dst: Item);
+		VAR _, w: INTEGER;
+	BEGIN
+		LGenOp2(0F6H, fix1, 2, dst);
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenNot;
+	
+	PROCEDURE LGenMul* (VAR src, dst: Item; ovflchk: BOOLEAN);
+		CONST LEA = 8DH; SHL = 0C1H; 
+		VAR pref, fixup, w, s, val, f2, f5, f9: INTEGER; prefixed: BOOLEAN;
+	BEGIN 
+		ASSERT((dst.mode = Reg) & (SSize[src.what] = SSize[dst.what]));
+		prefixed := src.what = T.fInt64; IF prefixed THEN pref := 48H (* or other val for R8..R16 *) END;
+		IF (src.mode = Con) & (src.offset = 1) THEN RETURN END;
+		IF src.what IN bytes THEN
+			ASSERT(dst.reg = 0);
+			E.GenByte(0F6H); GenCExt(28H, src)	(* IMUL AL, r/m8 *)
+		ELSIF src.mode = Con THEN
+			val := src.offset;
+			IF (src.obj = NIL) & (val # 0) & ~ovflchk THEN
+				f2 := 0; f5 := 0; f9 := 0;
+				WHILE ~ODD(val) DO val := val DIV 2; INC(f2) END;
+				WHILE val MOD 9 = 0 DO val := val DIV 9; INC(f9) END;
+				WHILE val MOD 5 = 0 DO val := val DIV 5; INC(f5) END;
+				IF ABS(val) <= 3 THEN
+					WHILE f9 > 0 DO
+						IF prefixed THEN E.GenByte(pref) END;
+						E.GenByte(LEA); E.GenByte(dst.reg * 8 + 4); E.GenByte(0C0H + dst.reg * 9); DEC(f9)
+					END;
+					WHILE f5 > 0 DO 
+						IF prefixed THEN E.GenByte(pref) END;
+						E.GenByte(LEA); E.GenByte(dst.reg * 8 + 4); E.GenByte(80H + dst.reg * 9); DEC(f5)
+					END;
+					IF ABS(val) = 3 THEN 
+						IF prefixed THEN E.GenByte(pref) END;
+						E.GenByte(LEA); E.GenByte(dst.reg * 8 + 4); E.GenByte(40H + dst.reg * 9)
+					END;
+					IF f2 > 1 THEN
+						IF prefixed THEN E.GenByte(pref) END;
+						E.GenByte(0C1H); E.GenByte(0E0H + dst.reg); E.GenByte(f2) 	(* SHL *)
+					ELSIF f2 = 1 THEN 
+						IF prefixed THEN E.GenByte(pref) END;
+						E.GenByte(1); E.GenByte(0C0H + dst.reg * 9)	(* ADD r/m, reg *)
+					END;
+					IF val < 0 THEN 
+						LGenOpRMR(0F7H, 3, dst, { noReg })	(* NEG r/m *)
+					END;
+					IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END;
+					RETURN		(* ARRRRGGGGGHHHH!!!!! *)
+				END
+			END;
+			LGenOpImm(69H, dst.reg, dst, src, { fixShort })	(* IMUL reg, r/m, imm *)	(*$138*)
+		ELSE
+			LGenOpRMR(0FAFH, dst.reg, src, {})	(* IMUL reg, r/m *)	(*$139*)
+		END;
+		IF ovflchk THEN E.GenByte(0CEH) END;
+		IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+	END LGenMul;
+	
+	PROCEDURE GenMul* (VAR src, dst: Item; ovflchk: BOOLEAN);
+		VAR w, s, val, f2, f5, f9: INTEGER;
+	BEGIN
+		ASSERT((dst.mode = Reg) & (Size[src.form] = Size[dst.form]));
+		IF (src.mode = Con) & (src.offset = 1) THEN RETURN END;
+		IF src.form <= Int8 THEN
+			ASSERT(dst.reg = 0);
+			DevCPE.GenByte(0F6H); GenCExt(28H, src)
+		ELSIF src.mode = Con THEN
+			val := src.offset;
+			IF (src.obj = NIL) & (val # 0) & ~ovflchk THEN
+				f2 := 0; f5 := 0; f9 := 0;
+				WHILE ~ODD(val) DO val := val DIV 2; INC(f2) END;
+				WHILE val MOD 9 = 0 DO val := val DIV 9; INC(f9) END;
+				WHILE val MOD 5 = 0 DO val := val DIV 5; INC(f5) END;
+				IF ABS(val) <= 3 THEN
+					WHILE f9 > 0 DO
+						DevCPE.GenByte(8DH);
+						DevCPE.GenByte(dst.reg * 8 + 4);
+						DevCPE.GenByte(0C0H + dst.reg * 9);
+						DEC(f9)
+					END;
+					WHILE f5 > 0 DO
+						DevCPE.GenByte(8DH);
+						DevCPE.GenByte(dst.reg * 8 + 4);
+						DevCPE.GenByte(80H + dst.reg * 9);
+						DEC(f5)
+					END;
+					IF ABS(val) = 3 THEN
+						DevCPE.GenByte(8DH); DevCPE.GenByte(dst.reg * 8 + 4); DevCPE.GenByte(40H + dst.reg * 9)
+					END;
+					IF f2 > 1 THEN DevCPE.GenByte(0C1H); DevCPE.GenByte(0E0H + dst.reg); DevCPE.GenByte(f2)
+					ELSIF f2 = 1 THEN DevCPE.GenByte(1); DevCPE.GenByte(0C0H + dst.reg * 9)
+					END;
+					IF val < 0 THEN DevCPE.GenByte(0F7H); GenCExt(18H, dst) END;
+					IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END;
+					RETURN
+				END
+			END;
+			CheckSize(src.form, w); CheckConst(src, s);
+			DevCPE.GenByte(69H + s); GenDExt(dst, dst); GenConst(src, TRUE)
+		ELSE
+			CheckSize(src.form, w);
+			DevCPE.GenByte(0FH); DevCPE.GenByte(0AFH); GenDExt(dst, src)
+		END;
+		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END
+	END GenMul;
+	
+	PROCEDURE GenDiv* (VAR src: Item; mod, pos: BOOLEAN);
+		VAR w, rem: INTEGER;
+	BEGIN
+		ASSERT(src.mode = Reg);
+		IF src.form >= Int32 THEN DevCPE.GenByte(99H) (* cdq *)
+		ELSIF src.form = Int16 THEN DevCPE.GenByte(66H); DevCPE.GenByte(99H) (* cwd *)
+		ELSE DevCPE.GenByte(66H); DevCPE.GenByte(98H) (* cbw *)
+		END;
+		CheckSize(src.form, w); DevCPE.GenByte(0F6H + w); GenCExt(38H, src); (* idiv src *)
+		IF src.form > Int8 THEN rem := 2 (* edx *) ELSE rem := 4 (* ah *) END;
+		IF pos THEN (* src > 0 *)
+			CheckSize(src.form, w); DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
+			IF mod THEN
+				DevCPE.GenByte(79H); DevCPE.GenByte(2);	(* jns end *)
+				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
+			ELSE
+				DevCPE.GenByte(79H); DevCPE.GenByte(1);	(* jns end *)
+				DevCPE.GenByte(48H);					(* dec eax *)
+			END
+		ELSE
+			CheckSize(src.form, w); DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
+			IF mod THEN
+				DevCPE.GenByte(79H);	(* jns end *)
+				IF src.form = Int16 THEN DevCPE.GenByte(9); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(8) END;
+				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
+				DevCPE.GenByte(74H); DevCPE.GenByte(4);	(* je end *)
+				DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
+				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
+			ELSE
+				DevCPE.GenByte(79H);	(* jns end *)
+				IF src.form = Int16 THEN DevCPE.GenByte(6); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(5) END;
+				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
+				DevCPE.GenByte(74H); DevCPE.GenByte(1);	(* je end *)
+				DevCPE.GenByte(48H);					(* dec eax *)
+			END
+(*
+			CheckSize(src.form, w); DevCPE.GenByte(3AH + w); GenCExt(8 * rem, src); (* cmp rem,src *)
+			IF mod THEN
+				DevCPE.GenByte(72H); DevCPE.GenByte(4);	(* jb end *)
+				DevCPE.GenByte(7FH); DevCPE.GenByte(2);	(* jg end *)
+				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
+			ELSE
+				DevCPE.GenByte(72H); DevCPE.GenByte(3);	(* jb end *)
+				DevCPE.GenByte(7FH); DevCPE.GenByte(1);	(* jg end *)
+				DevCPE.GenByte(48H);					(* dec eax *)
+			END
+*)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END GenDiv;
+
+	PROCEDURE ^ GenJump* (cc: INTEGER; VAR L: Label; shortjmp: BOOLEAN);	(* unforward! *)
+	PROCEDURE LGenDiv* (VAR src: Item; mod, pos: BOOLEAN);
+		VAR _, w, rem: INTEGER;	(* src is the divisor; the dividend is already in AX *)
+			i64: BOOLEAN; end2, end: Label; remr: Item;
+	BEGIN
+		ASSERT(src.mode = Reg);	(* why is this required? *)
+		i64 := src.what = T.fInt64;
+		IF i64 THEN E.GenByte(48H); E.GenByte(99H)	(* CQO RAX->RDX:RAX *)
+		ELSIF src.what = T.fInt32 THEN E.GenByte(99H) (* cdq *)
+		ELSIF src.what = T.fInt16 THEN E.GenByte(66H); E.GenByte(99H) (* cwd *)
+		ELSE E.GenByte(66H); E.GenByte(98H) (* cbw *)
+		END;
+		LGenOpRMR(0F6H, 7, src, { fix1, noReg }); (* idiv src *)
+		IF src.what # T.fInt8 THEN rem := 2 (* edx *) ELSE rem := 4 (* ah *) END;
+		(* because rem is RDX, EDX or AH, only REX.W prefix is needed, so it can be outed directly, beside GenOpRMR *)
+		IF src.what IN bytes THEN w := 0 ELSE w := 1 END;
+		LMakeReg(remr, rem, src.what);
+		end := NewLbl; 
+		IF pos THEN (* src > 0 *)
+			(*LCheckSize(src.what, TRUE, w, _); *)E.GenByte(8 + w); E.GenByte(0C0H + 9 * rem); (* or rem,rem *)
+			IF mod THEN
+				GenJump(ccNS, end, TRUE);	(* jns end *)
+				LGenOpRMR(2, rem, src, { fix1 }) (* add rem,src *)
+			ELSE
+				GenJump(ccNS, end, TRUE);	(* jns end *)
+				IF src.what = T.fInt64 THEN E.GenByte(48H) END;
+				E.GenByte(0FFH); E.GenByte(0C8H) 					(* dec eax/rax *)
+			END
+		ELSE
+			end2 := NewLbl;
+			LGenOpRMR(30H, rem, src, { fix1 }); (* xor src,rem *)
+			IF mod THEN
+				GenJump(ccNS, end, TRUE);
+				LGenOpRMR(8, rem, remr, { fix1 });	(* or rem,rem *)
+				GenJump(ccE, end2, TRUE); 	(* je end *)
+				LGenOpRMR(30H, rem, src, { fix1 }); (* xor src,rem *)
+				LGenOpRMR(2, rem, src, { fix1 }) (* add rem,src *)
+			ELSE
+				GenJump(ccNS, end, TRUE);	(* jns end *)
+				LGenOpRMR(8, rem, remr, { fix1 }); (* or rem,rem *)
+				GenJump(ccE, end2, TRUE);	(* je end *)
+				IF src.what = T.fInt64 THEN E.GenByte(48H) END;
+				E.GenByte(0FFH); E.GenByte(0C8H) 					(* dec eax/rax *)
+			END;
+			LSetLabel(end2)
+		END;
+		LSetLabel(end); 
+		a1.mode := 0; a2.mode := 0
+	END LGenDiv;
+
+	PROCEDURE GenShiftOp* (op: INTEGER; VAR cnt, dst: Item);
+		VAR w: INTEGER;
+	BEGIN
+		CheckSize(dst.form, w);
+		IF cnt.mode = Con THEN
+			ASSERT(cnt.offset >= 0); ASSERT(cnt.obj = NIL);
+			IF cnt.offset = 1 THEN
+				IF (op = 10H) & (dst.mode = Reg) THEN (* shl r *)
+					DevCPE.GenByte(w); GenDExt(dst, dst) (* add r, r *)
+				ELSE
+					DevCPE.GenByte(0D0H + w); GenCExt(op, dst)
+				END
+			ELSIF cnt.offset > 1 THEN
+				DevCPE.GenByte(0C0H + w); GenCExt(op, dst); DevCPE.GenByte(cnt.offset)
+			END
+		ELSE
+			ASSERT((cnt.mode = Reg) & (cnt.reg = CX));
+			DevCPE.GenByte(0D2H + w); GenCExt(op, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenShiftOp;
+	
+	PROCEDURE LGenShiftOp* (op: INTEGER; VAR cnt, dst: Item);
+		VAR _, w: INTEGER;
+	BEGIN
+		(*LCheckSize(dst.what, TRUE, w, _);*)
+		IF cnt.mode = Con THEN ASSERT(cnt.what = T.fInt32);
+			ASSERT(cnt.offset >= 0); ASSERT(cnt.obj = NIL);
+			IF cnt.offset = 1 THEN
+				IF (op = 10H) & (dst.mode = Reg) THEN (* shl r *)
+					LGenOpRMR(0, dst.reg, dst, { fix1 }) (* add r, r *)
+				ELSE
+					LGenOpRMR(0D0H, op DIV 8, dst, { fix1, noReg })		(* remove DIV after correcting constants *)
+				END
+			ELSIF cnt.offset > 1 THEN
+				LGenOpImm(0C0H, op DIV 8, dst, cnt, { fix1, noReg })
+			END
+		ELSE
+			ASSERT((cnt.mode = Reg) & (cnt.reg = CX));
+			LGenOpRMR(0D2H, op DIV 8, dst, { fix1, noReg }) 
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenShiftOp;
+	
+	PROCEDURE GenBitOp* (op: INTEGER; VAR num, dst: Item);
+	BEGIN
+		DevCPE.GenByte(0FH);
+		IF num.mode = Con THEN
+			ASSERT(num.obj = NIL);
+			DevCPE.GenByte(0BAH); GenCExt(op, dst); DevCPE.GenByte(num.offset)
+		ELSE
+			ASSERT((num.mode = Reg) & (num.form = Int32));
+			DevCPE.GenByte(83H + op); GenDExt(num, dst)
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenBitOp;
+	
+	PROCEDURE LGenBitOp* (op: INTEGER; VAR num, dst: Item);
+	BEGIN
+		IF num.mode = Con THEN
+			ASSERT(num.o = NIL);
+			LGenOpRMR(0FBAH, op DIV 8, dst, { noReg }); E.GenByte(num.offset)	(* BT, BTC, BTR, BTS*)
+		ELSE
+			ASSERT((num.mode = Reg) & (num.what = T.fInt32));
+			LGenOpRMR(0F83H + op, num.reg, dst, {})
+		END;
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenBitOp;
+	
+	PROCEDURE GenSetCC* (cc: INTEGER; VAR dst: Item);
+	BEGIN
+		ASSERT((dst.form = Bool) & (cc >= 0));
+		DevCPE.GenByte(0FH); DevCPE.GenByte(90H + cc); GenCExt(0, dst);
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END GenSetCC;
+	
+	PROCEDURE LGenSetCC* (cc: INTEGER; VAR dst: Item);
+	BEGIN
+		ASSERT((dst.what = Bool) & (cc >= 0));
+		LGenOpRMR(0F90H + cc, 0, dst, {});
+		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
+	END LGenSetCC;
+	
+	PROCEDURE GenFLoad* (VAR src: Item);
+		VAR mf: INTEGER;
+	BEGIN
+		IF src.mode = Con THEN (* predefined constants *)
+			DevCPE.GenByte(0D9H); DevCPE.GenByte(0E8H + src.offset)
+		ELSIF src.form = Int64 THEN
+			DevCPE.GenByte(0DFH); GenCExt(28H, src)
+		ELSE
+			CheckForm(src.form, mf);
+			DevCPE.GenByte(0D9H + mf); GenCExt(0, src)
+		END
+	END GenFLoad;
+
+	PROCEDURE LGenRMove* (VAR src, dst: Item);	(* Generate Real move (XMM) *)
+	BEGIN
+		IF dst.mode = Xmm THEN 	(* load into XMM register - for ms64 calling convention *)
+			(*ASSERT(dst.reg < 0);	(* XMM register numbers are negative: for XMMi, i = (-src.reg) DIV 2; src.reg # 0 *)*)
+			ASSERT(src.mode IN { Abs, Ind, Stk });
+			IF (src.mode = Abs) & (src.lit # NIL) THEN src.type := src.lit.type; src.what := src.type.what END;
+			LGenOpRMR(0F6EH, dst.reg, src, { xmm }); 		(* MOVD xmm, mem/reg *)
+		ELSIF dst.mode IN { Ind, Abs, Stk } THEN	(* store into memory from XMM register *)
+			ASSERT(src.mode = Xmm);
+			LGenOpRMR(0F7EH, src.reg, dst, { xmm })	(* MOVD mem/reg, xmm *)
+		ELSE HALT(126)
+		END
+	END LGenRMove;
+
+	PROCEDURE LGenFLoad* (VAR src: Item);
+		VAR mf: INTEGER;
+	BEGIN
+		IF src.mode = Con THEN (* predefined constants *)
+			E.GenByte(0D9H); E.GenByte(0E8H + src.offset)
+		ELSIF src.what = T.fInt32 THEN LGenOpRMR(0DBH, 0, src, {})
+		ELSIF src.what = T.fInt64 THEN LGenOpRMR(0DFH, 5, src, { noRexW })
+		ELSE
+			LGenOpRMR(0D9H + FloatOpFix(src), 0, src, { })	(* ? FLD mem32real, FLD mem64real *)
+			;(*ASSERT(src.lit(T.Real).real = 3.14, 4);*)
+		END
+	END LGenFLoad;
+	
+	PROCEDURE GenFStore* (VAR dst: Item; pop: BOOLEAN);
+		VAR mf: INTEGER;
+	BEGIN
+		IF dst.form = Int64 THEN ASSERT(pop);
+			DevCPE.GenByte(0DFH); GenCExt(38H, dst); DevCPE.GenByte(9BH)	(* wait *)
+		ELSE
+			CheckForm(dst.form, mf); DevCPE.GenByte(0D9H + mf);
+			IF pop THEN GenCExt(18H, dst); DevCPE.GenByte(9BH)	(* wait *)
+			ELSE GenCExt(10H, dst)
+			END
+		END;
+		a1.mode := 0; a2.mode := 0
+	END GenFStore;
+
+	PROCEDURE LGenFStore* (VAR dst: Item; pop: BOOLEAN);
+		VAR oce (* opcode extension *), mf: INTEGER;
+	BEGIN
+		IF dst.what = T.fInt64 THEN ASSERT(pop);
+			LGenOpRMR(0DFH, 7, dst, {}); E.GenByte(9BH)	(* wait *)
+		ELSE
+			IF pop THEN oce := 3 ELSE oce := 2 END;	(* FSTP/FST *)
+			LGenOpRMR(0D9H + FloatOpFix(dst), oce, dst, { noReg }); (* F(I)ST(P) mem32real, FST mem64real *)
+			IF pop THEN E.GenByte(9BH) END	(* wait *)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END LGenFStore;
+	
+	PROCEDURE GenFDOp* (op: INTEGER; VAR src: Item);
+		VAR mf: INTEGER;
+	BEGIN
+		IF src.mode = Reg THEN
+			DevCPE.GenByte(0DEH); DevCPE.GenByte(0C1H + op)
+		ELSE
+			CheckForm(src.form, mf);
+			DevCPE.GenByte(0D8H + mf); GenCExt(op, src)
+		END
+	END GenFDOp;
+
+	PROCEDURE LGenFDOp* (op: INTEGER; VAR src: Item);
+		VAR mf: INTEGER;
+	BEGIN
+		IF src.mode = Reg THEN
+			E.GenByte(0DEH); E.GenByte(0C1H + op)
+		ELSE
+			LGenOpRMR(0D8H + FloatOpFix(src), op DIV 8, src, { }) 
+		END
+	END LGenFDOp;
+	
+	PROCEDURE GenFMOp* (op: INTEGER);
+	BEGIN
+		DevCPE.GenByte(0D8H + op DIV 256);
+		DevCPE.GenByte(op MOD 256);
+		IF op = 07E0H THEN a1.mode := 0; a2.mode := 0 END	(* FSTSW AX *)
+	END GenFMOp;
+
+	PROCEDURE LGenFMOp* (op: INTEGER);
+	BEGIN
+		E.GenByte(0D8H + op DIV 256);
+		E.GenByte(op MOD 256);
+		IF op = 07E0H THEN a1.mode := 0; a2.mode := 0 END	(* FSTSW AX *)
+	END LGenFMOp;
+	
+	PROCEDURE GenJump* (cc: INTEGER; VAR L: Label; shortjmp: BOOLEAN);
+	BEGIN
+		IF cc # ccNever THEN
+			IF shortjmp OR (L > 0) & (E.pc + 2 - L <= 128) & (cc # ccCall) THEN
+				IF cc = ccAlways THEN E.GenByte(0EBH)
+				ELSE E.GenByte(70H + cc)
+				END;
+				IF L > 0 THEN E.GenByte(L - E.pc - 1)
+				ELSE ASSERT(L = 0); L := -(E.pc + short * 1000000H); E.GenByte(0)
+				END
+			ELSE
+				IF cc = ccAlways THEN E.GenByte(0E9H)
+				ELSIF cc = ccCall THEN E.GenByte(0E8H)
+				ELSE E.GenByte(0FH); E.GenByte(80H + cc)
+				END;
+				IF L > 0 THEN GenDbl(L - E.pc - 4)
+				ELSE GenDbl(-L); L := -(E.pc - 4 + relative * 1000000H)
+				END
+			END
+		END
+	END GenJump;
+	
+	PROCEDURE GenExtJump* (cc: INTEGER; VAR dst: Item);
+	BEGIN
+		IF cc = ccAlways THEN DevCPE.GenByte(0E9H)
+		ELSE DevCPE.GenByte(0FH); DevCPE.GenByte(80H + cc)
+		END;
+		dst.offset := 0; GenLinked(dst, relative)
+	END GenExtJump;
+	
+	PROCEDURE GenIndJump* (VAR dst: Item);
+	BEGIN
+		DevCPE.GenByte(0FFH); GenCExt(20H, dst)
+	END GenIndJump;
+	
+	PROCEDURE GenCaseJump* (VAR src: Item);
+		VAR link: DevCPT.LinkList; tab: INTEGER;
+	BEGIN
+		ASSERT((src.form = Int32) & (src.mode = Reg));
+		DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(85H + 8 * src.reg);
+		tab := (DevCPE.pc + 7) DIV 4 * 4;
+		NEW(link); link.offset := tab; link.linkadr := DevCPE.pc;
+		link.next := DevCPE.CaseLinks; DevCPE.CaseLinks := link;
+		GenDbl(absolute * 1000000H + tab);
+		WHILE DevCPE.pc < tab DO DevCPE.GenByte(90H) END;
+	END GenCaseJump;
+(*	
+	PROCEDURE GenCaseJump* (VAR src: Item; num: LONGINT; VAR tab: LONGINT);
+		VAR link: DevCPT.LinkList; else, last: LONGINT;
+	BEGIN
+		ASSERT((src.form = Int32) & (src.mode = Reg));
+		DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(85H + 8 * src.reg);
+		tab := (DevCPE.pc + 7) DIV 4 * 4;
+		else := tab + num * 4; last := else - 4;
+		NEW(link); link.offset := tab; link.linkadr := DevCPE.pc;
+		link.next := CaseLinks; CaseLinks := link;
+		GenDbl(absolute * 1000000H + tab);
+		WHILE DevCPE.pc < tab DO DevCPE.GenByte(90H) END;
+		WHILE DevCPE.pc < last DO GenDbl(table * 1000000H + else) END;
+		GenDbl(tableend * 1000000H + else)
+	END GenCaseJump;
+*)	
+	PROCEDURE GenCaseEntry* (VAR L: Label; last: BOOLEAN);
+		VAR typ: INTEGER;
+	BEGIN
+		IF last THEN typ := tableend * 1000000H ELSE typ := table * 1000000H END;
+		IF L > 0 THEN GenDbl(L + typ) ELSE GenDbl(-L); L := -(DevCPE.pc - 4 + typ) END
+	END GenCaseEntry;
+	
+	PROCEDURE GenCall* (VAR dst: Item);
+	BEGIN
+		IF dst.mode IN {LProc, XProc, IProc} THEN
+			DevCPE.GenByte(0E8H);
+			IF dst.obj.mnolev >= 0 THEN (* local *)
+				IF dst.obj.adr > 0 THEN GenDbl(dst.obj.adr - DevCPE.pc - 4)
+				ELSE GenDbl(-dst.obj.adr); dst.obj.adr := -(DevCPE.pc - 4 + relative * 1000000H)
+				END
+			ELSE (* imported *)
+				dst.offset := 0; GenLinked(dst, relative)
+			END
+		ELSE DevCPE.GenByte(0FFH); GenCExt(10H, dst)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END GenCall;
+	
+	PROCEDURE LGenCall* (VAR dst: Item);
+		VAR p: T.Proc; _: INTEGER;
+	BEGIN
+		IF (dst.mode = XProc) & (dst.o(T.Proc).imno = 0) THEN p := dst.o(T.Proc);
+			E.GenByte(0E8H);	(* CALL near *)
+			IF p.imno = 0 THEN (* local *)		(* eliminate this IF! It's always this branch, see above *)
+				IF p.adr > 0 THEN GenDbl(p.adr - E.pc - 4)
+				ELSE GenDbl(-p.adr); p.adr := -(E.pc - 4 + relative * 1000000H)
+				END
+			ELSE (* imported *)HALT(20) (* imported procedures: MOV [reg64], fixup; CALL [reg64] *)
+			END
+		ELSE 
+			IF dst.mode = XProc THEN 
+				dst.mode := Abs; dst.what := T.fProcedure; dst.offset := 0; dst.index := 0; dst.scale := 0 
+			END;
+			LGenOpRMR(0FFH, 2, dst, { noRexW })	 (* FF /2 CALL r/m16/64, doesn't need REX.W prefix *)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END LGenCall;
+	
+	PROCEDURE GenAssert* (cc, no: INTEGER);
+	BEGIN
+		IF cc # ccAlways THEN
+			IF cc >= 0 THEN
+				DevCPE.GenByte(70H + cc); (* jcc end *)
+				IF no < 0 THEN DevCPE.GenByte(2) ELSE DevCPE.GenByte(3) END
+			END;
+			IF no < 0 THEN
+				DevCPE.GenByte(8DH); DevCPE.GenByte(0E0H - no)
+			ELSE
+				DevCPE.GenByte(8DH); DevCPE.GenByte(0F0H); DevCPE.GenByte(no)
+			END
+		END
+	END GenAssert;
+	
+	PROCEDURE LGenAssert* (cc, no: INTEGER);
+	BEGIN
+		IF cc # ccAlways THEN
+			IF cc >= 0 THEN
+				E.GenByte(70H + cc); (* jcc end *)
+				IF no < 0 THEN E.GenByte(2) ELSE E.GenByte(3) END
+			END;
+			IF no < 0 THEN
+				E.GenByte(8DH); E.GenByte(0E0H - no)
+			ELSE
+				E.GenByte(8DH); E.GenByte(0F0H); E.GenByte(no)
+			END
+		END
+	END LGenAssert;
+	
+	PROCEDURE GenReturn* (val: INTEGER);
+	BEGIN
+		IF val = 0 THEN DevCPE.GenByte(0C3H)
+		ELSE DevCPE.GenByte(0C2H); GenWord(val)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END GenReturn;
+	
+	PROCEDURE LGenReturn* (val: INTEGER);
+	BEGIN
+		IF val = 0 THEN E.GenByte(0C3H)
+		ELSE E.GenByte(0C2H); GenWord(val)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END LGenReturn;
+	
+	PROCEDURE LoadStr (size: INTEGER);
+	BEGIN
+		IF size = 2 THEN DevCPE.GenByte(66H) END;
+		IF size <= 1 THEN DevCPE.GenByte(0ACH) ELSE DevCPE.GenByte(0ADH) END (* lods *)
+	END LoadStr;
+	
+	PROCEDURE LLoadStr (size: INTEGER);
+	BEGIN
+		IF size = 8 THEN E.GenByte(REXW)	(* is this reachable? *)
+		ELSIF size = 2 THEN E.GenByte(66H) 
+		END;
+		IF size <= 1 THEN E.GenByte(0ACH) ELSE E.GenByte(0ADH) END (* lods *)
+	END LLoadStr;
+	
+	PROCEDURE StoreStr (size: INTEGER);
+	BEGIN
+		IF size = 2 THEN DevCPE.GenByte(66H) END;
+		IF size <= 1 THEN DevCPE.GenByte(0AAH) ELSE DevCPE.GenByte(0ABH) END (* stos *)
+	END StoreStr;
+	
+	PROCEDURE LStoreStr (size: INTEGER);
+	BEGIN
+		IF size = 8 THEN E.GenByte(REXW)	(* is this reachable? *)
+		ELSIF size = 2 THEN E.GenByte(66H) 
+		END;
+		IF size <= 1 THEN E.GenByte(0AAH) ELSE E.GenByte(0ABH) END (* stos *)
+	END LStoreStr;
+	
+	PROCEDURE ScanStr (size: INTEGER; rep: BOOLEAN);
+	BEGIN
+		IF size = 2 THEN DevCPE.GenByte(66H) END;
+		IF rep THEN DevCPE.GenByte(0F2H) END;
+		IF size <= 1 THEN DevCPE.GenByte(0AEH) ELSE DevCPE.GenByte(0AFH) END (* scas *)
+	END ScanStr;
+
+	PROCEDURE LScanStr (size: INTEGER; rep: BOOLEAN);
+	BEGIN
+		IF size = 2 THEN E.GenByte(66H) END;
+		IF rep THEN E.GenByte(0F2H) END;
+		IF size <= 1 THEN E.GenByte(0AEH) ELSE E.GenByte(0AFH) END (* scas *)
+	END LScanStr;
+	
+	PROCEDURE TestNull (size: INTEGER);
+	BEGIN
+		IF size = 2 THEN DevCPE.GenByte(66H) END;
+		IF size <= 1 THEN DevCPE.GenByte(8); DevCPE.GenByte(0C0H); (* or al,al *)
+		ELSE DevCPE.GenByte(9); DevCPE.GenByte(0C0H); (* or ax,ax *)
+		END
+	END TestNull;
+	
+	PROCEDURE LTestNull (size: INTEGER);
+		VAR w: INTEGER;
+	BEGIN w := 1;
+		IF size = 8 THEN E.GenByte(REXW)	(* is this reachable? *)
+		ELSIF size = 2 THEN E.GenByte(66H) 
+		ELSIF size <= 1 THEN w := 0
+		END;
+		E.GenByte(8 + w); E.GenByte(0C0H); (* or ax,ax *)
+	END LTestNull;
+	
+	PROCEDURE GenBlockMove* (wsize, len: INTEGER);	(* len = 0: len in ECX *)
+		VAR w: INTEGER;
+	BEGIN
+		IF len = 0 THEN (* variable size move *)
+			IF wsize = 4 THEN w := 1 ELSIF wsize = 2 THEN w := 1; DevCPE.GenByte(66H) ELSE w := 0 END;
+			DevCPE.GenByte(0F3H); DevCPE.GenByte(0A4H + w); (* rep:movs *)
+		ELSE (* fixed size move *)
+			len := len * wsize;
+			IF len >= 16 THEN
+				DevCPE.GenByte(0B9H); GenDbl(len DIV 4); (* ld ecx,len/4 *)
+				DevCPE.GenByte(0F3H); DevCPE.GenByte(0A5H); (* rep:movs long*)
+				len := len MOD 4
+			END;
+			WHILE len >= 4 DO DevCPE.GenByte(0A5H); DEC(len, 4) END; (* movs long *);
+			IF len >= 2 THEN DevCPE.GenByte(66H); DevCPE.GenByte(0A5H) END; (* movs word *);
+			IF ODD(len) THEN DevCPE.GenByte(0A4H) END; (* movs byte *)
+		END
+	END GenBlockMove;
+	
+	PROCEDURE LGenBlockMove* (wsize, len: INTEGER);	(* len = 0: len in ECX *)
+		VAR w: INTEGER;
+	BEGIN
+		IF len = 0 THEN (* variable size move *)
+			E.GenByte(0F3H); 
+			IF wsize = 8 THEN E.GenByte(REXW); w := 1 
+			ELSIF wsize = 4 THEN w := 1 
+			ELSIF wsize = 2 THEN w := 1; E.GenByte(66H) 
+			ELSIF wsize = 1 THEN w := 0 
+			ELSE HALT(20)
+			END;
+			E.GenByte(0A4H + w); (* rep:movs *)
+		ELSE (* fixed size move *)
+			len := len * wsize;
+			IF len >= 16 THEN
+				E.GenByte(0B9H); GenDbl(len DIV 4); (* ld ecx,len/4 *)
+				E.GenByte(0F3H); E.GenByte(0A5H); (* rep:movs long*)
+				len := len MOD 4
+			END;
+			WHILE len >= 8 DO E.GenByte(48H); E.GenByte(0A5H); DEC(len, 8) END; (* movs quad *);
+			IF len >= 4 THEN E.GenByte(0A5H); DEC(len, 4) END; (* movs long *);
+			IF len >= 2 THEN E.GenByte(66H); E.GenByte(0A5H) END; (* movs word *);
+			IF ODD(len) THEN E.GenByte(0A4H) END; (* movs byte *)
+		END
+	END LGenBlockMove;
+	
+	PROCEDURE GenBlockStore* (wsize, len: INTEGER);	(* len = 0: len in ECX *)
+		VAR w: INTEGER;
+	BEGIN
+		IF len = 0 THEN (* variable size move *)
+			IF wsize = 4 THEN w := 1 ELSIF wsize = 2 THEN w := 1; DevCPE.GenByte(66H) ELSE w := 0 END;
+			DevCPE.GenByte(0F3H); DevCPE.GenByte(0AAH + w); (* rep:stos *)
+		ELSE (* fixed size move *)
+			len := len * wsize;
+			IF len >= 16 THEN
+				DevCPE.GenByte(0B9H); GenDbl(len DIV 4); (* ld ecx,len/4 *)
+				DevCPE.GenByte(0F3H); DevCPE.GenByte(0ABH); (* rep:stos long*)
+				len := len MOD 4
+			END;
+			WHILE len >= 4 DO DevCPE.GenByte(0ABH); DEC(len, 4) END; (* stos long *);
+			IF len >= 2 THEN DevCPE.GenByte(66H); DevCPE.GenByte(0ABH) END; (* stos word *);
+			IF ODD(len) THEN DevCPE.GenByte(0ABH) END; (* stos byte *)
+		END
+	END GenBlockStore;
+	
+	PROCEDURE GenBlockComp* (wsize, len: INTEGER);	(* len = 0: len in ECX *)
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(len >= 0);
+		IF len > 0 THEN DevCPE.GenByte(0B9H); GenDbl(len) END; (* ld ecx,len *)
+		IF wsize = 4 THEN w := 1 ELSIF wsize = 2 THEN w := 1; DevCPE.GenByte(66H) ELSE w := 0 END;
+		DevCPE.GenByte(0F3H); DevCPE.GenByte(0A6H + w) (* repe:cmps *)
+	END GenBlockComp;
+
+	PROCEDURE LGenBlockComp* (wsize, len: INTEGER);	(* len = 0: len in ECX *)
+		VAR w: INTEGER;
+	BEGIN
+		ASSERT(len >= 0);
+		IF len > 0 THEN E.GenByte(0B9H); GenDbl(len) END; (* ld ecx,len *)
+		IF wsize = 4 THEN w := 1 ELSIF wsize = 2 THEN w := 1; E.GenByte(66H) ELSE w := 0 END;
+		E.GenByte(0F3H); E.GenByte(0A6H + w) (* repe:cmps *)
+	END LGenBlockComp;
+	
+	PROCEDURE GenStringMove* (excl: BOOLEAN; wsize, dsize, len: INTEGER);
+	(*
+	len = 0: len in ECX, len = -1: len undefined; wsize # dsize -> convert; size = 0: opsize = 1, incsize = 2; excl: don't move 0X
+	*)
+		VAR loop, end: Label;
+	BEGIN
+		IF len > 0 THEN DevCPE.GenByte(0B9H); GenDbl(len) END; (* ld ecx,len *)
+		(* len >= 0: len IN ECX *)
+		IF (dsize = 2) & (wsize < 2) THEN DevCPE.GenByte(31H); DevCPE.GenByte(0C0H) END; (* xor eax,eax *)
+		loop := NewLbl; end := NewLbl;
+		SetLabel(loop); LoadStr(wsize);
+		IF wsize = 0 THEN DevCPE.GenByte(46H) END; (* inc esi *)
+		IF len < 0 THEN (* no limit *)
+			StoreStr(dsize); TestNull(wsize); GenJump(ccNE, loop, TRUE);
+			IF excl THEN (* dec edi *)
+				DevCPE.GenByte(4FH);
+				IF dsize # 1 THEN DevCPE.GenByte(4FH) END
+			END;
+		ELSE	(* cx limit *)
+			IF excl THEN TestNull(wsize); GenJump(ccE, end, TRUE); StoreStr(dsize)
+			ELSE StoreStr(dsize); TestNull(wsize); GenJump(ccE, end, TRUE)
+			END;
+			DevCPE.GenByte(49H); (* dec ecx *)
+			GenJump(ccNE, loop, TRUE);
+			GenAssert(ccNever, copyTrap); (* trap *)
+			SetLabel(end)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END GenStringMove;
+	
+	PROCEDURE LGenStringMove* (excl: BOOLEAN; wsize, dsize, len: INTEGER);
+	(*
+	len = 0: len in ECX, len = -1: len undefined; wsize # dsize -> convert; size = 0: opsize = 1, incsize = 2; excl: don't move 0X
+	*)
+		VAR loop, end: Label;
+	BEGIN
+		IF len > 0 THEN E.GenByte(REXW); E.GenByte(0C7H); E.GenByte(0C1H); GenDbl(len) END; (* ld rcx,len *)
+		(* len >= 0: len IN RCX *)
+		IF (dsize = 2) & (wsize < 2) THEN (*E.GenByte(REXW); *)E.GenByte(31H); E.GenByte(0C0H) END; (* xor eax,eax *)
+		loop := NewLbl; end := NewLbl;
+		LSetLabel(loop); LLoadStr(wsize);	(* LODS *)
+		IF wsize = 0 THEN E.GenByte(REXW); E.GenByte(0FFH); E.GenByte(0C6H) END;	 (* inc rsi *)
+		IF len < 0 THEN (* no limit *) 
+			LStoreStr(dsize); LTestNull(wsize); GenJump(ccNE, loop, TRUE);
+			IF excl THEN (* dec edi *)
+				E.GenByte(REXW); 
+				IF dsize = 1 THEN E.GenByte(0FFH); E.GenByte(0CFH)	(* DEC RDI *)
+				ELSE E.GenByte(83H); E.GenByte(0EFH); E.GenByte(dsize)
+				END
+			END;
+		ELSE	(* cx limit *)
+			IF excl THEN LTestNull(wsize); GenJump(ccE, end, TRUE); LStoreStr(dsize)	(* STOS *)
+			ELSE LStoreStr(dsize); LTestNull(wsize); GenJump(ccE, end, TRUE)
+			END;
+			(*E.GenByte(REXW); *)E.GenByte(0FFH); E.GenByte(0C9H);	  (* dec rcx *)
+			GenJump(ccNE, loop, TRUE);
+			LGenAssert(ccNever, copyTrap); (* trap *)
+			LSetLabel(end)
+		END;
+		a1.mode := 0; a2.mode := 0
+	END LGenStringMove;
+	
+	PROCEDURE GenStringComp* (wsize, dsize: INTEGER);
+	(* wsize # dsize -> convert; size = 0: opsize = 1, incsize = 2; *)
+		VAR loop, end: Label;
+	BEGIN
+		IF (dsize = 2) & (wsize < 2) THEN DevCPE.GenByte(31H); DevCPE.GenByte(0C0H); (* xor eax,eax *) END;
+		loop := NewLbl; end := NewLbl;
+		SetLabel(loop); LoadStr(wsize);
+		IF wsize = 0 THEN DevCPE.GenByte(46H) END; (* inc esi *)
+		ScanStr(dsize, FALSE); GenJump(ccNE, end, TRUE);
+		IF dsize = 0 THEN DevCPE.GenByte(47H) END; (* inc edi *)
+		TestNull(wsize); GenJump(ccNE, loop, TRUE);
+		SetLabel(end);
+		a1.mode := 0; a2.mode := 0
+	END GenStringComp;
+
+	PROCEDURE LGenStringComp* (wsize, dsize: INTEGER);
+	(* wsize # dsize -> convert; size = 0: opsize = 1, incsize = 2; *)
+		VAR loop, end: Label;
+	BEGIN
+		IF (dsize = 2) & (wsize < 2) THEN E.GenByte(31H); E.GenByte(0C0H); (* xor eax,eax *) END;
+		loop := NewLbl; end := NewLbl;
+		LSetLabel(loop); LLoadStr(wsize);
+		IF wsize = 0 THEN GenWord(0C6FFH) END; (* inc esi *)
+		LScanStr(dsize, FALSE); GenJump(ccNE, end, TRUE);
+		IF dsize = 0 THEN GenWord(0C7FFH) END; (* inc edi *)
+		LTestNull(wsize); GenJump(ccNE, loop, TRUE);
+		LSetLabel(end);
+		a1.mode := 0; a2.mode := 0
+	END LGenStringComp;
+
+	PROCEDURE GenStringLength* (wsize, len: INTEGER);	(* len = 0: len in ECX, len = -1: len undefined *)
+	BEGIN
+		DevCPE.GenByte(31H); DevCPE.GenByte(0C0H); (* xor eax,eax *)
+		IF len # 0 THEN DevCPE.GenByte(0B9H); GenDbl(len) END; (* ld ecx,len *)
+		ScanStr(wsize, TRUE);
+		a1.mode := 0; a2.mode := 0
+	END GenStringLength;
+
+	PROCEDURE LGenStringLength* (wsize, len: INTEGER);	(* len = 0: len in ECX, len = -1: len undefined *)
+	BEGIN
+		E.GenShort(0C031H); 	(* xor eax,eax *)
+		IF len # 0 THEN E.GenByte(0B9H); GenDbl(len) END; (* ld ecx,len *)
+		LScanStr(wsize, TRUE);
+		a1.mode := 0; a2.mode := 0
+	END LGenStringLength;
+	
+	PROCEDURE GenStrStore* (size: INTEGER);
+		VAR w: INTEGER;
+	BEGIN
+		IF size # 0 THEN
+			IF size MOD 4 = 0 THEN w := 1; size := size DIV 4
+			ELSIF size MOD 2 = 0 THEN w := 2; size := size DIV 2
+			ELSE w := 0
+			END;
+			DevCPE.GenByte(0B9H); GenDbl(size); (* ld ecx,size *)
+			IF w = 2 THEN DevCPE.GenByte(66H); w := 1 END
+		ELSE w := 0
+		END;
+		DevCPE.GenByte(0F3H); DevCPE.GenByte(0AAH + w); (* rep:stos *)
+		a1.mode := 0; a2.mode := 0
+	END GenStrStore;
+
+	PROCEDURE LGenAddChar* (chr: INTEGER; short, last: BOOLEAN);
+		VAR ok: Label;
+	BEGIN
+		ok := NewLbl;
+		IF last THEN
+			E.GenByte(083H); E.GenByte(0E9H); E.GenByte(2);	(* SUB ecx, 2 *)
+			GenJump(ccGE, ok, TRUE)
+		ELSE E.GenShort(0C9FFH);	(* DEC ecx *)
+			GenJump(ccNE, ok, TRUE)
+		END;
+		E.GenShort(0E88DH);	(* TRAP -8 *)
+		LSetLabel(ok);
+		E.GenByte(0B8H); E.GenWord(chr);	(* MOV eax, chr *)
+		IF last = short THEN E.GenShort(0AB66H)	(* STOSW *)
+		ELSIF short THEN E.GenByte(0AAH)	(* STOSB *)
+		ELSE E.GenByte(0ABH)	(* STOSD *)
+		END
+	END LGenAddChar;
+			(* cx=0 is ok if last, otherwise not ok *)
+
+	PROCEDURE GenCode* (op: INTEGER);
+	BEGIN
+		DevCPE.GenByte(op);
+		a1.mode := 0; a2.mode := 0
+	END GenCode;
+
+	PROCEDURE LGenCode* (op: INTEGER);
+	BEGIN
+		E.GenByte(op);
+		a1.mode := 0; a2.mode := 0
+	END LGenCode;
+
+
+	PROCEDURE Init*(opt: SET);
+	BEGIN
+		E.Init(processor, opt); 
+		level := 0;
+		one := T.ThisReal(1);
+		SIZEPREF := FALSE; REX := {}; hasMRM := FALSE; hasSIB := FALSE; DISPLEN := 0; SIB := 0BBH;
+	END Init;
+
+	PROCEDURE Close*;
+	BEGIN
+		a1.obj := NIL; a1.typ := NIL; a2.obj := NIL; a2.typ := NIL; one := NIL;
+		E.Close
+	END Close;
+
+BEGIN
+	Size[Undef] := 0;
+	Size[Byte] := 1;
+	Size[Bool] := 1;
+	Size[Char8] := 1;
+	Size[Int8] := 1;
+	Size[Int16] := 2;
+	Size[Int32] := 4;
+	Size[Real32] := -4;
+	Size[Real64] := -8;
+	Size[Set] := 4;
+	Size[String8] := 0;
+	Size[NilTyp] := 4;
+	Size[NoTyp] := 0;
+	Size[Pointer] := 4;
+	Size[ProcTyp] := 4;
+	Size[Comp] := 0;
+	Size[Char16] := 2;
+	Size[Int64] := 8;
+	Size[String16] := 0;
+	
+	SSize[T.fUndef] := 0;
+	SSize[T.fByte] := 1;
+	SSize[T.fBool] := 1;
+	SSize[T.fChar8] := 1;
+	SSize[T.fInt8] := 1;
+	SSize[T.fInt16] := 2;
+	SSize[T.fInt32] := 4;
+	SSize[T.fReal32] := -4;
+	SSize[T.fReal64] := -8;
+	SSize[T.fSet] := 4;
+	SSize[T.fString8] := 0;
+	SSize[T.fNil] := 8;
+	SSize[T.fSysPtr] := 8;
+	SSize[T.fProcedure] := 8;
+	SSize[T.fRecPtr] := 8;
+	SSize[T.fArrayPtr] := 8;
+	(*SSize[T.fNoTyp] := 0;
+	SSize[T.fPointer] := 4;
+	SSize[T.fProcTyp] := 4;
+	SSize[T.fComp] := 0;*)
+	SSize[T.fChar16] := 2;
+	SSize[T.fInt64] := 8;
+	SSize[T.fString16] := 0;
+	SSize[T.fType] := 8;
+	
+	unused.what := T.fUndef
+
+END HrL.
+
+
+
+ 缼`•̀益•́´缏

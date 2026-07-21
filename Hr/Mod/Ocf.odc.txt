@@ -1,0 +1,618 @@
+MODULE HrOcf;	(** OCF format scanners *)
+	
+(* Before disconnecting ref readers *)
+(* Before 8-byte pointers in ModuleDesc *)
+(* * change OcfScanner to read imported module list and preserve it and share with UseScanner *)
+	IMPORT SYSTEM, Files, Kernel, Utf, 
+		Log;
+
+	CONST 
+		mEnd* = 0; mConst* = 1; mType* = 2; mVar* = 3; mProc* = 4; mNextImp* = -1; mBad* = -2; 
+		mBegin = -3; (* marks the beginning of scanning UseBlk *)
+		littleEndian = TRUE; bigEndian = ~littleEndian;
+		i386* = 10; amd64* = 12; (* sync with L.processor !!! *)
+		eBadTag = 1; eUtf8 = 2; eProc = 3; eProcMismatch = 4 (** job processor and OCF processor mismatch *);
+		eOldRev = 5; eNewRev = 6;
+		(* fixup types *)
+		absolute* = 100; (*relative = 101; copy = 102; table = 103; tableend = 104; short = 105;*)
+		absolute64* = 116;
+
+		mBool = 1; mChar8 = 2; mChar16 = 3; mInt8 = 4; mInt16 = 5; mInt32 = 6;
+		mReal32 = 7; mReal64 = 8; mSet = 9; mInt64 = 10; mAnyRec = 11; mAnyPtr = 12; mSysPtr = 13;
+		mProctyp = 0; mRecord = 1; mArray = 2; mPointer = 3;
+		mInternal = 1; mReadonly = 2; mPrivate = 3; mExported = 4;
+		mValue = 10; mInPar = 11; mOutPar = 12; mVarPar = 13;
+		mProcedure = 14;
+		mInterface = 32; mGuid = 33; mResult = 34;
+
+	CONST valpartg* = 0FDX; varpartg* = 0FFX; proctg = 0FCX; 
+		locvartg* = 0F0X (* not found in OCF, only scanner *);
+		revision = 1;	(* OCF amd64 format revision *)
+		
+		(* error codes *)
+		OK* = 0; eModNameMismatch* = 1;
+
+	TYPE
+		RelocatorRegister* = PROCEDURE (VAR bs: BookmarkScanner);
+		
+		Name* = Kernel.Name;
+		
+		BookmarkScanner* = RECORD
+			meta-, desc-, code-, seg*: POINTER TO ARRAY OF BYTE;
+			next, metaSize: INTEGER;
+			type*: INTEGER;	(** bookmark type: absolute, etc. *)
+			adr*: INTEGER; 	(** bookmark's address WRT it's segment *)
+			offset*: INTEGER;	(** current chain's offset to be added to wrt *)
+			eob*: BOOLEAN
+		END;
+		
+		UseScanner* = EXTENSIBLE RECORD
+			rd, 	(* reader of the UseBlk in OCF format file *)
+			provRider: Files.Reader;	(* provider list reader, used in .GetNextModName *)
+			provPos,	(* = OcfScanner.importsPos: position of providers list (imports) in OCF *)
+			provCount: INTEGER;	(* number of providers (imported modules) *)
+			imp*: INTEGER;	(* number of imported object's module in import list *)
+			provider*: Name;	(* name of imported object's module as evaluated by GetNextModName *)
+			meta, desc, code: POINTER TO ARRAY OF BYTE;	(* duplicates from OcfScaner *)
+			name*: Name;	(* name of used object *)
+			type*: INTEGER;	(* type of used object *)
+			fprint*: INTEGER;	(* fingerprint of used object *)
+			chainHead*, chainOffset*: INTEGER;	(* bookmark chain head and offset for the used object *)
+				(* actually, for procedures chainHead = address of proxy entry WRT proxies base *)
+		END;
+		
+		OcfScanner* = RECORD
+			res*: INTEGER;	(** result of the latest procedure call *)
+			rider-: Files.Reader;	(* is it needed? > importance, should it be kept as an anchor to the file? *)
+			processor*: INTEGER;
+			ms*, ds*, cs*, vs*: INTEGER;	(* block sizes *)
+			imps*, exts*: INTEGER;	(* number of imports and externals *)
+			newRec*, newArr*: INTEGER;	(* indices of NEW(rec), NEW(arr) in the proxy table, -1 if not used *)
+			importsPos*, nofImports*, metaPos*, descPos*, codePos*, baseRelocPos*, usesPos*: INTEGER;
+			name*: Name;	(* module name *)
+			meta*, desc*, code*, vars*: POINTER TO ARRAY OF BYTE;
+				(* .meta, .desc, .code have to, .vars doesn't have to be set before Fixup, ConnectToBlks *)
+			shortDesc*: POINTER [untagged] TO ShortModDesc; (* IFF .desc # NIL, i.e. after  ConnectToBlks*)
+			modDesc*: POINTER [untagged] TO ModDesc; 	 (* IFF .desc # NIL, i.e. after  ConnectToBlks*)
+		END;
+		
+		MetaScanner* = RECORD
+			meta*: POINTER TO ARRAY OF BYTE
+		END;
+		
+		SHORTADDR* = INTEGER;
+		ShortModDesc* = RECORD
+			link*: SHORTADDR;
+			opts*: SET;
+			refcnt*: INTEGER;
+			ymdhms*: ARRAY 6 OF SHORTINT;
+			loadtime*: ARRAY 3 OF INTEGER;
+			ext*: INTEGER;
+			closeSection*: PROCEDURE;
+			nofimps*, nofptrs*, csize*, vsize*, refsize*: INTEGER;
+			code*, data*, refs*: SHORTADDR;
+			procBase*, varBase*, names*, ptrs*, imports*, exports*: SHORTADDR;
+			name*: ARRAY 128 OF CHAR;
+				(* overlays ARRAY 256 OF SHORTCHAR, requires conversion from Utf8 *)
+		END;
+		
+		ADDRESS* = LONGINT;
+		ModDesc* = RECORD
+			link*: ADDRESS;	
+			opts*: SET;	(*8*)
+			refcnt*: INTEGER;	(*12*)
+			ymdhms*: ARRAY 6 OF SHORTINT;	(*16*)
+			loadtime*: ARRAY 3 OF INTEGER;
+			ext*: INTEGER;	(*40*)
+			closeSection*: ADDRESS (*PROCEDURE*);	(*44*)
+			nofimps*, nofptrs*, csize*, vsize*, refsize*: INTEGER;	(*52*)
+			code*, data*, refs*: ADDRESS;	(* code offset 72 *)
+			procBase*, varBase*, names*, ptrs*, imports*, exports*: ADDRESS;
+			name*: ARRAY 128 OF CHAR;
+				(* Shouldn't it be extended to 256? It's 256 OF SHORTCHAR in OCF/32 *)
+		END;
+
+		Scanner = ABSTRACT RECORD
+			base: POINTER TO ARRAY OF BYTE;
+			pos: INTEGER;
+			ch: CHAR;
+			eos*: BOOLEAN;
+		END;
+	
+		
+		ExpScanner* = RECORD (Scanner)
+			numObj-: INTEGER;
+			next,	(** number of the next export to be read; .next = .numObj => .eos *)
+			fprint*,
+			offset*,
+			mode*, vis*,	(* mode and visibility unpacked from id4 *)
+			nameOffs*: INTEGER;	(** name offset wrt MetaBlk *)
+			struct*: ADDRESS;
+			name*: Name;
+			names: INTEGER;	(* base of names list in MetaBlk *)
+		END;
+
+		VarScanner* = RECORD (Scanner)
+			name*: Name;
+			mode*: CHAR;
+			type*, offs*: INTEGER;
+			typeaddr*: ADDRESS;
+			start: RECORD 		(* to enable Reset of scanner *)
+				pos: INTEGER;
+				ch: CHAR
+			END;
+			processor: INTEGER;
+		END;
+		
+		SrcPosScanner = RECORD (Scanner)
+			da-, dt-: INTEGER;
+		END;
+
+		RefScanner* = RECORD (Scanner)	 (* procedure scanner *)
+			name*: Name;
+			endpos*: INTEGER;	(* => endaddr *)
+			src*: SrcPosScanner;
+			var*: VarScanner
+		END;
+	
+	PROCEDURE ToChar (b: BYTE): CHAR; BEGIN RETURN CHR(b - b DIV 80H * 100H) END ToChar;
+	
+	PROCEDURE SetPos (VAR s: Scanner; pos: INTEGER);
+	BEGIN s.pos := pos; s.ch := ToChar(s.base[pos])
+	END SetPos;
+	
+	PROCEDURE GetByte (VAR s: Scanner);
+	BEGIN INC(s.pos); s.ch := ToChar(s.base[s.pos])
+	END GetByte;
+	
+	PROCEDURE GetNum (VAR s: Scanner; OUT x: INTEGER);
+		VAR q, n: INTEGER; 
+	BEGIN
+		q := 0; n := 0;
+		WHILE ORD(s.ch) >= 128 DO INC(n, ASH(ORD(s.ch) - 128, q) ); INC(q, 7); GetByte(s) END;
+		x := n + ASH(ORD(s.ch) MOD 64 - ORD(s.ch) DIV 64 * 64, q);
+		GetByte(s) 
+	END GetNum;
+
+	PROCEDURE GetCodeDelta (VAR s: Scanner; OUT x: INTEGER);
+	(** a positive number, cf. HrE.EOutSourceRefs *)
+		VAR q: INTEGER; 
+	BEGIN
+		q := 0; x := 0;
+		WHILE s.ch = 0FAX DO INC(x, 0FAH); GetByte(s); ASSERT(s.ch = 0X); GetByte(s) END;
+		INC(x, ORD(s.ch)); GetByte(s)
+	END GetCodeDelta;
+	
+	PROCEDURE GetName (VAR s: Scanner; OUT n: Kernel.Name);
+		VAR res, i: INTEGER; b: BYTE; un: Kernel.Utf8Name;
+	BEGIN i := 0; REPEAT b := s.base[s.pos]; un[i] := SHORT(ToChar(b)); INC(i); INC(s.pos) UNTIL b = 0;
+		Utf.Utf8ToString(un, n, res);
+		s.ch := ToChar(s.base[s.pos])
+	END GetName;
+
+	PROCEDURE GetInt (VAR s: Scanner; OUT x: INTEGER);
+		VAR a, b, c, d: CHAR;
+	BEGIN a := s.ch; GetByte(s); b := s.ch; GetByte(s); c := s.ch; GetByte(s); d := s.ch;
+		x := ASH(ORD(d), 24) + ASH(ORD(c), 16) + ASH(ORD(b), 8) + ORD(a);
+		GetByte(s)
+	END GetInt;
+	
+	PROCEDURE GetLong (VAR s: Scanner; OUT x: LONGINT);
+		VAR i: INTEGER; a: ARRAY 8 OF SHORTCHAR;
+	BEGIN i := 0; WHILE i < LEN(a) DO a[i] := SHORT(s.ch); GetByte(s); INC(i) END;
+		SYSTEM.GET(SYSTEM.ADR(a[0]), x)
+	END GetLong;
+	
+	PROCEDURE (VAR s: SrcPosScanner) ScanSourceRef*, NEW;
+	BEGIN
+		ASSERT(s.base # NIL, 20); ASSERT(~s.eos, 21);
+		s.eos := (0X = s.ch) OR (s.ch >= proctg);
+		IF ~s.eos THEN
+			GetCodeDelta(s, s.da); GetNum(s, s.dt)
+		END
+	END ScanSourceRef;
+	
+	PROCEDURE SkipSourceRefs (VAR s: RefScanner; VAR pos: INTEGER);
+		VAR _: INTEGER;
+	BEGIN
+		WHILE (0X < s.ch) & (s.ch < proctg) DO GetNum(s, _); GetNum(s, _) END
+	END SkipSourceRefs;
+	
+	PROCEDURE [code] LONGADDR* (x: SHORTADDR): ADDRESS 31H, 0D2H; 	(* XOR EDX, EDX *)
+	
+	PROCEDURE (VAR s: VarScanner) ScanVar*, NEW;
+		CONST mmComp = 15; (* cf HrE.EOutRefs *) 
+		VAR shortaddr: SHORTADDR;
+	BEGIN
+		ASSERT(s.base # NIL, 20); ASSERT(~s.eos, 21);
+		s.mode := s.ch;
+		s.eos := ~((s.mode = varpartg) OR (s.ch = valpartg));
+		IF ~s.eos THEN
+			GetByte(s); s.type := ORD(s.ch); GetByte(s);
+			CASE s.type OF
+			|mInt8, mInt16, mInt32, mInt64, mChar8, mChar16, mReal32, mReal64, mSet, mBool, 
+				mSysPtr, mAnyPtr, mInterface, mAnyRec, mProcedure, mmComp:
+			| mGuid, mResult: HALT(126)
+			| 10H: 		(* a reference to a structure descriptor *)
+				IF s.processor = amd64 THEN GetLong(s, s.typeaddr) 
+				ELSE GetInt(s, shortaddr); s.typeaddr := LONGADDR(shortaddr) 
+				END
+			ELSE HALT(126)
+			END;
+			GetNum(s, s.offs);
+			IF (s.mode = valpartg) & (s.offs < 0) THEN s.mode := locvartg END;
+			GetName(s, s.name)
+		END
+	END ScanVar;
+	
+	PROCEDURE (VAR s: VarScanner) Reset*, NEW;
+	BEGIN s.pos := s.start.pos; s.ch := s.start.ch; s.eos := FALSE
+	END Reset;
+	
+	PROCEDURE (VAR s: RefScanner) ScanProc*, NEW;
+		VAR p: INTEGER; c: CHAR;
+			qq: INTEGER;
+	BEGIN
+		ASSERT(s.base # NIL, 20); ASSERT(~s.eos, 21);
+		s.eos := s.ch = 0X;
+		IF ~s.eos THEN 
+			c := s.ch; p := s.pos;
+			s.src.pos := p; s.src.eos := FALSE; s.src.ch := c; 
+			REPEAT s.src.ScanSourceRef 
+			UNTIL s.src.eos;	(* skip all source pos references... *)
+			qq := ORD(s.src.ch);
+			ASSERT(s.src.ch = proctg, 22); 
+			s.pos := s.src.pos; s.ch := s.src.ch; GetByte(s);
+			s.src.pos := p; s.src.eos := FALSE; s.src.ch := c;  	(* and reset source scanner to be used again *)
+			GetNum(s, s.endpos); GetName(s, s.name);
+			s.var.start.ch := s.ch; s.var.start.pos := s.pos;
+			s.var.Reset;
+			REPEAT s.var.ScanVar UNTIL s.var.eos;
+			s.pos := s.var.pos; s.ch := s.var.ch;
+			s.var.Reset
+		END
+	END ScanProc;
+	
+	PROCEDURE (VAR r: RefScanner) Reset*, NEW;
+	BEGIN
+		r.eos := FALSE; r.pos := 0; r.var.eos := TRUE; r.src.eos := TRUE; 
+		r.ch := ToChar(r.base[r.pos])
+	END Reset;
+	
+	PROCEDURE (VAR s: OcfScanner) ConnectRefScanner* (VAR r: RefScanner), NEW;
+	BEGIN 
+		ASSERT(s.meta # NIL, 20); 
+		r.base := s.meta; r.var.base := s.meta; r.var.processor := s.processor; r.src.base := s.meta;
+		r.Reset
+	END ConnectRefScanner;
+	
+	(*PROCEDURE (VAR s: MetaScanner) ConnectSigScanner* (VAR ss: SigScanner), NEW;
+	END ConnectSigScanner;*)
+	
+	
+	
+	
+	(* BookmarkScanner *)
+	
+	PROCEDURE UnpackAddrType (VAR addr: INTEGER; OUT type: INTEGER);
+	BEGIN
+		type := addr DIV 1000000H; 
+		addr := (addr + 800000H) MOD 1000000H - 800000H;	 (* sign-extend lower 3 bytes *)
+	END UnpackAddrType;
+	
+	PROCEDURE (VAR bs: BookmarkScanner) SetPos* (head: INTEGER), NEW;
+	BEGIN
+		ASSERT(head # 0, 20);
+		IF head > 0 THEN ASSERT((bs.code # NIL) & (head < LEN(bs.code) - 4), 21) 
+		ELSIF -head < bs.metaSize THEN 
+			ASSERT((bs.desc # NIL) & (-head - bs.metaSize < LEN(bs.desc) - 4), 22)
+		END;
+		bs.next := head; bs.eob := head = 0
+	END SetPos;
+	
+	PROCEDURE (VAR bs: BookmarkScanner) ConnectTo* (meta, desc, code: POINTER TO ARRAY OF BYTE ), NEW;
+	BEGIN bs.meta := meta; bs.desc := desc; bs.code := code; bs.next := 0; bs.eob := TRUE;
+		IF meta # NIL THEN bs.metaSize := LEN(meta) ELSE bs.metaSize := 0 END
+	END ConnectTo;
+	
+	PROCEDURE (VAR bs: BookmarkScanner) Scan*, NEW;
+		VAR check: INTEGER;
+	BEGIN
+		ASSERT(~bs.eob, 20);
+		bs.eob := bs.next = 0;
+		IF ~bs.eob THEN
+			IF bs.next > 0 THEN bs.seg := bs.code; bs.adr := bs.next
+			ELSIF -bs.next < bs.metaSize THEN bs.seg := bs.meta; bs.adr := -bs.next
+			ELSE bs.seg := bs.desc; bs.adr := -bs.next - bs.metaSize
+			END;
+			SYSTEM.GET(SYSTEM.ADR(bs.seg[bs.adr MOD 1000000H]), bs.next);
+			UnpackAddrType(bs.next, bs.type);
+			IF bs.type = absolute64 THEN 
+				SYSTEM.GET(SYSTEM.ADR(bs.seg[bs.adr MOD 1000000H + 4]), check);
+				ASSERT(check = 11223344H, 100)
+			END;
+			ASSERT((bs.type = absolute) OR (bs.type = absolute64), 126)
+		END
+	END Scan;
+
+	PROCEDURE ReadNum (r: Files.Reader; VAR x: INTEGER);
+		VAR b: BYTE; s, y: INTEGER;
+	BEGIN
+		s := 0; y := 0; r.ReadByte(b);
+		WHILE b < 0 DO INC(y, ASH(b + 128, s)); INC(s, 7); r.ReadByte(b) END;
+		x := ASH((b + 64) MOD 128 - 64, s) + y;
+	END ReadNum;
+	
+	PROCEDURE (VAR bs: BookmarkScanner) NextChain* (rd: Files.Reader), NEW;
+		VAR head: INTEGER;
+	BEGIN
+		ReadNum(rd, head); IF head # 0 THEN ReadNum(rd, bs.offset); bs.SetPos(head) END
+	END NextChain;
+	
+
+
+	PROCEDURE FixupWRT (VAR bs: BookmarkScanner; rd: Files.Reader; wrt: ADDRESS; rel: RelocatorRegister );
+		VAR seg, type, next, head, adr, codeBase, metaBase, offset: INTEGER; addr: ADDRESS;
+	BEGIN 													(* see also StdLoader.Fixup *)
+		bs.NextChain(rd);
+		WHILE ~bs.eob DO bs.Scan;
+			IF ~bs.eob THEN ASSERT(bs.adr # 0, 100); 
+				addr := wrt + bs.offset;
+				CASE bs.type OF
+				| absolute: 
+					SYSTEM.MOVE(SYSTEM.ADR(addr), SYSTEM.ADR(bs.seg[bs.adr]), 4);
+					IF rel # NIL THEN rel(bs) END
+				| absolute64: 
+					SYSTEM.PUT(SYSTEM.ADR(bs.seg[bs.adr]), addr);
+					IF rel # NIL THEN rel(bs) END
+				ELSE HALT(126)
+				END
+			ELSE bs.NextChain(rd)
+			END
+		END
+	END FixupWRT;
+	
+	(* UseScanner *)
+	
+	PROCEDURE ReadAsChar (rd: Files.Reader; VAR ch: CHAR);
+		VAR b: BYTE;
+	BEGIN rd.ReadByte(b); ch := CHR(b - ASH(b, -7) * 100H)
+	END ReadAsChar;
+
+	(*PROCEDURE ReadNum (r: Files.Reader; VAR i: INTEGER);
+		VAR b: BYTE; s, y: INTEGER;
+	BEGIN
+		s := 0; y := 0; r.ReadByte(b);
+		WHILE b < 0 DO INC(y, ASH(b + 128, s)); INC(s, 7); r.ReadByte(b) END;
+		i := ASH((b + 64) MOD 128 - 64, s) + y;
+	END ReadNum;*)
+	
+	PROCEDURE ReadName* (rd: Files.Reader; OUT name: ARRAY OF CHAR; OUT res: INTEGER);
+		VAR b: BYTE; i: INTEGER; n: Kernel.Utf8Name;
+	BEGIN
+		i := 0; REPEAT rd.ReadByte(b); n[i] := SHORT(ToChar(b)); INC(i) UNTIL b = 0;
+		Utf.Utf8ToString(n, name, res);
+	END ReadName;
+	
+	PROCEDURE (VAR us: UseScanner) ConnectTo (f: Files.File; pos: INTEGER), NEW;
+	BEGIN
+		us.rd := f.NewReader(us.rd); us.rd.SetPos(pos); us.imp := 0; us.type := mEnd
+	END ConnectTo;
+	
+	PROCEDURE (VAR os: OcfScanner) ConnectUseScanner* (VAR us: UseScanner), NEW;
+	BEGIN
+		ASSERT(os.res = OK, 20); ASSERT(os.usesPos # -1, 21 (* Fixups applied *));
+		us.rd := os.rider; us.rd.SetPos(os.usesPos); us.imp := 0; us.type := mBegin; 
+		us.provPos := os.importsPos; us.provCount := os.nofImports;
+		us.meta := os.meta; us.desc := os.desc; us.code := os.code
+	END ConnectUseScanner;
+		
+	PROCEDURE (VAR us: UseScanner) Scan*, NEW;
+		VAR ch: CHAR; rd: Files.Reader; _: INTEGER;
+	BEGIN rd := us.rd; ASSERT(~rd.eof, 20); ASSERT(us.type # mEnd, 21);
+		ReadAsChar(rd, ch); us.type := ORD(ch);
+		CASE ORD(ch) OF
+		| mEnd: IF us.imp + 1 < us.provCount THEN INC(us.imp); us.type := mNextImp END
+		| mProc, mType:
+			ReadName(rd, us.name, _);	(* ignoring potential error; no error handling now ( *)
+			ReadNum(rd, us.fprint); ReadNum(rd, us.chainHead);
+			(*UnpackAddrType(us.chainHead, _); *)
+			ReadNum(rd, us.chainOffset); 
+			IF ORD(ch) = mProc THEN 
+				ASSERT(us.chainOffset = 0, 20); ReadAsChar(rd, ch); ASSERT(ch = 0X, 21 (*0X trailing link *))
+			END;
+		| mVar, mConst: HALT(126)
+		ELSE us.type := mBad
+		END
+	END Scan;
+	
+	PROCEDURE (VAR us: UseScanner) Resolve* (OUT x: ADDRESS), NEW, EXTENSIBLE; 
+	(** Resolve the symbol in the scanner into x to be used in linking *)
+	BEGIN x := 0
+	END Resolve;
+
+	PROCEDURE (VAR us: UseScanner) NextModule*, NEW, EMPTY;
+	(** During linking process, step over to next imported module us.imp named name*)
+	PROCEDURE (VAR us: UseScanner) GetNextModName*, NEW, EXTENSIBLE;
+	(** During linking process, Step over to next imported module us.imp and return it's name in us.provider. Default implementation reads module names from OCF format file; override to avoid file access if your client already has a list of module names *)
+		VAR _: INTEGER;
+	BEGIN
+		IF us.imp = 0 THEN 
+			us.provRider := us.rd.Base().NewReader(NIL); us.provRider.SetPos(us.provPos) 
+		END;
+		ReadName(us.provRider, us.provider, _)
+	END GetNextModName;
+	
+	PROCEDURE (VAR us: UseScanner) Link* (proxies: POINTER TO ARRAY OF BYTE), NEW;
+		CONST none = -1;
+		VAR bs: BookmarkScanner; x: ADDRESS;
+	BEGIN
+		bs.ConnectTo(us.meta, us.desc, us.code); 
+		IF us.provCount > 0 THEN us.GetNextModName; us.NextModule;
+			REPEAT us.Scan;
+				CASE us.type OF
+				| mEnd:	(* end of UseBlk *)
+				| mNextImp: us.GetNextModName; us.NextModule	(* step over to next imported module *)
+				| mProc: us.Resolve(x);
+					IF x # 0 THEN ASSERT(us.chainHead # none);
+						IF proxies # NIL THEN SYSTEM.PUT(SYSTEM.ADR(proxies[us.chainHead]), x) END
+					END
+				| mType:
+					us.Resolve(x);	(* resolve the symbol in the scanner into x *)
+					IF x # 0 THEN 
+						IF (proxies # NIL) & (us.chainHead # none) THEN
+							SYSTEM.PUT(SYSTEM.ADR(proxies[us.chainHead]), x) 
+						END;
+						IF us.chainOffset # 0 THEN
+							(* now fixup the link chain *)
+							bs.SetPos(us.chainOffset);
+							REPEAT bs.Scan;
+								IF ~bs.eob THEN ASSERT(bs.adr # 0, 100);
+									CASE bs.type OF 
+									| absolute64: SYSTEM.PUT(SYSTEM.ADR(bs.seg[bs.adr]), x)
+									ELSE HALT(126)
+									END
+								END
+							UNTIL bs.eob
+						END
+					END
+				ELSE HALT(126)
+				END
+			UNTIL us.type = mEnd
+		END
+	END Link;
+				
+	
+	
+	
+	(* OcfScanner *)
+	
+	PROCEDURE ReadInt (r: Files.Reader; VAR i: INTEGER);
+		VAR b: BYTE; x: INTEGER;
+	BEGIN
+		r.ReadByte(b); x := b MOD 256;
+		r.ReadByte(b); x := x + 100H * (b MOD 256);
+		r.ReadByte(b); x := x + 10000H * (b MOD 256);
+		r.ReadByte(b); i := x + 1000000H * b;
+	END ReadInt;
+	
+	PROCEDURE (VAR os: OcfScanner) ConnectTo* (rd: Files.Reader), NEW;
+		CONST litTag = 6F4F4346H; bigTag = 46434F6FH;
+		VAR _, rev, hs, res, tag: INTEGER;
+	BEGIN
+		os.rider := rd; 
+		ReadInt(rd, tag);
+		IF littleEndian & (tag # litTag) OR ~littleEndian & (tag # bigTag) THEN res := eBadTag
+		ELSE
+			ReadInt(rd, os.processor); res := 0;
+			IF (os.processor = i386) OR (os.processor = amd64) THEN ELSE res := eProc END;
+			IF res = 0 THEN
+				ReadInt(rd, hs); ReadInt(rd, os.ms); ReadInt(rd, os.ds); ReadInt(rd, os.cs); ReadInt(rd, os.vs); 
+				IF os.processor = amd64 THEN 
+					(*incomplete NEW revision ReadNum(rd, news); os.news := BITS(news);
+					ASSERT(os.news * {2..MAX(SET)} = {}, 60);*)
+					ReadInt(rd, os.newRec); ReadInt(rd, os.newArr);
+					ReadInt(rd, os.imps); 
+					ReadInt(rd, os.exts) 
+				END;
+				ReadNum(rd, os.nofImports); 
+				ReadName(rd, os.name, _); os.importsPos := rd.Pos(); 	(* ignoring error *)
+				os.metaPos := hs;
+				os.descPos := os.metaPos + os.ms;
+				os.codePos := os.descPos + os.ds;
+				os.baseRelocPos := os.codePos + os.cs;
+				os.usesPos := -1
+			END
+		END;
+		os.res := res
+		;ASSERT(res = OK);
+	END ConnectTo;
+
+	PROCEDURE (VAR os: OcfScanner) ConnectToBlks*, NEW;
+		TYPE ModDescPtr = POINTER TO ModDesc;
+		VAR _: INTEGER; ptr: ModDescPtr; 
+			name: ARRAY 256 OF CHAR; chk: LONGINT;
+			offs: ADDRESS;
+	BEGIN
+		ASSERT(os.meta # NIL, 20); ASSERT(os.desc # NIL, 21); ASSERT(os.code # NIL, 22); 
+		ASSERT(LEN(os.meta) = os.ms, 23); ASSERT(LEN(os.desc) = os.ds, 24); 
+		ASSERT(LEN(os.code) = os.cs, 25);
+		os.res := OK;
+		IF os.processor = i386 THEN
+			os.shortDesc := SYSTEM.VAL(SYSTEM.PTR, SYSTEM.ADR(os.desc[0]));
+			Utf.Utf8ToString(SYSTEM.THISARRAY(SYSTEM.ADR(os.shortDesc.name[0]), 256), name, _);
+			IF name # os.name THEN os.res := eModNameMismatch 
+				;HALT(38);
+			END
+		ELSIF os.processor = amd64 THEN
+			os.modDesc := SYSTEM.VAL(SYSTEM.PTR, SYSTEM.ADR(os.desc[0]));
+			offs := os.modDesc.names - LONGADDR(SYSTEM.ADR(os.meta[0]));
+			Log.String("NamesBlk wrt MetaBlk"); Log.Int(offs); Log.Ln;
+			ASSERT((0 < offs) & (offs < os.ms));
+			chk := os.modDesc.link; Log.String("modDesc.link ="); ASSERT(chk = 280578H, 39);
+			Log.Int(chk); Log.Ln;
+			IF os.modDesc.name # os.name THEN os.res := eModNameMismatch 
+				;HALT(38);
+			END
+		END
+	END ConnectToBlks;
+	
+	PROCEDURE Fixup* (VAR ocf: OcfScanner; rd: Files.Reader; rel: RelocatorRegister);
+	(** Perform all relocation fixups in ocf.meta, .desc and .code *)
+		VAR bs: BookmarkScanner; wrt: ADDRESS;
+	BEGIN
+		ASSERT(ocf.res = OK, 20);
+		ASSERT(ocf.meta # NIL, 21); ASSERT(ocf.desc # NIL, 22); ASSERT(ocf.code # NIL, 23);
+		ASSERT(rd # NIL, 24);
+		rd.SetPos(ocf.baseRelocPos);
+		bs.ConnectTo(ocf.meta, ocf.desc, ocf.code);
+		IF ocf.processor = i386 THEN
+			FixupWRT(bs, rd, -1(*NewRec or NewArr*), rel);
+			FixupWRT(bs, rd, -1(*NewArr or NewRec*), rel)
+		END;
+		FixupWRT(bs, rd, LONGADDR(SYSTEM.ADR(ocf.meta[0])), rel);
+		FixupWRT(bs, rd, LONGADDR(SYSTEM.ADR(ocf.desc[0])), rel);
+		FixupWRT(bs, rd, LONGADDR(SYSTEM.ADR(ocf.code[0])), rel);
+		IF ocf.vars # NIL THEN wrt := LONGADDR(SYSTEM.ADR(ocf.vars[0])) ELSE wrt := 0 END;
+		FixupWRT(bs, rd, wrt, rel);
+		ocf.usesPos := rd.Pos()
+	END Fixup;	
+	
+
+
+	PROCEDURE (VAR os: OcfScanner) ConnectExpScanner* (VAR es: ExpScanner), NEW;
+		VAR tmp, names, exports: ADDRESS;	(* eliminate after CPL bug is fixed *)
+	BEGIN
+		ASSERT(os.res = OK, 20);
+		ASSERT(os.meta # NIL, 21); ASSERT(os.desc # NIL, 22);
+		IF os.processor = i386 THEN ASSERT(os.shortDesc # NIL, 23); 
+			exports := LONGADDR(os.shortDesc.exports);
+			names := os.shortDesc.names
+		ELSIF os.processor = amd64 THEN ASSERT(os.modDesc # NIL, 24); exports := os.modDesc.exports;
+			names := os.modDesc.names
+		ELSE HALT(25)
+		END;
+		ASSERT(exports # absolute * 1000000H, 26	(* raw module data not fixed up yet *) );
+		es.base := os.meta; tmp := LONGADDR(SYSTEM.ADR(os.meta[0]));
+		SetPos(es, SHORT(exports - tmp)); 
+		GetInt(es, es.numObj);
+		es.next := 0; es.names := SHORT(names - tmp)
+	END ConnectExpScanner;
+	
+	PROCEDURE (VAR es: ExpScanner) Scan*, NEW;
+		VAR p, idx: INTEGER; ch: CHAR;
+	BEGIN
+		ASSERT(es.base # NIL, 20); ASSERT(~es.eos, 21);
+		es.eos := es.next = es.numObj;
+		IF ~es.eos THEN
+			GetInt(es, es.fprint); GetInt(es, es.offset); GetInt(es, idx); es.nameOffs := es.names + idx DIV 256;
+			es.mode := idx MOD 16; es.vis := idx MOD 256 DIV 16;
+			GetLong(es, es.struct);
+			p := es.pos; ch := es.ch; SetPos(es, es.nameOffs);
+			GetName(es, es.name); 
+			es.pos := p; es.ch := ch;
+			INC(es.next)
+		END
+	END Scan;
+	
+END HrOcf.

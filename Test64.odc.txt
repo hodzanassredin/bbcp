@@ -1,0 +1,16 @@
+MODULE Test64;
+
+	TYPE
+		Rec = RECORD x: INTEGER END;
+		Ptr = POINTER TO Rec;
+
+	VAR
+		p: Ptr;
+
+	PROCEDURE Run*;
+	BEGIN
+		NEW(p);
+		p.x := 42;
+	END Run;
+
+END Test64.

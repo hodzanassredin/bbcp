@@ -1,0 +1,77 @@
+MODULE Kernel64;
+	IMPORT S := SYSTEM;
+
+	CONST
+		processor* = 12;
+		N = 16;
+		any = 1000000;
+
+	TYPE
+		Module* = POINTER TO RECORD
+			next: Module; opts: SET; refcnt: INTEGER;
+			ext: INTEGER; termLo, termHi: INTEGER;
+			nofimps, nofptrs: INTEGER; csize, dsize, rsize: INTEGER;
+			code, data, refs: LONGINT;
+			procBase, varBase: LONGINT;
+			names: POINTER TO ARRAY OF SHORTCHAR;
+			ptrs: POINTER TO ARRAY OF LONGINT;
+			imports: POINTER TO ARRAY OF Module;
+			export: LONGINT;
+			name: ARRAY 256 OF SHORTCHAR
+		END;
+
+		Type* = POINTER TO RECORD
+			size: INTEGER; mod: Module; id: INTEGER;
+			base: ARRAY 16 OF Type; fields: LONGINT;
+			ptroffs: ARRAY any OF INTEGER
+		END;
+
+		Cluster* = POINTER TO RECORD size: INTEGER; next: Cluster END;
+		Block* = POINTER TO RECORD tag: Type; last: LONGINT; first: LONGINT END;
+		FreeBlk* = POINTER TO RECORD tag: Type; size: INTEGER; next: FreeBlk END;
+
+	VAR
+		modList: Module; root: Cluster;
+		free: ARRAY N OF FreeBlk;
+		sentinel: FreeBlk; sentinelBlock: FreeBlk;
+		allocated-: LONGINT;
+
+	PROCEDURE NewBlock* (size: INTEGER): Block;
+		VAR i: INTEGER; fb: FreeBlk;
+	BEGIN
+		i := (size + 19) DIV 16;
+		IF i >= N THEN i := N - 1 END;
+		WHILE i < N DO
+			fb := free[i];
+			WHILE (fb # sentinel) & (fb.size < size) DO fb := fb.next END;
+			IF fb # sentinel THEN RETURN S.VAL(Block, S.VAL(LONGINT, fb)) END;
+			INC(i)
+		END;
+		RETURN NIL
+	END NewBlock;
+
+	PROCEDURE NewRec* (typ: LONGINT): LONGINT;
+		VAR tag: Type; b: Block;
+	BEGIN
+		IF ODD(SHORT(typ)) THEN tag := S.VAL(Type, typ - 1) ELSE tag := S.VAL(Type, typ) END;
+		b := NewBlock(tag.size);
+		IF b = NIL THEN RETURN 0 END;
+		b.tag := tag;
+		RETURN S.ADR(b.last)
+	END NewRec;
+
+	PROCEDURE RegisterMod* (m: Module);
+	BEGIN m.next := modList; modList := m END RegisterMod;
+
+	PROCEDURE Init*;
+		VAR i: INTEGER;
+	BEGIN
+		modList := NIL; root := NIL; allocated := 0;
+		NEW(sentinelBlock);
+		sentinelBlock.size := MAX(INTEGER);
+		sentinel := sentinelBlock;
+		FOR i := 0 TO N - 1 DO free[i] := sentinel END
+	END Init;
+
+BEGIN Init
+END Kernel64.

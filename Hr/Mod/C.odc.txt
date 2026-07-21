@@ -1,0 +1,4242 @@
+MODULE HrC;	(* Looks like some sort of an 'abstract machine': a layer between V (tree traverser) and L (low-level cg) *)
+(**
+	project	= "BlackBox"
+	organization	= "www.oberon.ch"
+	contributors	= "Oberon microsystems"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "Docu/BB-License"
+	references	= "http://e-collection.library.ethz.ch/eserv/eth:39386/eth-39386-02.pdf"
+	changes	= ""
+	issues	= ""
+
+**)
+
+	IMPORT SYSTEM, DevCPM, DevCPT, DevCPE, DevCPL486,
+		L := HrL, T := HrT, M := HrM, E := HrE, Y := HrSyn
+		, Log
+		;
+
+	CONST
+		deferred126 = FALSE;	(* set to find all deferred 126 traps *)
+		initializeAll = FALSE;	(* initialize all local variable to zero *)
+		initializeOut = FALSE;	(* initialize all OUT parameters to zero *)
+		initializeDyn = FALSE;	(* initialize all open array OUT parameters to zero *)
+		initializeStr = FALSE;	(* initialize rest of string value parameters to zero *)
+		
+		FpuControlRegister = 33EH;	(* value for fpu control register initialization *)
+		
+		(* structure forms *)
+		Undef = 0; Byte = 1; Bool = 2; Char8 = 3; Int8 = 4; Int16 = 5; Int32 = 6;
+		Real32 = 7; Real64 = 8; Set = 9; String8 = 10; NilTyp = 11; NoTyp = 12;
+		Pointer = 13; ProcTyp = 14; Comp = 15;
+		Char16 = 16; String16 = 17; Int64 = 18; Guid = 23;
+		VString16to8 = 29; VString8 = 30; VString16 = 31;
+		intSet = {Int8..Int32, Int64}; realSet = {Real32, Real64};
+
+		(* composite structure forms *)
+		Basic = 1; Array = 2; DynArr = 3; Record = 4;
+
+		(* item base modes (=object modes) *)
+		Var = 1; VarPar = 2; Con = 3; Fld = 4; Typ = 5; LProc = 6; XProc = 7; CProc = 9; IProc = 10; TProc = 13;
+
+		(* item modes for i386 *)
+		Ind = 14; Abs = 15; Stk = 16; Cond = 17; Reg = 18; DInd = 19;
+		Xmm = 20;
+		
+		(* symbol values and ops *)
+		times = 1; slash = 2; div = 3; mod = 4;
+		and = 5; plus = 6; minus = 7; or = 8; eql = 9;
+		neq = 10; lss = 11; leq = 12; gtr = 13; geq = 14;
+		in = 15; is = 16; ash = 17; msk = 18; len = 19;
+		conv = 20; abs = 21; cap = 22; odd = 23; not = 33;
+		adr = 24; cc = 25; bit = 26; lsh = 27; rot = 28; val = 29;
+		getrfn = 26; putrfn = 27;
+		min = 34; max = 35; typ = 36;
+
+		(* procedure flags (conval.setval) *)
+		hasBody = 1; isRedef = 2; slNeeded = 3; imVar = 4; isGuarded = 30; isCallback = 31;
+		(* slNeeded static link needed (for local procedures) *)
+
+		(* attribute flags (attr.adr, struct.attribute, proc.conval.setval) *)
+		newAttr = 16; absAttr = 17; limAttr = 18; empAttr = 19; extAttr = 20;
+		
+		false = 0; true = 1; nil = 0;
+
+		(* registers *)
+		AX = 0; CX = 1; DX = 2; BX = 3; SP = 4; BP = 5; SI = 6; DI = 7; AH = 4; CH = 5; DH = 6; BH = 7;
+		R8 = 8; R9 = 9;
+		XMM0 = 0; XMM1 = 1; XMM2 = 2; XMM3 = 3;
+		stk = 31; mem = 30; con = 29; float = 28; high = 27; short = 26; deref = 25; 
+		deferred = 23;	(* deferred IN stop => int->real conversion should not be deferred. Cf. V.VFloatDOp *) 
+		wreg = {AX, BX, CX, DX, SI, DI, R8, R9};
+		toQuad = 23;
+		regMin = AX; regMax = Y.R9;
+
+		(* GenShiftOp *)
+		ROL = 0; ROR = 8H; SHL = 20H; SHR = 28H; SAR = 38H;
+
+		(* GenBitOp *)
+		BT = 20H; BTS = 28H; BTR = 30H;
+		
+		(* GenFDOp *)
+		FADD = 0; FMUL = 8H; FCOM = 10H; FCOMP = 18H; FSUB = 20H; FSUBR = 28H; FDIV = 30H; FDIVR = 38H; 
+		
+		(* GenFMOp *)
+		FABS = 1E1H; FCHS = 1E0H; FTST = 1E4H; FSTSW = 7E0H; FUCOM = 2E9H;
+
+		(* GenCode *)
+		SAHF = 9EH; WAIT = 9BH;
+
+		(* condition codes *)
+		ccB = 2; ccAE = 3; ccBE = 6; ccA = 7; (* unsigned *)
+		ccL = 12; ccGE = 13; ccLE = 14; ccG = 15; (* signed *)
+		ccE = 4; ccNE = 5; ccS = 8; ccNS = 9; ccO = 0; ccNO = 1;
+		ccAlways = -1; ccNever = -2; ccCall = -3;
+
+		(* sysflag *)
+		untagged = 1; callback = 2; noAlign = 3; union = 7;
+		interface = 10; ccall = -10; guarded = 10; noframe = 16;
+		nilBit = 1; enumBits = 8; new = 1; iid = 2;
+		stackArray = 120;
+		
+		(* system trap numbers *)
+		withTrap = -1; caseTrap = -2; funcTrap = -3; typTrap = -4;
+		recTrap = -5; ranTrap = -6; inxTrap = -7; copyTrap = -8;
+		
+		(* module visibility of objects *)
+		internal = 0; external = 1; externalR = 2; inPar = 3; outPar = 4;
+
+		(* pointer init limits *)
+		MaxPtrs = 10; MaxPush = 4;
+		
+		Tag0Offset = 12;
+		BasesOffset = 16;	(* basetype table offset inside the record type descriptor (Kernel.Type.base) *)
+		Mth0Offset = -4;
+		ArrDOffs = 8;
+		numPreIntProc = 2;
+		
+		stackAllocLimit = 2048;
+
+		strCon* = 0;	(* flags for Item.flags. Defined if Item.what IN T.strings. Means that the item *)
+
+	VAR
+		imLevel*: ARRAY 64 OF BYTE;
+		intHandler*: DevCPT.Object;
+		inxchk, ovflchk, ranchk, typchk, ptrinit, hints: BOOLEAN;
+		WReg, 	(* ? word registers? working registers? *)
+		BReg, 	(* ? byte registers? busy registeres? *)
+		AllReg: SET; 	(* ?all available registers; availability set thru SetReg *)
+		FReg: INTEGER;
+		ptrTab: ARRAY MaxPtrs OF INTEGER;
+		stkAllocLbl: DevCPL486.Label;
+		procedureUsesFpu: BOOLEAN;
+
+	PROCEDURE Init* (opt: SET);
+		CONST chk = 0; achk = 1; hint = 29;
+	BEGIN
+		inxchk := chk IN opt; ovflchk := achk IN opt; ranchk := achk IN opt; typchk := chk IN opt; ptrinit := chk IN opt;
+		hints := hint IN opt;
+		stkAllocLbl := L.NewLbl
+	END Init;
+
+	PROCEDURE Reversed (cond: INTEGER): BYTE (*->INTEGER*) ;	(* reversed condition *)
+	BEGIN
+		IF cond = T.lssfn THEN RETURN T.gtrfn
+		ELSIF cond = T.gtrfn THEN RETURN T.lssfn
+		ELSIF cond = T.leqfn THEN RETURN T.geqfn
+		ELSIF cond = T.geqfn THEN RETURN T.leqfn
+		ELSE RETURN SHORT(SHORT(cond))
+		END
+	END Reversed;
+	
+	PROCEDURE Inverted (cc: INTEGER): INTEGER;	(* inverted sense of condition code *)
+	BEGIN
+		IF ODD(cc) THEN RETURN cc-1 ELSE RETURN cc+1 END
+	END Inverted;
+
+	PROCEDURE setCC* (VAR x: DevCPL486.Item; rel: BYTE; reversed, signed: BOOLEAN);
+	BEGIN
+		IF reversed THEN rel := Reversed(rel) END;
+		CASE rel OF
+		   false: x.offset := ccNever
+		| true: x.offset := ccAlways
+		| eql: x.offset := ccE
+		| neq: x.offset := ccNE
+		| lss: IF signed THEN x.offset := ccL ELSE x.offset := ccB END
+		| leq: IF signed THEN x.offset := ccLE ELSE x.offset := ccBE END
+		| gtr: IF signed THEN x.offset := ccG ELSE x.offset := ccA END
+		| geq: IF signed THEN x.offset := ccGE ELSE x.offset := ccAE END
+		END;
+		x.mode := Cond; x.form := Bool; x.reg := 0;
+		IF reversed THEN x.reg := 1 END;
+		IF signed THEN INC(x.reg, 2) END
+	END setCC;
+
+	PROCEDURE CsetCC* (VAR x: L.Item; rel: INTEGER; reversed, signed: BOOLEAN);
+	BEGIN
+		IF reversed THEN rel := Reversed(rel) END;
+		CASE rel OF	(* hm.. false and true overlap with other constants *)
+		   false: x.offset := ccNever
+		| true: x.offset := ccAlways
+		| T.eqlfn: x.offset := ccE
+		| T.neqfn: x.offset := ccNE
+		| T.lssfn: IF signed THEN x.offset := ccL ELSE x.offset := ccB END
+		| T.leqfn: IF signed THEN x.offset := ccLE ELSE x.offset := ccBE END
+		| T.gtrfn: IF signed THEN x.offset := ccG ELSE x.offset := ccA END
+		| T.geqfn: IF signed THEN x.offset := ccGE ELSE x.offset := ccAE END
+		END;
+		x.mode := Cond; x.what := T.fBool; x.reg := 0;
+		IF reversed THEN x.reg := 1 END;
+		IF signed THEN INC(x.reg, 2) END
+	END CsetCC;
+
+	PROCEDURE StackAlloc*;	(* pre: len = CX bytes; post: len = CX words *)
+	BEGIN
+		DevCPL486.GenJump(ccCall, stkAllocLbl, FALSE)
+	END StackAlloc;
+	
+	PROCEDURE CStackAlloc*;	(* pre: len = CX bytes; post: len = CX words *)
+	BEGIN L.GenJump(ccCall, stkAllocLbl, FALSE)
+	END CStackAlloc;
+	
+	PROCEDURE CSimpleStackAlloc*;
+	(** Simple stack allocation - i.e. without probing every page. Pre: len = ECX bytes; post: new RSP 8-aligned *)
+		VAR cx, sp, x: L.Item;
+	BEGIN
+		E.GenByte(48H); E.GenByte(63H); E.GenByte(0C9H);	(* MOVSXD RCX, ECX *)	(* How 'bout SUB RSP, ECX? *)
+		L.LMakeReg(cx, CX, T.fInt64); L.LMakeReg(sp, SP, T.fSysPtr);
+		L.LGenSub(cx, sp, FALSE);
+		L.LMakeConst(x, -8, T.fInt64); L.LGenAnd(x, sp)
+	END CSimpleStackAlloc;
+	
+	PROCEDURE^ CheckAv* (reg: INTEGER);
+
+	PROCEDURE AdjustStack (val: INTEGER);
+		VAR c, sp: DevCPL486.Item;
+	BEGIN
+		IF val < -stackAllocLimit THEN
+			CheckAv(CX);
+			DevCPL486.MakeConst(c, -val, Int32); DevCPL486.MakeReg(sp, CX, Int32); DevCPL486.GenMove(c, sp);
+			StackAlloc
+		ELSIF val # 0 THEN
+			DevCPL486.MakeConst(c, val, Int32); DevCPL486.MakeReg(sp, SP, Int32); DevCPL486.GenAdd(c, sp, FALSE)
+		END
+	END AdjustStack;
+	
+	PROCEDURE CAdjustStack (val: INTEGER);
+		VAR c, sp: L.Item;
+	BEGIN
+		IF val < -stackAllocLimit THEN
+			CheckAv(CX);
+			L.LMakeConst(c, -val, T.fInt32); L.LMakeReg(sp, CX, T.fInt32); L.LGenMove(c, sp);
+			CSimpleStackAlloc
+		ELSIF val # 0 THEN
+			L.LMakeConst(c, val, T.fInt64); c.scale := 0; L.LMakeReg(sp, SP, T.fInt64); L.LGenAdd(c, sp, FALSE)
+		END
+	END CAdjustStack;
+	
+	PROCEDURE DecStack (form: INTEGER);
+	BEGIN
+		IF form IN {Real64, Int64} THEN AdjustStack(-8) ELSE AdjustStack(-4) END
+	END DecStack;
+
+	PROCEDURE CDecStack (what: INTEGER);
+	BEGIN
+		CAdjustStack(-8)
+	END CDecStack;
+	
+	PROCEDURE IncStack (form: INTEGER);
+	BEGIN
+		IF form IN {Real64, Int64} THEN AdjustStack(8) ELSE AdjustStack(4) END
+	END IncStack;
+
+	PROCEDURE CIncStack (what: INTEGER);
+	BEGIN
+		CAdjustStack(8)
+	END CIncStack;
+	
+	(*-----------------register handling------------------*)
+	
+	PROCEDURE SetReg* (reg: SET);
+	BEGIN
+		AllReg := reg; WReg := reg; BReg := reg * {0..3} + SYSTEM.LSH(reg * {0..3}, 4); FReg := 8
+	END SetReg;
+	
+	PROCEDURE CheckReg*;
+		VAR reg: SET;
+	BEGIN
+		reg := AllReg - WReg;
+		IF reg # {} THEN
+			DevCPM.err(-777); (* register not released *)
+			IF AX IN reg THEN DevCPM.LogWStr(" AX") END;
+			IF BX IN reg THEN DevCPM.LogWStr(" BX") END;
+			IF CX IN reg THEN DevCPM.LogWStr(" CX") END;
+			IF DX IN reg THEN DevCPM.LogWStr(" DX") END;
+			IF SI IN reg THEN DevCPM.LogWStr(" SI") END;
+			IF DI IN reg THEN DevCPM.LogWStr(" DI") END;
+			WReg := AllReg; BReg := AllReg * {0..3} + SYSTEM.LSH(AllReg * {0..3}, 4)
+		END;
+		IF FReg < 8 THEN DevCPM.err(-778); FReg := 8	 (* float register not released *)
+		ELSIF FReg > 8 THEN DevCPM.err(-779); FReg := 8
+		END
+	END CheckReg;
+	
+	PROCEDURE CCheckReg*;
+		VAR reg: SET;
+	BEGIN
+		reg := AllReg - WReg;
+		IF reg # {} THEN
+			M.err(-777); (* register not released *)
+			IF AX IN reg THEN M.LogWStr(" AX") END;
+			IF BX IN reg THEN M.LogWStr(" BX") END;
+			IF CX IN reg THEN M.LogWStr(" CX") END;
+			IF DX IN reg THEN M.LogWStr(" DX") END;
+			IF SI IN reg THEN M.LogWStr(" SI") END;
+			IF DI IN reg THEN M.LogWStr(" DI") END;
+			WReg := AllReg; BReg := AllReg * {0..3} + SYSTEM.LSH(AllReg * {0..3}, 4)
+			;HALT(0);
+		END;
+		IF FReg < 8 THEN M.err(-778); FReg := 8	 (* float register not released *)
+		ELSIF FReg > 8 THEN M.err(-779); FReg := 8
+		END
+	END CCheckReg;
+	
+	PROCEDURE CheckAv* (reg: INTEGER);
+	BEGIN
+		ASSERT(reg IN WReg)
+	END CheckAv; 
+
+	PROCEDURE CCheckAv* (reg: INTEGER);
+	BEGIN
+		ASSERT(reg IN WReg)
+	END CCheckAv; 
+	
+	PROCEDURE GetReg (VAR x: DevCPL486.Item; f: BYTE; hint, stop: SET);
+		VAR n: INTEGER; s, s1: SET;
+	BEGIN
+		CASE f OF
+		| Byte, Bool, Char8, Int8:
+			s := BReg * {0..3} - stop;
+			IF (high IN stop) OR (high IN hint) & (s - hint  # {}) THEN n := 0;
+				IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := {0..7} END;
+				IF s - hint # {} THEN s := s - hint END;
+				WHILE ~(n IN s) DO INC(n) END
+			ELSE
+				s := BReg - (stop * {0..3}) - SYSTEM.LSH(stop * {0..3}, 4); n := 0;
+				IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := {0..7} END;
+				s1 := s - (hint * {0..3}) - SYSTEM.LSH(hint * {0..3}, 4);
+				IF s1 # {} THEN s := s1 END;
+				WHILE ~(n IN s) & ~(n + 4 IN s) DO INC(n) END;
+				IF ~(n IN s) THEN n := n + 4 END
+			END;
+			EXCL(BReg, n); EXCL(WReg, n MOD 4)
+		| Int16, Int32, Set, String8, NilTyp, Pointer, ProcTyp, Comp, Char16, String16: 
+			s := WReg - stop;
+			IF high IN stop THEN s := s * {0..3} END;
+			IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := wreg END;
+			s1 := s - hint;
+			IF high IN hint THEN s1 := s1 * {0..3} END;
+			IF s1 # {} THEN s := s1 END;
+			IF AX IN s THEN n := AX
+			ELSIF DX IN s THEN n := DX
+			ELSIF CX IN s THEN n := CX
+			ELSIF SI IN s THEN n := SI
+			ELSIF DI IN s THEN  n := DI
+			ELSE n := BX (* not used *)
+			END;
+			EXCL(WReg, n);
+			IF n < 4 THEN EXCL(BReg, n); EXCL(BReg, n + 4) END
+		| Real32, Real64:
+			IF (FReg = 0) OR (float IN stop) THEN DevCPM.err(216); FReg := 99 END;
+			DEC(FReg); n := 0
+		END;
+		DevCPL486.MakeReg(x, n, f);
+	END GetReg;
+	
+	PROCEDURE CGetReg (VAR x: L.Item; w: INTEGER; hint, stop: SET);	(* Allocate an available register  *)
+		VAR n: INTEGER; s, s1: SET;
+	BEGIN
+		CASE w OF
+		| T.fByte, T.fBool, T.fChar8, T.fInt8:
+			s := BReg * {0..3} - stop;
+			IF (high IN stop) OR (high IN hint) & (s - hint  # {}) THEN n := 0;
+				IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := {0..7} END;
+				IF s - hint # {} THEN s := s - hint END;
+				WHILE ~(n IN s) DO INC(n) END
+			ELSE
+				s := BReg - (stop * {0..3}) - SYSTEM.LSH(stop * {0..3}, 4); n := 0;
+				IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := {0..7} END;
+				s1 := s - (hint * {0..3}) - SYSTEM.LSH(hint * {0..3}, 4);
+				IF s1 # {} THEN s := s1 END;
+				WHILE ~(n IN s) & ~(n + 4 IN s) DO INC(n) END;
+				IF ~(n IN s) THEN n := n + 4 END
+			END;
+			EXCL(BReg, n); EXCL(WReg, n MOD 4)
+		| T.fInt16, T.fInt32, T.fInt64, T.fSet, T.fString8, (*NilTyp, Pointer, ProcTyp, Comp,*) T.fChar16, T.fString16,
+		T.fNil, T.fSysPtr, T.fProcedure, T.fArrayPtr, T.fRecPtr: 
+			s := WReg - stop;
+			IF high IN stop THEN s := s * {0..3, R8, R9} END;
+			IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := wreg END;
+			s1 := s - hint;
+			IF high IN hint THEN s1 := s1 * {0..3, R8, R9} END;
+			IF s1 # {} THEN s := s1 END;
+			IF AX IN s THEN n := AX
+			ELSIF DX IN s THEN n := DX
+			ELSIF CX IN s THEN n := CX
+			ELSIF SI IN s THEN n := SI
+			ELSIF DI IN s THEN  n := DI
+			ELSIF R8 IN s THEN n := R8
+			ELSIF R9 IN s THEN n := R9
+			ELSE n := BX (* not used *)
+			END;
+			EXCL(WReg, n);
+			IF n < 4 THEN EXCL(BReg, n); EXCL(BReg, n + 4) END
+		| T.fReal32, T.fReal64:
+			IF (FReg = 0) OR (float IN stop) THEN M.err(-216); FReg := 99 END;
+			DEC(FReg); n := 0
+		END;
+		L.LMakeReg(x, n, w)
+	END CGetReg;
+	
+	PROCEDURE FreeReg (n, f: INTEGER);
+	BEGIN
+		IF f <= Int8 THEN
+			INCL(BReg, n);
+			IF (n + 4) MOD 8 IN BReg THEN INCL(WReg, n MOD 4) END
+		ELSIF f IN realSet THEN
+			INC(FReg)
+		ELSIF n IN AllReg THEN
+			INCL(WReg, n);
+			IF n < 4 THEN INCL(BReg, n); INCL(BReg, n + 4) END
+		END
+	END FreeReg;
+	
+	PROCEDURE CFreeReg (n, w: INTEGER);
+	BEGIN
+		IF w IN L.bytes THEN
+			INCL(BReg, n);
+			IF (n + 4) MOD 8 IN BReg THEN INCL(WReg, n MOD 4) END
+		ELSIF w IN T.reals THEN
+			INC(FReg)
+		ELSIF n IN AllReg THEN
+			INCL(WReg, n);
+			IF n < 4 THEN INCL(BReg, n); INCL(BReg, n + 4) END
+		END
+	END CFreeReg;
+	
+	PROCEDURE FreeWReg (n: INTEGER);
+	BEGIN
+		IF n IN AllReg THEN
+			INCL(WReg, n);
+			IF n < 4 THEN INCL(BReg, n); INCL(BReg, n + 4) END
+		END
+	END FreeWReg;
+
+	PROCEDURE CFreeWReg (n: INTEGER);
+	BEGIN
+		IF n IN AllReg THEN
+			INCL(WReg, n);
+			IF n < 4 THEN INCL(BReg, n); INCL(BReg, n + 4) END
+		END
+	END CFreeWReg;
+	
+	PROCEDURE Free* (VAR x: DevCPL486.Item);
+	BEGIN
+		CASE x.mode OF
+		| Var, VarPar, Abs: IF x.scale # 0 THEN FreeWReg(x.index) END
+		| Ind: FreeWReg(x.reg);
+			IF x.scale # 0 THEN FreeWReg(x.index) END
+		| Reg: FreeReg(x.reg, x.form);
+			IF x.form = Int64 THEN FreeWReg(x.index) END
+		ELSE
+		END
+	END Free;
+	
+	PROCEDURE CFree* (VAR x: L.Item);
+	BEGIN 
+		CASE x.mode OF
+		| Var, VarPar, Abs: IF x.scale # 0 THEN FreeWReg(x.index); FreeWReg(x.reg) END
+		| Ind: FreeWReg(x.reg);
+			IF x.scale # 0 THEN FreeWReg(x.index) END
+		| Reg: CFreeReg(x.reg, x.what);
+			(*IF x.form = Int64 THEN FreeWReg(x.index) END not needed 'cause LONGINT now fits in one reg *)
+		ELSE
+		END
+	END CFree;
+	
+	PROCEDURE FreeHi (VAR x: DevCPL486.Item);	(* free hi byte of word reg *)
+	BEGIN
+		IF x.mode = Reg THEN
+			IF x.form = Int64 THEN FreeWReg(x.index)
+			ELSIF x.reg < 4 THEN INCL(BReg, x.reg + 4)
+			END
+		END
+	END FreeHi;
+
+	PROCEDURE CFreeHi (VAR x: L.Item);	(* free hi byte of word reg *)
+	BEGIN
+		IF x.mode = Reg THEN
+			(*IF x.form = Int64 THEN FreeWReg(x.index)
+			ELS*)IF x.reg < 4 THEN INCL(BReg, x.reg + 4)
+			END
+		END
+	END CFreeHi;
+
+	PROCEDURE Fits* (VAR x: DevCPL486.Item; stop: SET): BOOLEAN;	(* x.mode = Reg *)
+	BEGIN
+		IF (short IN stop) & (x.form <= Int8) THEN RETURN FALSE END;
+		IF x.form <= Int8 THEN RETURN ~(x.reg MOD 4 IN stop) & ((x.reg < 4) OR ~(high IN stop))
+		ELSIF x.form IN realSet THEN RETURN ~(float IN stop)
+		ELSIF x.form = Int64 THEN RETURN ~(x.reg IN stop) & ~(x.index IN stop)
+		ELSE RETURN ~(x.reg IN stop) & ((x.reg < 4) OR ~(high IN stop))
+		END
+	END Fits;
+	
+	PROCEDURE CFits* (VAR x: L.Item; stop: SET): BOOLEAN;	(* x.mode = Reg *)
+	BEGIN
+		IF (short IN stop) & (x.what IN L.bytes) THEN RETURN FALSE END;
+		IF x.what IN L.bytes THEN RETURN ~(x.reg MOD 4 IN stop) & ((x.reg < 4) OR ~(high IN stop))
+		ELSIF x.what IN T.reals THEN RETURN ~(float IN stop)
+		(*ELSIF x.form = Int64 THEN RETURN ~(x.reg IN stop) & ~(x.index IN stop)*)	(* ?no need *)
+		ELSE RETURN ~(x.reg IN stop) & ((x.reg < 4) OR ~(high IN stop))
+		END
+	END CFits;
+	
+	PROCEDURE Pop* (VAR r: DevCPL486.Item; f: BYTE; hint, stop: SET);
+		VAR rh: DevCPL486.Item;
+	BEGIN
+		IF f = Int64 THEN
+			GetReg(r, Int32, hint, stop); DevCPL486.GenPop(r);
+			GetReg(rh, Int32, hint, stop); DevCPL486.GenPop(rh);
+			r.form := Int64; r.index := rh.reg
+		ELSE
+			IF f < Int16 THEN INCL(stop, high) END;
+			GetReg(r, f, hint, stop); DevCPL486.GenPop(r)
+		END
+	END Pop;
+
+	PROCEDURE CPop* (VAR r: L.Item; what: INTEGER; hint, stop: SET);
+		(*VAR rh: L.Item;*)
+	BEGIN
+		(*IF what = Int64 THEN
+			GetReg(r, Int32, hint, stop); DevCPL486.GenPop(r);
+			GetReg(rh, Int32, hint, stop); DevCPL486.GenPop(rh);
+			r.form := Int64; r.index := rh.reg
+		ELSE*)
+			IF what IN L.bytes + L.words THEN INCL(stop, high) END;
+			CGetReg(r, what, hint, stop); L.LGenPop(r)
+		(*END*)
+	END CPop;
+	
+	PROCEDURE^ LoadLong (VAR x: DevCPL486.Item; hint, stop: SET);
+	
+	PROCEDURE Load* (VAR x: DevCPL486.Item; hint, stop: SET);	(* = Assert(x, hint, stop + {mem, stk}) *)
+		VAR r: DevCPL486.Item; f: BYTE;
+	BEGIN
+		f := x.typ.form;
+		IF x.mode = Con THEN
+			IF (short IN stop) & (x.form IN {Int8, Int16, Bool, Char8, Char16}) THEN f := Int32; x.form := Int32 END;
+			IF con IN stop THEN
+				IF f = Int64 THEN LoadLong(x, hint, stop)
+				ELSE
+					GetReg(r, f, hint, stop); DevCPL486.GenMove(x, r);
+					x.mode := Reg; x.reg := r.reg; x.form := f
+				END
+			END
+		ELSIF x.mode = Stk THEN
+			IF f IN realSet THEN
+				GetReg(r, f, hint, stop); DevCPL486.GenFLoad(x); IncStack(x.form)
+			ELSE
+				Pop(r, f, hint, stop)
+			END;
+			x.mode := Reg; x.reg := r.reg; x.index := r.index; x.form := f
+		ELSIF (short IN stop) & (x.form IN {Int8, Int16, Bool, Char8, Char16}) THEN
+			Free(x); GetReg(r, Int32, hint, stop); DevCPL486.GenExtMove(x, r);
+			x.mode := Reg; x.reg := r.reg; x.form := Int32
+		ELSIF (x.mode # Reg) OR ~Fits(x, stop) THEN
+			IF f = Int64 THEN LoadLong(x, hint, stop)
+			ELSE
+				Free(x); GetReg(r, f, hint, stop);
+				IF f IN realSet THEN DevCPL486.GenFLoad(x) ELSE DevCPL486.GenMove(x, r) END;
+				x.mode := Reg; x.reg := r.reg; x.form := f
+			END
+		END
+	END Load;
+	
+	PROCEDURE CLoad* (VAR x: L.Item; hint, stop: SET);	(* = Assert(x, hint, stop + {mem, stk}) *)
+		VAR r: L.Item; w: INTEGER;
+	BEGIN
+		w := x.(*type.*)what;
+		IF x.mode = Con THEN
+			IF (short IN stop) & (x.what IN L.bytes + L.words) THEN w := T.fInt32; x.what := T.fInt32 END;
+			IF con IN stop THEN
+				(*IF w = T.fInt64 THEN LoadLong(x, hint, stop)
+				ELSE*)
+					CGetReg(r, w, hint, stop); L.LGenMove(x, r);
+					x.mode := Reg; x.reg := r.reg; x.what := w
+				(*END*)
+			END
+		ELSIF x.mode = XProc THEN HALT(126)
+		ELSIF x.mode = Stk THEN
+			IF w IN T.reals THEN
+				CGetReg(r, w, hint, stop); L.LGenFLoad(x); CIncStack(x.what)
+			ELSE
+				CPop(r, w, hint, stop)
+			END;
+			x.mode := Reg; x.reg := r.reg; x.index := r.index; x.what := w
+		ELSIF (short IN stop) & (x.what IN L.bytes + L.words) THEN
+			CFree(x); CGetReg(r, T.fInt32, hint, stop); L.LGenExtMove(x, r);
+			x.mode := Reg; x.reg := r.reg; x.what := T.fInt32
+		ELSIF (x.mode # Reg) OR ~CFits(x, stop) THEN
+			(*IF w = Int64 THEN LoadLong(x, hint, stop)
+			ELSE*)
+				(*r.o := x.o;*)
+				CFree(x); CGetReg(r, w, hint, stop);
+				IF w IN T.reals THEN L.LGenFLoad(x) ELSE L.LGenMove(x, r) END;
+				x.mode := Reg; x.reg := r.reg; x.what := w
+			(*END*)
+		END
+	END CLoad;
+
+	(*PROCEDURE CGetThisReg (VAR reg: L.Item; num, what: INTEGER; hint, stop: SET);
+	BEGIN
+		(* also check assertions regarding hint and stop *)
+		IF num >= 0 THEN 
+			ASSERT(num IN WReg, 20); ASSERT(what IN T.integers + T.chars + T.pointers + T.booleans + T.sets, 21);
+			EXCL(WReg, num)
+		ELSE 
+			ASSERT(-num IN XReg, 20); ASSERT(what IN T.reals, 21);
+			EXCL(XReg, -num)
+		END; 
+		reg.reg := num; reg.what := what; reg.mode := Reg
+	END CGetThisReg;
+	
+	PROCEDURE CLoadInto* (VAR x: L.Item; reg: INTEGER; hint, stop: SET);	(* = Assert(x, hint, stop + {mem, stk}) *)
+	(* merge with CLoad? *)
+		VAR r: L.Item; w: INTEGER;
+	BEGIN
+		w := x.(*type.*)what;
+		IF x.mode = Con THEN
+			IF (short IN stop) & (x.what IN L.bytes + L.words) THEN w := T.fInt32; x.what := T.fInt32 END;
+			IF con IN stop THEN
+				(*IF w = T.fInt64 THEN LoadLong(x, hint, stop)
+				ELSE*)
+					CGetThisReg(r, reg, w, hint, stop); L.LGenMove(x, r);
+					x.mode := Reg; x.reg := r.reg; x.what := w
+				(*END*)
+			END
+		ELSIF x.mode = Stk THEN
+			HALT(126);
+		ELSIF (short IN stop) & (x.what IN L.bytes + L.words) THEN
+			CFree(x); CGetThisReg(r, reg, T.fInt32, hint, stop); L.LGenExtMove(x, r);
+			x.mode := Reg; x.reg := r.reg; x.what := T.fInt32
+		ELSIF ~((x.mode = Reg) & (x.reg = reg)) OR ~CFits(x, stop) THEN
+			(*IF w = Int64 THEN LoadLong(x, hint, stop)
+			ELSE*)
+				CFree(x); CGetThisReg(r, reg, w, hint, stop);
+				IF w IN T.reals THEN IF r.reg < 0 THEN L.LGenRMove(x, r) ELSE L.LGenFLoad(x) END
+				ELSE L.LGenMove(x, r) 
+				END;
+				x.mode := Reg; x.reg := r.reg; x.what := w
+			(*END*)
+		END
+	END CLoadInto;*)
+	
+	PROCEDURE Push* (VAR x: DevCPL486.Item);
+		VAR y: DevCPL486.Item;
+	BEGIN
+		IF x.form IN realSet THEN
+			Load(x, {}, {}); DecStack(x.form);
+			Free(x); x.mode := Stk;
+			IF x.typ = DevCPT.intrealtyp THEN x.form := Int64 END;
+			DevCPL486.GenFStore(x, TRUE)
+		ELSIF x.form = Int64 THEN
+			Free(x); x.form := Int32; y := x;
+			IF x.mode = Reg THEN y.reg := x.index ELSE INC(y.offset, 4) END;
+			DevCPL486.GenPush(y); DevCPL486.GenPush(x);
+			x.mode := Stk; x.form := Int64
+		ELSE
+			IF x.form < Int16 THEN Load(x, {}, {high})
+			ELSIF x.form = Int16 THEN Load(x, {}, {})
+			END;
+			Free(x); DevCPL486.GenPush(x); x.mode := Stk
+		END
+	END Push;
+	
+	PROCEDURE CPush* (VAR x: L.Item);
+		VAR y: L.Item;
+	BEGIN
+		IF x.what IN T.reals THEN
+			CLoad(x, {}, {}); CDecStack(x.what);
+			CFree(x); x.mode := Stk;
+			(*IF x.typ = DevCPT.intrealtyp THEN x.form := Int64 END;*)
+			L.LGenFStore(x, TRUE)
+		(*ELSIF x.what IN L.quads THEN CFree(x); L.LGenPushNatural(x)*)
+		ELSE
+			IF x.what IN L.bytes THEN CLoad(x, {}, {short, high})		(* couldn't you PUSH [var] despite it's type? *)
+			(*ELSIF x.what IN L.words + L.doubles THEN CLoad(x, {}, {})*)	(*!*)
+			END;
+			CFree(x); L.LGenPush(x); x.mode := Stk
+		END
+	END CPush;
+	
+	PROCEDURE Assert* (VAR x: DevCPL486.Item; hint, stop: SET);
+	BEGIN
+		IF (short IN stop) & (x.form IN {Int8, Int16, Bool, Char8, Char16}) & (x.mode # Con) THEN
+			IF (wreg - stop = {}) & ~(stk IN stop) THEN Load(x, {}, {short}); Push(x)
+			ELSE Load(x, hint, stop);
+			END
+		ELSE
+			CASE x.mode OF
+			| Var, VarPar: IF ~(mem IN stop) THEN RETURN END
+			| Con: IF ~(con IN stop) THEN RETURN END
+			| Ind: IF ~(mem IN stop) & ~(x.reg IN stop) & ((x.scale = 0) OR ~(x.index IN stop)) THEN RETURN END
+			| Abs: IF ~(mem IN stop) & ((x.scale = 0) OR ~(x.index IN stop)) THEN RETURN END
+			| Stk: IF ~(stk IN stop) THEN RETURN END
+			| Reg: IF Fits(x, stop) THEN RETURN END
+			ELSE RETURN
+			END;
+			IF ((float IN stop) OR ~(x.typ.form IN realSet) & (wreg - stop = {})) & ~(stk IN stop) THEN Push(x)
+			ELSE Load(x, hint, stop)
+			END
+		END
+	END Assert;
+	
+	PROCEDURE CAssert* (VAR x: L.Item; hint, stop: SET);	(* ? what does it do? *)
+	BEGIN
+		IF (short IN stop) & (x.what IN L.bytes + L.words) & (x.mode # Con) THEN
+			HALT(126);
+		ELSE
+			CASE x.mode OF
+			| Var, VarPar: IF ~(mem IN stop) THEN RETURN END
+			| Con: IF ~(con IN stop) THEN RETURN END
+			| Ind: IF ~(mem IN stop) & ~(x.reg IN stop) & ((x.scale = 0) OR ~(x.index IN stop)) THEN RETURN END
+			| Abs: IF ~(mem IN stop) & ((x.scale = 0) OR ~(x.index IN stop)) THEN RETURN END
+			| Stk: IF ~(stk IN stop) THEN RETURN END
+			| Reg: IF CFits(x, stop) THEN RETURN END
+			ELSE RETURN
+			END;
+			IF ((float IN stop) OR ~(x.type.what IN T.reals) & (wreg - stop = {})) & ~(stk IN stop) THEN CPush(x)
+			ELSE CLoad(x, hint, stop)
+			END
+		END
+	END CAssert;
+	
+	(*------------------------------------------------*)
+
+	PROCEDURE LoadR (VAR x: DevCPL486.Item);
+	BEGIN
+		IF x.mode # Reg THEN
+			Free(x); DevCPL486.GenFLoad(x);
+			IF x.mode = Stk THEN IncStack(x.form) END;
+			GetReg(x, Real32, {}, {})
+		END
+	END LoadR;
+
+	PROCEDURE CLoadR (VAR x: L.Item);
+	BEGIN
+		IF x.mode # Reg THEN
+			CFree(x); L.LGenFLoad(x);
+			IF x.mode = Stk THEN CIncStack(x.what) END;
+			CGetReg(x, T.fReal64, {}, {}); x.type := T.realtp
+		END
+	END CLoadR;
+	
+	PROCEDURE PushR (VAR x: DevCPL486.Item);
+	BEGIN
+		IF x.mode # Reg THEN LoadR(x) END;
+		DecStack(x.form);
+		Free(x); x.mode := Stk; DevCPL486.GenFStore(x, TRUE)
+	END PushR;
+	
+	PROCEDURE LoadW (VAR x: DevCPL486.Item; hint, stop: SET);
+		VAR r: DevCPL486.Item;
+	BEGIN
+		IF x.mode = Stk THEN
+			Pop(x, x.form, hint, stop)
+		ELSE
+			Free(x); GetReg(r, x.form, hint, stop);
+			DevCPL486.GenMove(x, r);
+			x.mode := Reg; x.reg := r.reg
+		END
+	END LoadW;
+
+	PROCEDURE ^ CGetAdr* (VAR x: L.Item; hint, stop: SET);
+	PROCEDURE CLoadW (VAR x: L.Item; hint, stop: SET);	(* ? Load word into a new register? *)
+		VAR r: L.Item;
+	BEGIN
+		IF x.mode = Stk THEN
+			CPop(x, x.what, hint, stop)
+		ELSIF x.what = T.fProcedure THEN CGetAdr(x, hint, stop)
+		ELSE
+			CFree(x); CGetReg(r, x.what, hint, stop);
+			L.LGenMove(x, r);
+			x.mode := Reg; x.reg := r.reg
+		END
+	END CLoadW;
+
+	PROCEDURE LoadL (VAR x: DevCPL486.Item; hint, stop: SET);
+		VAR r: DevCPL486.Item;
+	BEGIN
+		IF x.mode = Stk THEN
+			Pop(x, x.form, hint, stop);
+			IF (x.form < Int32) OR (x.form = Char16) THEN
+				r := x; x.form := Int32; DevCPL486.GenExtMove(r, x)
+			END
+		ELSE
+			Free(x);
+			IF (x.form < Int32) OR (x.form = Char16) THEN GetReg(r, Int32, hint, stop) ELSE GetReg(r, x.form, hint, stop) END;
+			IF x.mode = Con THEN x.form := r.form END;
+			IF x.form # r.form THEN DevCPL486.GenExtMove(x, r) ELSE DevCPL486.GenMove(x, r) END;
+			x.mode := Reg; x.reg := r.reg; x.form := r.form
+		END
+	END LoadL;
+	
+	PROCEDURE CLoadL (VAR x: L.Item; hint, stop: SET);
+	(** Load longer: extend the loaded value to 32 bits  (~(toQword IN hint) or to 64 bits (toQword IN hint)). In CP2, LoadL would always extend to 32 bits. In Herschel/amd64, it is possible to extend to 64 bits for cases like LONGINT := BYTE. But generally speaking the default operand size, and the most common type in CP, is 32 bits/INTEGER, so extension to 64 bytes is only necessary for assignments to LONGINT. It is permissible for other assignments, like INTEGER := BYTE: it is ok to do the extension to 64 bits and then just drop the higher dword. However, extending to 64 bits requires a REX.W prefix, which makes the instruction 1 byte longer. The same holds true for extension to 16 bits - it requires a prefix and is 1 byte longer. At the same time, the cost of distinguishing to-32-bit-extension from to-64-bit-extension is minimal: CLoadL has to be informed of the latter, which is now done thru the qword (=31) flag in hint. *)
+		VAR r: L.Item; w: INTEGER;
+	BEGIN
+		IF x.mode = Stk THEN HALT(126)
+		ELSE
+			CFree(x);
+			IF toQuad IN hint THEN w := T.fInt64
+			ELSIF x.what IN T.chars + { T.fInt8, T.fInt16, T.fBool } THEN w := T.fInt32 
+			ELSE w := x.what
+			END;
+			CGetReg(r, w, hint, stop);
+			IF x.mode = Con THEN x.what := w END;
+			IF x.what # w THEN L.LGenExtMove(x, r) 
+			ELSE L.LGenMove(x, r) END;
+			x.mode := Reg; x.reg := r.reg; x.what := w
+		END
+	END CLoadL;
+	
+	PROCEDURE LoadLong (VAR x: DevCPL486.Item; hint, stop: SET);
+		VAR r, rh: DevCPL486.Item; offs: INTEGER;
+	BEGIN
+		IF x.form = Int64 THEN
+			IF  x.mode = Stk THEN
+				Pop(x, x.form, hint, stop)
+			ELSIF x.mode = Reg THEN
+				FreeReg(x.reg, Int32); GetReg(r, Int32, hint, stop);
+				FreeReg(x.index, Int32); GetReg(rh, Int32, hint, stop);
+				x.form := Int32; DevCPL486.GenMove(x, r);
+				x.reg := x.index; DevCPL486.GenMove(x, rh);
+				x.reg := r.reg; x.index := rh.reg
+			ELSE
+				GetReg(rh, Int32, hint, stop + {AX});
+				Free(x);
+				GetReg(r, Int32, hint, stop); 
+				x.form := Int32; offs := x.offset;
+				IF x.mode = Con THEN x.offset := x.scale ELSE INC(x.offset, 4) END;
+				DevCPL486.GenMove(x, rh);
+				x.offset := offs;
+				DevCPL486.GenMove(x, r);
+				x.mode := Reg; x.reg := r.reg; x.index := rh.reg
+			END
+		ELSE
+			LoadL(x, hint, stop); GetReg(rh, Int32, hint, stop); DevCPL486.GenSignExt(x, rh);
+			x.index := rh.reg
+		END;
+		x.form := Int64
+	END LoadLong;
+	
+	(*------------------------------------------------*)
+	
+	PROCEDURE CopyReg* (VAR x, y: DevCPL486.Item; hint, stop: SET);
+	BEGIN
+		ASSERT(x.mode = Reg);
+		GetReg(y, x.form, hint, stop);
+		DevCPL486.GenMove(x, y)
+	END CopyReg;
+
+	PROCEDURE CCopyReg* (VAR x, y: L.Item; hint, stop: SET);
+	BEGIN
+		ASSERT(x.mode = Reg);
+		CGetReg(y, x.what, hint, stop);
+		L.LGenMove(x, y)
+	END CCopyReg;
+
+	PROCEDURE GetAdr* (VAR x: DevCPL486.Item; hint, stop: SET);
+		VAR r: DevCPL486.Item;
+	BEGIN
+		IF x.mode = DInd THEN
+			x.mode := Ind
+		ELSIF (x.mode = Ind) & (x.offset = 0) & (x.scale = 0) & (x.reg IN wreg) THEN
+			x.mode := Reg
+		ELSE
+			Free(x); GetReg(r, Pointer, hint, stop);
+			IF x.mode = Con THEN DevCPL486.GenMove(x, r) ELSE DevCPL486.GenLoadAdr(x, r) END;
+			x.mode := Reg; x.reg := r.reg; x.form := Pointer
+		END;
+		x.form := Pointer; x.typ := DevCPT.anyptrtyp;
+		Assert(x, hint, stop)
+	END GetAdr;
+	
+	PROCEDURE CGetAdr* (VAR x: L.Item; hint, stop: SET);
+		VAR r: L.Item;
+	BEGIN
+		IF x.mode = DInd THEN
+			x.mode := Ind
+		ELSIF (x.mode = Ind) & (x.offset = 0) & (x.scale = 0) & (x.reg IN wreg) THEN
+			x.mode := Reg
+		ELSE
+			CFree(x); CGetReg(r, T.fSysPtr, hint, stop);
+			IF (x.mode = Con) THEN L.LGenMove(x, r) ELSE L.LGenLoadAdr(x, r) END;
+			x.mode := Reg; x.reg := r.reg; x.what := T.fSysPtr
+		END;
+		x.what := T.fSysPtr; x.type := T.sysptrtp;
+			(* shouldn't it be T.sysptrtp instead? 'cause it's not necessarily a rec ptr *)
+		CAssert(x, hint, stop)
+	END CGetAdr;
+	
+	PROCEDURE PushAdr (VAR x: DevCPL486.Item; niltest: BOOLEAN);
+		VAR r, v: DevCPL486.Item;
+	BEGIN
+		IF (x.mode = Abs) & (x.scale = 0) THEN x.mode := Con; x.form := Pointer
+		ELSIF niltest THEN
+			GetAdr(x, {}, {mem, stk});
+			DevCPL486.MakeReg(r, AX, Int32);
+			v.mode := Ind; v.form := Int32; v.offset := 0; v.scale := 0; v.reg := x.reg;
+			DevCPL486.GenTest(r, v)
+		ELSIF x.mode = DInd THEN x.mode := Ind; x.form := Pointer
+		ELSE GetAdr(x, {}, {})
+		END;
+		Free(x); DevCPL486.GenPush(x)
+	END PushAdr;
+
+	(*PROCEDURE CPlaceParam (VAR p: L.Item; pass: INTEGER(*; VAR used: SET; VAR pushed: INTEGER*)); 
+	(** Place parameter p in accordance with parameter passing mode pass *)
+		VAR reg: L.Item; bytes: INTEGER;
+	BEGIN
+		IF (pass = Y.stk) OR (pass = Y.stk16) THEN CFree(p); L.LGenPush(p); (*INC(pushed, 8)*)
+		ELSE 
+			IF (pass >= 0) & ~(pass IN WReg) OR (pass < 0) & ~(-pass IN XReg) THEN M.MMark(-215, 1, M.errpos) 
+				;HALT(77);
+			ELSE (*INCL(used, pass); *)CLoadInto(p, pass, {}, { con })
+			END
+		END
+	END CPlaceParam;
+	
+	PROCEDURE CPlaceAdr (VAR x: L.Item; niltest: BOOLEAN; pass: INTEGER);
+		VAR r, v, y: L.Item;
+	BEGIN
+		IF (x.mode = Abs) & (x.scale = 0) THEN y := x; CGetReg(x, T.fSysPtr, {}, {}); L.LGenLoadAdr(y, x)
+		ELSIF niltest THEN HALT(126)
+		ELSIF x.mode = DInd THEN HALT(126)
+		ELSE CGetAdr(x, {}, {})
+		END;
+		CFree(x); CPlaceParam(x, pass)
+	END CPlaceAdr;*)
+
+	PROCEDURE LevelBase (VAR a: DevCPL486.Item; lev: INTEGER; hint, stop: SET);
+		VAR n: BYTE;
+	BEGIN
+		a.mode := Ind; a.scale := 0; a.form := Int32; a.typ := DevCPT.int32typ;
+		IF lev = DevCPL486.level THEN a.reg := BP
+		ELSE
+			a.reg := BX; n := SHORT(SHORT(imLevel[DevCPL486.level] - imLevel[lev]));
+			WHILE n > 0 DO
+				a.offset := -4; LoadL(a, hint, stop); a.mode := Ind; DEC(n)
+			END
+		END
+	END LevelBase;
+	
+	PROCEDURE CLevelBase (VAR a: L.Item; nst: INTEGER; hint, stop: SET);
+	(** Get the frame base into a, with respect to procedure's level lev *)
+		VAR n: BYTE;
+	BEGIN ASSERT(nst > 0, 20);
+		a.mode := Ind; a.scale := 0; (*a.what := T.fInt64; a.type := T.longtp;*)
+		IF nst = L.level THEN a.reg := BP
+		ELSE
+			a.reg := BX; n := SHORT(SHORT(imLevel[L.level] - imLevel[nst]));
+			WHILE n > 0 DO
+				a.offset := -4; CLoadL(a, hint, stop); a.mode := Ind; DEC(n)
+			END
+		END
+	END CLevelBase;
+	
+	PROCEDURE LenDesc (VAR x, len: DevCPL486.Item; typ: DevCPT.Struct); (* set len to LEN(x, -typ.n) *)
+	BEGIN
+		IF x.tmode = VarPar THEN
+			LevelBase(len, x.obj.mnolev, {}, {}); len.offset := x.obj.adr;
+		ELSE ASSERT((x.tmode = Ind) & (x.mode = Ind));
+			len := x; len.offset := ArrDOffs; len.scale := 0; len.form := Int32
+		END;
+		INC(len.offset, typ.n * 4 + 4);
+		IF typ.sysflag = stackArray THEN len.offset := -4 END
+	END LenDesc;
+	
+	PROCEDURE CLenDesc (VAR x, len: L.Item; typ: T.Array); (* set len to LEN(x, -typ.n) *)
+	BEGIN 
+		IF x.tmode = VarPar THEN CLevelBase(len, x.o.owner.nesting, {}, {}); len.offset := x.o(T.Par).adr;
+		ELSE ASSERT((x.tmode = Ind) & (x.mode = Ind));
+			len := x; len.offset := ArrDOffs; len.scale := 0; (*len.what := T.fInt32 see below*)
+		END;
+		INC(len.offset, typ.len * 8 + 8);
+		IF (x.o # NIL) & (Y.stackArray IN x.o.flags) THEN len.offset := -8 END;
+		len.what := T.fInt32; len.type := T.inttp;	(* len is used in indexed addressing mode => has to be 8byte *)
+	END CLenDesc;
+	
+	PROCEDURE Tag* (VAR x, tag: DevCPL486.Item);
+		VAR typ: DevCPT.Struct;
+	BEGIN
+		typ := x.typ;
+		IF typ.form = Pointer THEN typ := typ.BaseTyp END;
+		IF (x.typ # DevCPT.sysptrtyp) & (typ.attribute = 0) & ~(DevCPM.oberon IN DevCPM.options) THEN	(* final type *)
+			DevCPL486.MakeConst(tag, 0, Pointer); tag.obj := DevCPE.TypeObj(typ)
+		ELSIF x.typ.form = Pointer THEN
+			ASSERT(x.mode = Reg);
+			tag.mode := Ind; tag.reg := x.reg; tag.offset := -4;
+			IF x.typ.sysflag = interface THEN tag.offset := 0 END
+		ELSIF x.tmode = VarPar THEN
+			LevelBase(tag, x.obj.mnolev, {}, {}); tag.offset := x.obj.adr + 4;
+			Free(tag)	(* ??? *)
+		ELSIF x.tmode = Ind THEN
+			ASSERT(x.mode = Ind);
+			tag := x; tag.offset := -4
+		ELSE
+			DevCPL486.MakeConst(tag, 0, Pointer); tag.obj := DevCPE.TypeObj(x.typ)
+		END;
+		tag.scale := 0; tag.form := Pointer; tag.typ := DevCPT.sysptrtyp
+	END Tag;
+	
+	PROCEDURE GetTypeName (type: T.Type; OUT obj: T.Object);
+		VAR typename: T.TypeName;
+	BEGIN HALT(126(*should be eliminated*))
+	END GetTypeName;
+	
+	PROCEDURE CTag* (VAR x, tag: L.Item);
+		VAR t, typ: T.Type; 
+	BEGIN
+		typ := x.type;
+		t := typ; WITH t: T.RecPtr DO typ := t.base ELSE END;
+		IF (x.type # T.sysptrtp) & ({ T.abstract, T.limited, T.extensible} * typ.flags = {})
+		& ~(DevCPM.oberon IN DevCPM.options) THEN	(* terminal type *)
+			L.LMakeConst(tag, 0, T.fSysPtr); (*GetTypeName(typ, tag.o) should be eliminated*)
+			;HALT(0);	(* for v: T where T is terminal, the tag of v is evaluated as S.TYP(T) *)
+			(* terminal type handling should be forwarded to CTyp from V, so this branch blocked out here *)
+		ELSIF x.type.what IN T.pointers THEN
+			ASSERT(x.mode = Reg);
+			tag.mode := Ind; tag.reg := x.reg; tag.offset := -8;
+			IF x.type.flags * T.strucMask = T.interfaceF THEN tag.offset := 0 END
+		ELSIF x.tmode = VarPar THEN
+			HALT(126); (*not tested*)
+			CLevelBase(tag, x.o.owner.imno, {}, {}); tag.offset := x.o(T.Par).adr + 8;
+			CFree(tag)	(* ??? *)
+		ELSIF x.tmode = Ind THEN
+			HALT(126); (*not tested*)
+			ASSERT(x.mode = Ind);
+			tag := x; tag.offset := -8
+		ELSE
+			HALT(126); (*not tested*)
+			L.LMakeConst(tag, 0, T.fSysPtr); (*GetTypeName(x.type, tag.o) should be eliminated*)
+		END;
+		tag.scale := 0; tag.what := T.fSysPtr; tag.type := T.sysptrtp
+	END CTag;
+	
+	PROCEDURE NumOfIntProc (typ: DevCPT.Struct): INTEGER;
+	BEGIN
+		WHILE (typ # NIL) & (typ.sysflag # interface) DO typ := typ.BaseTyp END;
+		IF typ # NIL THEN RETURN typ.n
+		ELSE RETURN 0
+		END
+	END NumOfIntProc;
+
+	PROCEDURE CNumOfIntProc (typ: T.Type): INTEGER;
+		VAR res: INTEGER; base: T.Record; found: BOOLEAN;
+	BEGIN 
+		ASSERT(typ # NIL, 20);
+		WITH typ: T.Record DO base := typ | typ: T.RecPtr DO base := typ.base ELSE HALT(21) END;
+		REPEAT
+			typ := base;
+			found := T.interface IN typ.flags; 	(* or is it IN typ.sysflags? *)
+			IF ~found THEN WITH typ: T.Record DO base := typ.base ELSE HALT(60) END END
+		UNTIL (base = NIL) OR found;
+		IF found THEN res := -1; HALT(126)
+		ELSE res := 0
+		END;
+		RETURN res
+	END CNumOfIntProc;
+	
+	PROCEDURE ContainsIPtrs* (typ: DevCPT.Struct): BOOLEAN;
+		VAR fld: DevCPT.Object;
+	BEGIN
+		WHILE typ.comp IN {DynArr, Array} DO typ := typ.BaseTyp END;
+		IF (typ.form = Pointer) & (typ.sysflag = interface) THEN RETURN TRUE
+		ELSIF (typ.comp = Record) & (typ.sysflag # union) THEN
+			REPEAT
+				fld := typ.link;
+				WHILE (fld # NIL) & (fld.mode = Fld) DO
+					IF (fld.sysflag = interface) & (fld.name^ = DevCPM.HdUtPtrName) 
+						OR ContainsIPtrs(fld.typ) THEN RETURN TRUE END;
+					fld := fld.link
+				END;
+				typ := typ.BaseTyp
+			UNTIL typ = NIL
+		END;
+		RETURN FALSE
+	END ContainsIPtrs;
+	
+	PROCEDURE CContainsIPtrs* (typ: T.Type): BOOLEAN;
+		VAR fld: DevCPT.Object;
+	BEGIN ASSERT(~deferred126, 126); RETURN FALSE
+	END CContainsIPtrs;
+	
+	PROCEDURE GuidFromString* (str: DevCPT.ConstExt; VAR x: DevCPL486.Item);
+		VAR cv: DevCPT.Const;
+	BEGIN
+		IF ~DevCPM.ValidGuid(str) THEN DevCPM.err(165) END;
+		cv := DevCPT.NewConst();
+		cv.intval := DevCPM.ConstNotAlloc; cv.intval2 := 16; cv.ext := str;
+		DevCPL486.AllocConst(x, cv, Guid); x.typ := DevCPT.guidtyp
+	END GuidFromString;
+	
+	PROCEDURE IPAddRef* (VAR x: DevCPL486.Item; offset: INTEGER; nilTest: BOOLEAN);
+		VAR r, p, c: DevCPL486.Item; lbl: DevCPL486.Label;
+	BEGIN
+		ASSERT(x.mode IN {Reg, Ind, Abs});
+		ASSERT({AX, CX, DX} - WReg = {});
+		IF hints THEN
+			IF nilTest THEN DevCPM.err(-701) ELSE DevCPM.err(-700) END
+		END;
+		IF x.mode # Reg THEN 
+			GetReg(r, Pointer, {}, {});
+			p := x; INC(p.offset, offset); p.form := Pointer; DevCPL486.GenMove(p, r);
+		ELSE r := x
+		END;
+		IF nilTest THEN
+			DevCPL486.MakeConst(c, 0, Pointer); DevCPL486.GenComp(c, r);
+			lbl := DevCPL486.NewLbl; DevCPL486.GenJump(ccE, lbl, TRUE)
+		END;
+		DevCPL486.GenPush(r); p := r;
+		IF x.mode # Reg THEN Free(r) END;
+		GetReg(r, Pointer, {}, {});
+		p.mode := Ind; p.offset := 0; p.scale := 0; p.form := Pointer; DevCPL486.GenMove(p, r);
+		p.offset := 4; p.reg := r.reg; Free(r); DevCPL486.GenCall(p);
+		IF nilTest THEN DevCPL486.SetLabel(lbl) END;
+	END IPAddRef;
+	
+	PROCEDURE IPRelease* (VAR x: DevCPL486.Item; offset: INTEGER; nilTest, nilSet: BOOLEAN);
+		VAR r, p, c: DevCPL486.Item; lbl: DevCPL486.Label;
+	BEGIN
+		ASSERT(x.mode IN {Ind, Abs});
+		ASSERT({AX, CX, DX} - WReg = {});
+		IF hints THEN
+			IF nilTest THEN DevCPM.err(-703) ELSE DevCPM.err(-702) END
+		END;
+		GetReg(r, Pointer, {}, {});
+		p := x; INC(p.offset, offset); p.form := Pointer; DevCPL486.GenMove(p, r);
+		DevCPL486.MakeConst(c, 0, Pointer);
+		IF nilTest THEN
+			DevCPL486.GenComp(c, r);
+			lbl := DevCPL486.NewLbl; DevCPL486.GenJump(ccE, lbl, TRUE)
+		END;
+		IF nilSet THEN DevCPL486.GenMove(c, p) END;
+		DevCPL486.GenPush(r);
+		p.mode := Ind; p.reg := r.reg; p.offset := 0; p.scale := 0; DevCPL486.GenMove(p, r);
+		p.offset := 8; Free(r); DevCPL486.GenCall(p);
+		IF nilTest THEN DevCPL486.SetLabel(lbl) END;
+	END IPRelease;
+	
+	PROCEDURE CPrepare* (VAR x: L.Item; hint, stop: SET);
+	(** transforms language modes into processor modes (Var, VarPar, TProc etc. into Abs, Stk, Ind etc. *)
+		VAR o: T.Object; scale, n, i, lev: INTEGER; base, len, y: L.Item;
+	BEGIN
+		x.what := x.type.what;
+		o := x.o;
+		IF o # NIL THEN
+			IF (x.mode IN {Var, VarPar, Ind, Abs}) & (x.scale # 0) THEN 	(*?x.scale#0=>ongoing Index designator*)
+				L.LMakeReg(y, x.index, T.fInt32); 
+				IF T.open IN x.type.flags (*& x.type IS T.Array*) THEN 
+					HALT(126) 
+				END;
+				n := x.scale; i := 0;
+				WHILE (n MOD 2 = 0) & (i < 3) DO n := n DIV 2; INC(i) END;
+				IF n > 1 THEN (* assure scale factor in {1, 2, 4, 8} *)
+					L.LMakeConst(len, n, T.fInt32); L.LGenMul(len, y, FALSE); x.scale := x.scale DIV n 
+				END
+			END;
+			CASE x.mode OF
+			| Var, VarPar:
+				WITH o: T.Var DO
+					IF o.owner.nesting = 0 THEN x.mode := Abs;	(* global var *)
+						scale := x.scale;
+						IF (o.type IS T.Array) & (x.index # -1) & (scale # 0) THEN
+							(* scale # 0 => x.o is indexed (referenced in an array selector), otherwise x is referred to as a whole *)
+							CGetReg(base, T.fInt64, {}(*!*)(*hinted regnum requirements stop here, 'cause they are for the result of [], not the process. Might be a VERY bad idea. *)(*$GC110*), stop); x.reg := base.reg; 
+							x.scale := 0; L.LGenLoadAdr(x, base); x.scale := scale 
+								(* hide scale in order to get arr's base adress, not the array selector result's address *)
+						END
+					ELSE 
+						CLevelBase(y, o.owner.nesting, hint, stop);	 (* Get the frame base into y, with respect to  *)
+						IF x.mode # VarPar THEN	(* for local variables and value parameters *)
+							x.mode := Ind
+						ELSIF (deref IN hint) & (x.offset = 0) & (x.scale = 0) THEN
+							(* what is this branch for? VAR [nil] params fall into this branch... *) 
+							x.mode := DInd; x.offset := o.adr
+						ELSE 	(* varibale parameter *)
+							y.what := T.fSysPtr; y.type := T.sysptrtp; y.offset := x.o(T.Par).adr; CLoad(y, hint, stop); x.mode := Ind
+						END;
+						x.reg := y.reg
+					END
+				END;
+				x.what := x.type.what
+			| LProc, XProc, IProc: x.offset := 0; x.what := T.fProcedure; x.mode := Abs; x.flags := { 5, 28 } 
+			| TProc, CProc: HALT(126)
+			| Ind, Abs, Stk, Reg:
+				IF ~(x.type.what IN T.strings) THEN x.what := x.type.what END
+			ELSE HALT(126)
+			END
+		END
+	END CPrepare;
+	
+	PROCEDURE Prepare* (VAR x: DevCPL486.Item; hint, stop: SET);
+		VAR n, i, lev: INTEGER; len, y: DevCPL486.Item; typ: DevCPT.Struct;
+	BEGIN
+		IF (x.mode IN {Var, VarPar, Ind, Abs}) & (x.scale # 0) THEN
+			DevCPL486.MakeReg(y, x.index, Int32); typ := x.typ;
+			WHILE typ.comp = DynArr DO (* complete dynamic array iterations *)
+				LenDesc(x, len, typ); DevCPL486.GenMul(len, y, FALSE); typ := typ.BaseTyp;
+				IF x.tmode = VarPar THEN Free(len) END;	(* ??? *)
+			END;
+			n := x.scale; i := 0;
+			WHILE (n MOD 2 = 0) & (i < 3) DO n := n DIV 2; INC(i) END;
+			IF n > 1 THEN (* assure scale factor in {1, 2, 4, 8} *)
+				DevCPL486.MakeConst(len, n, Int32); DevCPL486.GenMul(len, y, FALSE); x.scale := x.scale DIV n 
+			END
+		END;
+		CASE x.mode OF
+		   Var, VarPar:
+				lev := x.obj.mnolev;
+				IF lev <= 0 THEN
+					x.mode := Abs
+				ELSE
+					LevelBase(y, lev, hint, stop);
+					IF x.mode # VarPar THEN
+						x.mode := Ind
+					ELSIF (deref IN hint) & (x.offset = 0) & (x.scale = 0) THEN
+						x.mode := DInd; x.offset := x.obj.adr
+					ELSE
+						y.offset := x.obj.adr; Load(y, hint, stop); x.mode := Ind
+					END;
+					x.reg := y.reg
+				END;
+				x.form := x.typ.form
+		| LProc, XProc, IProc:
+				x.mode := Con; x.offset := 0; x.form := ProcTyp
+		| TProc, CProc:
+				x.form := ProcTyp
+		| Ind, Abs, Stk, Reg:
+				IF ~(x.typ.form IN {String8, String16}) THEN x.form := x.typ.form END
+		END
+	END Prepare;
+	
+	PROCEDURE Field* (VAR x: DevCPL486.Item; field: DevCPT.Object);
+	BEGIN
+		INC(x.offset, field.adr); x.tmode := Con
+	END Field;
+	
+	PROCEDURE CField* (VAR x: L.Item; field: T.Field);
+	BEGIN
+		INC(x.offset, field.offs); x.tmode := Con
+	END CField;
+	
+	PROCEDURE DeRef* (VAR x: DevCPL486.Item);
+		VAR btyp: DevCPT.Struct;
+	BEGIN
+		x.mode := Ind; x.tmode := Ind; x.scale := 0;
+		btyp := x.typ.BaseTyp;
+		IF btyp.untagged OR (btyp.sysflag = stackArray) THEN x.offset := 0
+		ELSIF btyp.comp = DynArr THEN x.offset := ArrDOffs + btyp.size
+		ELSIF btyp.comp = Array THEN x.offset := ArrDOffs + 4 
+		ELSE x.offset := 0
+		END
+	END DeRef;
+
+	PROCEDURE CDeRef* (VAR x: L.Item);
+		VAR btyp: T.Type;
+	BEGIN
+		x.mode := Ind; x.tmode := Ind; x.scale := 0;
+		btyp := x.type(T.Pointer).Base();
+		IF (T.untagged IN btyp.flags) OR (x.o # NIL) & (Y.stackArray IN x.o.flags) THEN x.offset := 0	(* revisit *)
+		ELSIF btyp.what = T.fArray THEN 
+			IF T.open IN btyp.flags THEN x.offset := ArrDOffs + btyp.size ELSE x.offset := ArrDOffs + 4 END
+		ELSE x.offset := 0
+		END
+	END CDeRef;
+	
+	PROCEDURE CIndex* (VAR a, y: L.Item; t: T.Array; hint, stop: SET);
+		(** Array a, index y in dimension of type t *)	(* needs to be totally reworked given that indexing is not a recursive tree any more, but rather an array of index expressions *)
+		VAR (*t: T.Type; *) indwhat, elsize: INTEGER; base, idx, len: L.Item; elt, q: T.Type;
+	BEGIN
+		elt := t.elTyp; elsize := elt.size;
+		IF elsize = 0 THEN CFree(y)
+		ELSIF T.open IN t.flags THEN
+			IF (T.open IN elt.flags) & (elt.what = T.fArray) & (T.untagged IN elt.flags) THEN M.err(-137) END;
+			CLenDesc(a, len, t);	(* a's type is not changed, but a is ongoing indexing operation... *)
+			IF a.scale # 0 THEN	(* not first index *)
+				CLoadL(len, { toQuad } + hint, stop);
+				L.LMakeReg(idx, a.index, T.fInt64); 
+				CFree(len); L.LGenMul(len, idx, FALSE)
+			END;
+			IF (y.mode # Con) OR (y.offset # 0) THEN
+				IF (y.mode # Con) OR (T.open IN elt.flags) & (elt.what = T.fArray) & (a.scale = 0) THEN
+					CLoadL(y, hint + { toQuad }, stop + {mem, stk, con, short})
+				ELSE y.what := T.fInt64
+				END;
+				IF inxchk & (T.untagged IN t.flags) THEN HALT(126);
+					L.LGenComp(y, len); L.LGenAssert(ccA, inxTrap)
+				END;
+				IF (y.mode = Con) & ~((T.open IN elt.flags) & (elt.what = T.fArray)) THEN
+					INC(a.offset, y.offset * elsize)
+				ELSIF a.scale = 0 THEN
+					REPEAT q := elt;  WITH q: T.Array DO elt := q.elTyp ELSE q := NIL END UNTIL q = NIL;
+					a.index := y.reg; a.scale := elt.size
+				ELSE
+					L.LGenAdd(y, idx, FALSE); CFree(y)
+				END
+			END
+		ELSE
+			IF y.mode = Con THEN INC(a.offset, y.offset * elsize)
+			ELSE
+				len.mode := Con; 
+				CLoadL(y, hint + { toQuad }, stop + {mem, stk, short});
+				IF inxchk THEN 
+					HALT(126) 
+				END;
+				IF a.scale = 0 THEN	(* first index *)
+					 a.index := y.reg;	(* this is where LEA should be inserted: LEA reg, [a]; ... to be followed by MOV *)
+					(* these might have to be in the Designator, 'cause they produce the base address of the array *)
+						(*CPrepare(a, hint, stop);
+						CGetReg(base, T.fInt64, hint, stop); L.LGenLoadAdr(a, base); a.reg := base.reg;*)
+					(**)
+					(* When do you free the allocated register?!! *)
+					(* fpr GenLoadAdr to work (that is, to generate LEA), the item has to be prepared - that is, it's mode has to be transformed from program modes (Var, VarPar, TProc, etc.) into processor modes (Abs, Ind, Stk etc.). In CP2, this was done AFTER the full evaluation of a designator. I am now going to change this order, and have the array variable prepared in the middle of designator evaluation. Not sure what the consequences will be. *)
+				ELSE
+					IF y.what = T.fInt64 THEN indwhat := T.fInt64 ELSE indwhat := T.fInt32 END;
+					IF a.scale MOD elsize # 0 THEN
+						IF (a.scale MOD 4 = 0) & (elsize MOD 4 = 0) THEN elsize := 4
+						ELSIF (a.scale MOD 4 = 0) & (elsize MOD 2 = 0) THEN elsize := 2
+						ELSE elsize := 1
+						END;
+						L.LMakeConst(len, t.size DIV elsize, T.fInt64);
+						L.LGenMul(len, y, FALSE)
+					END;
+					L.LMakeConst(len, a.scale DIV elsize, T.fInt64);	(* ?current dimension *)
+					L.LMakeReg(idx, a.index, T.fInt64);
+					L.LGenMul(len, idx, FALSE); L.LGenAdd(y, idx, FALSE); CFree(y)
+				END;
+				a.scale := elsize
+			END;
+			a.tmode := Con
+		END
+	END CIndex;
+	
+	PROCEDURE Index* (VAR x, y: DevCPL486.Item; hint, stop: SET);	(* x[y] *)
+		VAR idx, len: DevCPL486.Item; btyp: DevCPT.Struct; elsize: INTEGER;
+	BEGIN
+		btyp := x.typ.BaseTyp; elsize := btyp.size;
+		IF elsize = 0 THEN Free(y)
+		ELSIF x.typ.comp = Array THEN
+			len.mode := Con; len.obj := NIL;
+			IF y.mode = Con THEN
+				INC(x.offset, y.offset * elsize)
+			ELSE
+				Load(y, hint, stop + {mem, stk, short});
+				IF inxchk THEN
+					DevCPL486.MakeConst(len, x.typ.n, Int32);
+					DevCPL486.GenComp(len, y); DevCPL486.GenAssert(ccB, inxTrap)
+				END;
+				IF x.scale = 0 THEN x.index := y.reg
+				ELSE
+					IF x.scale MOD elsize # 0 THEN
+						IF (x.scale MOD 4 = 0) & (elsize MOD 4 = 0) THEN elsize := 4
+						ELSIF (x.scale MOD 2 = 0) & (elsize MOD 2 = 0) THEN elsize := 2
+						ELSE elsize := 1
+						END;
+						DevCPL486.MakeConst(len, btyp.size DIV elsize, Int32);
+						DevCPL486.GenMul(len, y, FALSE)
+					END;
+					DevCPL486.MakeConst(len, x.scale DIV elsize, Int32);
+					DevCPL486.MakeReg(idx, x.index, Int32);
+					DevCPL486.GenMul(len, idx, FALSE); DevCPL486.GenAdd(y, idx, FALSE); Free(y)
+				END;
+				x.scale := elsize
+			END;
+			x.tmode := Con
+		ELSE (* x.typ.comp = DynArr *)
+			IF (btyp.comp = DynArr) & x.typ.untagged THEN DevCPM.err(137) END;
+			LenDesc(x, len, x.typ);
+			IF x.scale # 0 THEN
+				DevCPL486.MakeReg(idx, x.index, Int32); 
+				DevCPL486.GenMul(len, idx, FALSE)
+			END;
+			IF (y.mode # Con) OR (y.offset # 0) THEN
+				IF (y.mode # Con) OR (btyp.comp = DynArr) & (x.scale = 0) THEN
+					Load(y, hint, stop + {mem, stk, con, short})
+				ELSE y.form := Int32
+				END;
+				IF inxchk & ~x.typ.untagged THEN
+					DevCPL486.GenComp(y, len); DevCPL486.GenAssert(ccA, inxTrap)
+				END;
+				IF (y.mode = Con) & (btyp.comp # DynArr) THEN
+					INC(x.offset, y.offset * elsize)
+				ELSIF x.scale = 0 THEN
+					WHILE btyp.comp = DynArr DO btyp := btyp.BaseTyp END;
+					x.index := y.reg; x.scale := btyp.size
+				ELSE
+					DevCPL486.GenAdd(y, idx, FALSE); Free(y)
+				END
+			END;
+			IF x.tmode = VarPar THEN Free(len) END;	(* ??? *)
+			IF x.typ.BaseTyp.comp # DynArr THEN x.tmode := Con END
+		END
+	END Index;
+	
+	PROCEDURE TypTest* (VAR x: DevCPL486.Item; testtyp: DevCPT.Struct; guard, equal: BOOLEAN);
+		VAR tag, tdes, r: DevCPL486.Item; typ: DevCPT.Struct;
+	BEGIN
+		typ := x.typ;
+		IF typ.form = Pointer THEN testtyp := testtyp.BaseTyp; typ := typ.BaseTyp END;
+		IF ~guard & typ.untagged THEN DevCPM.err(139)
+		ELSIF ~guard OR typchk & ~typ.untagged THEN
+			IF testtyp.untagged THEN DevCPM.err(139)
+			ELSE
+				IF (x.typ.form = Pointer) & (x.mode # Reg) THEN
+					GetReg(r, Pointer, {}, {}); DevCPL486.GenMove(x, r); Free(r); r.typ := x.typ; Tag(r, tag)
+				ELSE Tag(x, tag)
+				END;
+				IF ~guard THEN Free(x) END;
+				IF ~equal THEN
+					GetReg(r, Pointer, {}, {}); DevCPL486.GenMove(tag, r); Free(r);
+					tag.mode := Ind; tag.reg := r.reg; tag.scale := 0; tag.offset := Tag0Offset + 4 * testtyp.extlev
+				END;
+				DevCPL486.MakeConst(tdes, 0, Pointer); tdes.obj := DevCPE.TypeObj(testtyp);
+				DevCPL486.GenComp(tdes, tag);
+				IF guard THEN
+					IF equal THEN DevCPL486.GenAssert(ccE, recTrap) ELSE DevCPL486.GenAssert(ccE, typTrap) END
+				ELSE setCC(x, eql, FALSE, FALSE)
+				END
+			END
+		END
+	END TypTest;
+
+	PROCEDURE CTyp* (VAR x: L.Item; hint, stop: SET);
+	(** Post: The type tag for x.type is loaded into a register *)
+		VAR typ: T.Type; tag: L.Item; y: L.Item;
+	BEGIN
+		typ := x.type;
+		WITH typ: T.Record DO
+			Log.String("CTyp "); Log.String(typ.typeName.name); Log.Ln;
+			IF T.IsProper(typ) THEN
+				L.LMakeConst(tag, 0, T.fType); tag.mode := Abs; tag.type := typ;
+				IF CContainsIPtrs(typ) THEN HALT(126); INC(tag.offset) END;
+				CGetReg(x, T.fInt64, hint, stop);
+				L.LGenLoadAdr(tag, x)
+			ELSE y.type := x.type; y.mode := Abs; y.what := T.fType; y.index := 0; y.scale := 0;
+				CGetReg(x, T.fInt64, hint, stop);
+				L.LGenMove(y, x)
+			END
+		ELSE HALT(20)
+		END
+	END CTyp;
+
+	PROCEDURE CTypTest* (VAR x: L.Item; test: T.Type; guard, equal: BOOLEAN);
+	(* guard => context is type guard v(T); ~guard => context is type test v IS T. ~guard => free register *)
+		VAR tag, tdes, r: L.Item; typ: T.Type; testtyp: T.Record; tn: T.TypeName;
+	BEGIN
+		WITH test: T.RecPtr DO testtyp := test.base | test: T.Record DO testtyp := test ELSE HALT(20) END;
+		typ := x.type;
+		IF typ.what = T.fRecPtr THEN typ := typ(T.RecPtr).base END;
+		IF ~guard & (T.untagged IN typ.flags) THEN HALT(126) (* -139 This error should be reported in the front-end *)
+		ELSIF ~guard OR typchk & ~(T.untagged IN typ.flags) THEN
+			IF (T.untagged IN testtyp.flags) THEN HALT(126) (* -139 This error should be reported in the front-end *)
+			ELSE
+				(*L.LMakeConst(tdes, 0, T.fSysPtr); E.EGetTypeName(testtyp, tn); tdes.o := tn;*)
+				tdes.type := testtyp; CTyp(tdes, {}, {});
+				IF (x.type.what = T.fRecPtr) & (x.mode # Reg) THEN
+					CGetReg(r, T.fRecPtr, {}, {}); L.LGenMove(x, r); CFree(r); r.type := x.type; CTag(r, tag)
+					(* ; Cons.String("Long CTag"); Cons.Ln *)
+				ELSE CTag(x, tag)
+					(* ; Cons.String("CTag"); Cons.Ln *)
+				END;
+				IF ~guard THEN CFree(x) END;
+				IF ~equal THEN
+					CGetReg(r, T.fRecPtr, {}, {}); L.LGenMove(tag, r); CFree(r);
+					tag.mode := Ind; tag.reg := r.reg; tag.scale := 0; tag.offset := BasesOffset + 8 * testtyp.level
+				END;
+				L.LGenComp(tdes, tag); CFree(tdes);
+				IF guard THEN
+					IF equal THEN L.LGenAssert(ccE, recTrap) ELSE L.LGenAssert(ccE, typTrap) END
+				ELSE CsetCC(x, T.eqlfn, FALSE, FALSE)
+				END
+			END
+		END
+	END CTypTest;
+	
+	PROCEDURE ShortTypTest* (VAR x: DevCPL486.Item; testtyp: DevCPT.Struct);
+		VAR tag, tdes: DevCPL486.Item;
+	BEGIN
+		(* tag must be in AX ! *)
+		IF testtyp.form = Pointer THEN testtyp := testtyp.BaseTyp END;
+		IF testtyp.untagged THEN DevCPM.err(139)
+		ELSE
+			tag.mode := Ind; tag.reg := AX; tag.scale := 0; tag.offset := Tag0Offset + 4 * testtyp.extlev; tag.form := Pointer;
+			DevCPL486.MakeConst(tdes, 0, Pointer); tdes.obj := DevCPE.TypeObj(testtyp);
+			DevCPL486.GenComp(tdes, tag);
+			setCC(x, eql, FALSE, FALSE)
+		END
+	END ShortTypTest;
+
+	PROCEDURE Check (VAR x: DevCPL486.Item; min, max: INTEGER);
+		VAR c: DevCPL486.Item;
+	BEGIN
+		ASSERT((x.mode # Reg) OR (max > 255) OR (max = 31) OR (x.reg < 4));
+		IF ranchk & (x.mode # Con) THEN
+			DevCPL486.MakeConst(c, max, x.form); DevCPL486.GenComp(c, x);
+			IF min # 0 THEN
+				DevCPL486.GenAssert(ccLE, ranTrap);
+				c.offset := min; DevCPL486.GenComp(c, x);
+				DevCPL486.GenAssert(ccGE, ranTrap)
+			ELSIF max # 0 THEN
+				DevCPL486.GenAssert(ccBE, ranTrap)
+			ELSE
+				DevCPL486.GenAssert(ccNS, ranTrap)
+			END
+		END
+	END Check;
+
+	PROCEDURE CCheck (VAR x: L.Item; min, max: INTEGER);	(* maybe replace range edge comparisons  *)
+		VAR c: L.Item;
+	BEGIN
+		ASSERT((x.mode # Reg) OR (max > 255) OR (max = 31) OR (x.reg < 4));
+		IF ranchk & (x.mode # Con) THEN
+			HALT(126);
+		END
+	END CCheck;
+
+	PROCEDURE Floor (VAR x: DevCPL486.Item; useSt1: BOOLEAN);
+		VAR c: DevCPL486.Item; local: DevCPL486.Label;
+	BEGIN
+		IF useSt1 THEN DevCPL486.GenFMOp(5D1H);	(* FST ST1 *)
+		ELSE DevCPL486.GenFMOp(1C0H);	(* FLD ST0 *)
+		END;
+		DevCPL486.GenFMOp(1FCH);	(* FRNDINT *)
+		DevCPL486.GenFMOp(0D1H);	(* FCOM *)
+		CheckAv(AX);
+		DevCPL486.GenFMOp(FSTSW);
+		DevCPL486.GenFMOp(5D9H);	(* FSTP ST1 *)
+		(* DevCPL486.GenCode(WAIT); *) DevCPL486.GenCode(SAHF);
+		local := DevCPL486.NewLbl; DevCPL486.GenJump(ccBE, local, TRUE);
+		DevCPL486.AllocConst(c, DevCPL486.one, Real32);
+		DevCPL486.GenFDOp(FSUB, c);
+		DevCPL486.SetLabel(local);
+	END Floor;
+
+	PROCEDURE CFloor (VAR x: L.Item; useSt1: BOOLEAN);
+		VAR c: L.Item; local: L.Label;
+	BEGIN
+		IF useSt1 THEN L.LGenFMOp(5D1H);	(* FST ST1 *)
+		ELSE L.LGenFMOp(1C0H);	(* FLD ST0 *)
+		END;
+		L.LGenFMOp(1FCH);	(* FRNDINT *)
+		L.LGenFMOp(0D1H);	(* FCOM *)
+		CCheckAv(AX);
+		L.LGenFMOp(FSTSW);
+		L.LGenFMOp(5D9H);	(* FSTP ST1 *)
+		(* L.LGenCode(WAIT); *) L.LGenCode(SAHF);
+		local := L.NewLbl; L.GenJump(ccBE, local, TRUE);
+		L.LAllocLiteral(c, L.one, T.fReal32);
+		L.LGenFDOp(FSUB, c);
+		L.LSetLabel(local);
+	END CFloor;
+	
+	PROCEDURE Entier(VAR x: DevCPL486.Item; typ: DevCPT.Struct; hint, stop: SET);
+	BEGIN
+		IF typ # DevCPT.intrealtyp THEN Floor(x, FALSE) END;
+		DevCPL486.GenFStore(x, TRUE);
+		IF (x.mode = Stk) & (stk IN stop) THEN Pop(x, x.form, hint, stop) END
+	END Entier;
+
+	PROCEDURE CEntier(VAR x: L.Item; type: T.Type; hint, stop: SET);
+	BEGIN
+		(*IF typ # DevCPT.intrealtyp THEN*) CFloor(x, FALSE) (*END*);
+		L.LGenFStore(x, TRUE);
+		IF (x.mode = Stk) & (stk IN stop) THEN CPop(x, x.what, hint, stop) END
+	END CEntier;
+
+	PROCEDURE ConvMove (VAR x, y: DevCPL486.Item; sysval: BOOLEAN; hint, stop: SET);	(* x := y *)
+		(* scalar values only, y.mode # Con, all kinds of conversions, x.mode = Undef => convert y only *)
+		VAR f, m: BYTE; s: INTEGER; z: DevCPL486.Item;
+	BEGIN
+		f := x.form; m := x.mode; ASSERT(m IN {Undef, Reg, Abs, Ind, Stk});
+		IF y.form IN {Real32, Real64} THEN
+			IF f IN {Real32, Real64} THEN
+				IF m = Undef THEN
+					IF (y.form = Real64) & (f = Real32) THEN
+						IF y.mode # Reg THEN LoadR(y) END;
+						Free(y); DecStack(Real32); y.mode := Stk; y.form := Real32; DevCPL486.GenFStore(y, TRUE)
+					END
+				ELSE
+					IF y.mode # Reg THEN LoadR(y) END;
+					IF m = Stk THEN DecStack(f) END;
+					IF m # Reg THEN Free(y); DevCPL486.GenFStore(x, TRUE) END;
+				END
+			ELSE (* x not real *)
+				IF sysval THEN
+					IF y.mode = Reg THEN Free(y);
+						IF (m # Stk) & (m # Undef) & (m # Reg) & (f >= Int32) THEN
+							x.form := y.form; DevCPL486.GenFStore(x, TRUE); x.form := f
+						ELSIF y.form = Real64 THEN	(* S.VAL(LONGINT, real) *)
+							ASSERT((m = Undef) & (f = Int64));
+							DecStack(y.form); y.mode := Stk; DevCPL486.GenFStore(y, TRUE); y.form := Int64;
+							Pop(y, y.form, hint, stop)
+						ELSE
+							ASSERT(y.form # Real64);
+							DecStack(y.form); y.mode := Stk; DevCPL486.GenFStore(y, TRUE); y.form := Int32;
+							IF m # Stk THEN
+								Pop(y, y.form, hint, stop);
+								IF f < Int16 THEN ASSERT(y.reg < 4) END;
+								y.form := f;
+								IF m # Undef THEN Free(y); DevCPL486.GenMove(y, x) END
+							END
+						END
+					ELSE (* y.mode # Reg *)
+						y.form := f;
+						IF m # Undef THEN LoadW(y, hint, stop); Free(y);
+							IF m = Stk THEN DevCPL486.GenPush(y) ELSE DevCPL486.GenMove(y, x) END
+						END
+					END
+				ELSE (* not sysval *)
+					IF y.mode # Reg THEN LoadR(y) END;
+					Free(y);
+					IF (m # Stk) & (m # Undef) & (m # Reg) & (f >= Int16) & (f # Char16) THEN
+						Entier(x, y.typ, hint, stop);
+					ELSE
+						DecStack(f); y.mode := Stk;
+						IF (f < Int16) OR (f = Char16) THEN y.form := Int32 ELSE y.form := f END;
+						IF m = Stk THEN Entier(y, y.typ, {}, {})
+						ELSIF m = Undef THEN Entier(y, y.typ, hint, stop)
+						ELSE Entier(y, y.typ, hint, stop + {stk})
+						END;
+						IF f = Int8 THEN Check(y, -128, 127); FreeHi(y)
+						ELSIF f = Char8 THEN Check(y, 0, 255); FreeHi(y)
+						ELSIF f = Char16 THEN Check(y, 0, 65536); FreeHi(y)
+						END;
+						y.form := f;
+						IF (m # Undef) & (m # Stk) THEN
+							IF f = Int64 THEN
+								Free(y); y.form := Int32; z := x; z.form := Int32; DevCPL486.GenMove(y, z);
+								IF z.mode = Reg THEN z.reg := z.index ELSE INC(z.offset, 4) END;
+								y.reg := y.index; DevCPL486.GenMove(y, z);
+							ELSE
+								Free(y); DevCPL486.GenMove(y, x);
+							END
+						END
+					END
+				END
+			END
+		ELSE (* y not real *)
+			IF sysval THEN
+				IF (y.form < Int16) & (f >= Int16) OR (y.form IN {Int16, Char16}) & (f >= Int32) & (f < Char16) THEN LoadL(y, hint, stop) END;
+				IF (y.form >= Int16) & (f < Int16) THEN FreeHi(y) END
+			ELSE
+				CASE y.form OF
+				| Byte, Bool:
+						IF f = Int64 THEN LoadLong(y, hint, stop)
+						ELSIF f >= Int16 THEN LoadL(y, hint, stop)
+						END
+				| Char8:
+						IF f = Int8 THEN Check(y, 0, 0)
+						ELSIF f = Int64 THEN LoadLong(y, hint, stop)
+						ELSIF f >= Int16 THEN LoadL(y, hint, stop)
+						END
+				| Char16:
+						IF f = Char8 THEN Check(y, 0, 255); FreeHi(y)
+						ELSIF f = Int8 THEN Check(y, -128, 127); FreeHi(y)
+						ELSIF f = Int16 THEN Check(y, 0, 0)
+						ELSIF f = Char16 THEN (* ok *)
+						ELSIF f = Int64 THEN LoadLong(y, hint, stop)
+						ELSIF f >= Int32 THEN LoadL(y, hint, stop)
+						END
+				| Int8:
+						IF f = Char8 THEN Check(y, 0, 0)
+						ELSIF f = Int64 THEN LoadLong(y, hint, stop)
+						ELSIF f >= Int16 THEN LoadL(y, hint, stop)
+						END
+				| Int16:
+						IF f = Char8 THEN Check(y, 0, 255); FreeHi(y)
+						ELSIF f = Char16 THEN Check(y, 0, 0)
+						ELSIF f = Int8 THEN Check(y, -128, 127); FreeHi(y)
+						ELSIF f = Int64 THEN LoadLong(y, hint, stop)
+						ELSIF (f = Int32) OR (f = Set) THEN LoadL(y, hint, stop)
+						END
+				| Int32, Set, Pointer, ProcTyp:
+						IF f = Char8 THEN Check(y, 0, 255); FreeHi(y)
+						ELSIF f = Char16 THEN Check(y, 0, 65536)
+						ELSIF f = Int8 THEN Check(y, -128, 127); FreeHi(y)
+						ELSIF f = Int16 THEN Check(y, -32768, 32767)
+						ELSIF f = Int64 THEN LoadLong(y, hint, stop)
+						END
+				| Int64:
+						IF f IN {Bool..Int32, Char16} THEN
+							(* make range checks !!! *)
+							FreeHi(y);
+							IF f IN {Bool..Int8} THEN y.form := Int32; FreeHi(y) END
+						END
+				END
+			END;
+			IF f IN {Real32, Real64} THEN
+				IF sysval THEN
+					IF (m # Undef) & (m # Reg) THEN
+						IF y.mode # Reg THEN LoadW(y, hint, stop) END;
+						Free(y);
+						IF m = Stk THEN DevCPL486.GenPush(y)
+						ELSE x.form := Int32; DevCPL486.GenMove(y, x); x.form := f
+						END
+					ELSE
+						IF y.mode = Reg THEN Push(y) END;
+						y.form := f;
+						IF m = Reg THEN LoadR(y) END
+					END
+				ELSE (* not sysval *) (* int -> float *)
+					IF y.mode = Reg THEN Push(y) END;
+					IF m = Stk THEN
+						Free(y); DevCPL486.GenFLoad(y); s := -4;
+						IF f = Real64 THEN DEC(s, 4) END;
+						IF y.mode = Stk THEN
+							IF y.form = Int64 THEN INC(s, 8) ELSE INC(s, 4) END
+						END;
+						IF s # 0 THEN AdjustStack(s) END;
+						GetReg(y, Real32, {}, {});
+						Free(y); DevCPL486.GenFStore(x, TRUE)
+					ELSIF m = Reg THEN
+						LoadR(y)
+					ELSIF m # Undef THEN
+						LoadR(y); Free(y); DevCPL486.GenFStore(x, TRUE) 
+					END
+				END
+			ELSE
+				y.form := f;
+				IF m = Stk THEN
+					IF ((f < Int32) OR (f = Char16)) & (y.mode # Reg) THEN LoadW(y, hint, stop) END;
+					Push(y)
+				ELSIF m # Undef THEN
+					IF f = Int64 THEN
+						IF y.mode # Reg THEN LoadLong(y, hint, stop) END;
+						Free(y); y.form := Int32; z := x; z.form := Int32; DevCPL486.GenMove(y, z);
+						IF z.mode = Reg THEN ASSERT(z.reg # y.index); z.reg := z.index ELSE INC(z.offset, 4) END;
+						y.reg := y.index; DevCPL486.GenMove(y, z);
+					ELSE
+						IF y.mode # Reg THEN LoadW(y, hint, stop) END;
+						Free(y); DevCPL486.GenMove(y, x)
+					END
+				END
+			END
+		END	
+	END ConvMove;
+
+	PROCEDURE CConvMove (VAR x, y: L.Item; sysval: BOOLEAN; hint, stop: SET);	(* x := y *)
+		(* scalar values only, y.mode # Con, all kinds of conversions, x.mode = Undef => convert y only *)
+		VAR lo, hi, w, m: INTEGER; s: INTEGER; z: L.Item; toq: SET;
+	BEGIN
+		(*f := x.form;*) m := x.mode; ASSERT(m IN {Undef, Reg, Abs, Ind, Stk, Xmm});
+		w := x.what; 
+		IF y.what IN T.reals THEN
+			IF w IN T.reals THEN
+				IF m = Undef THEN
+					IF (y.what = T.fReal64) & (w = T.fReal32) THEN
+						IF y.mode # Reg THEN CLoadR(y) END;
+						CFree(y); CDecStack(T.fReal32); y.mode := Stk; y.what := T.fReal32; y.type := T.shortrealtp;
+						L.LGenFStore(y, TRUE)
+					END
+				ELSE
+					IF (m = Xmm) THEN
+						IF y.mode = Reg THEN CPush(y) END;
+						L.LGenRMove(y, x);
+						IF y.mode = Stk THEN CIncStack(y.what) END
+					(*IF (m = Reg) & (x.reg < 0) & ((y.mode # Reg) OR (y.reg < 0)) THEN L.LGenRMove(y, x) 
+					ELSIF (m = Reg) & (x.reg < 0) & (y.mode = Reg) & (y.reg >= 0) THEN	(* XMMi := ST(j) *)
+						CDecStack(T.fReal64); z.mode := Stk; z.what := w; L.LGenFStore(z, TRUE); L.LGenRMove(z, x);
+						CPop(z, T.fInt64, {}, {})*)
+					ELSE
+						IF y.mode # Reg THEN CLoadR(y) END;
+						IF m = Stk THEN CDecStack(w) END;
+						IF m # Reg THEN CFree(y); L.LGenFStore(x, TRUE) END
+					END
+				END
+			ELSE (* x not real *) 
+				IF sysval THEN HALT(126)
+				ELSE (* not sysval *)
+					IF y.mode # Reg THEN CLoadR(y) END;
+					CFree(y);
+					IF (m # Stk) & (m # Undef) & (m # Reg) & (w = T.fInt64) THEN
+						CEntier(x, y.type, hint, stop);
+					ELSE 
+						CDecStack(w); y.mode := Stk;
+						IF w IN L.bytes + L.words + L.doubles THEN y.what := T.fInt32 ELSE y.what := w END;
+						IF m = Stk THEN CEntier(y, y.type, {}, {})
+						ELSIF m = Undef THEN CEntier(y, y.type, hint, stop)(*!*)
+						ELSE CEntier(y, y.type, hint, stop + {stk})
+						END;
+						IF w = T.fInt8 THEN CCheck(y, -128, 127); CFreeHi(y)
+						ELSIF w = T.fChar8 THEN CCheck(y, 0, 255); CFreeHi(y)
+						ELSIF w = T.fChar16 THEN CCheck(y, 0, 65536); CFreeHi(y)
+						END;
+						y.what := w;
+						IF (m # Undef) & (m # Stk) THEN
+							(*IF w = Int64 THEN
+								Free(y); y.form := Int32; z := x; z.form := Int32; DevCPL486.GenMove(y, z);
+								IF z.mode = Reg THEN z.reg := z.index ELSE INC(z.offset, 4) END;
+								y.reg := y.index; DevCPL486.GenMove(y, z);
+							ELSE*)
+								CFree(y); L.LGenMove(y, x);
+							(*END*)
+						END
+					END
+				END
+			END
+		ELSE (* y not real *)
+			IF sysval THEN 
+				IF (y.what IN L.bytes) & ~(w IN L.bytes) OR (y.what IN L.words) & ~(w IN L.words) THEN 
+					IF w IN L.quads THEN toq := { toQuad } ELSE toq := {} END;
+					CLoadL(y, hint + toq, stop)
+				END;
+				IF ~(y.what IN L.bytes) & (w IN L.bytes) THEN CFreeHi(y) END
+			ELSE 
+				IF L.SSize[x.what] < L.SSize[y.what] THEN 
+					IF ranchk THEN lo := 0; hi := 0;
+						CASE w OF
+						| T.fBool: lo := 0; hi := 1
+						| T.fChar8: IF y.what # T.fInt8 THEN hi := 255 END
+						| T.fChar16: IF y.what # T.fInt16 THEN hi := 65535 END;
+						| T.fInt8: IF y.what # T.fChar8 THEN lo := -128; hi := 127 END
+						| T.fInt16: IF y.what # T.fChar16 THEN lo := -32768; hi := 32767 END
+						| T.fInt32: lo := -2147483648; hi := 2147483647
+						| T.fSet: HALT(126)
+						ELSE lo := -1
+						END;
+						IF lo # -1 THEN CCheck(y, lo, hi) END
+					END;
+					IF (w IN L.bytes) & ~(y.what IN L.bytes) THEN CFreeHi(y) END
+				ELSIF L.SSize[x.what] > L.SSize[y.what] THEN (* sign/zero extension applicable *)
+					IF w IN L.quads THEN toq := { toQuad } ELSE toq := {} END;
+					CLoadL(y, hint + toq, stop)
+				ELSE (* ok - simple move done with LoadW later *)
+				END
+			END;
+			IF w IN T.reals THEN
+				
+				IF sysval THEN HALT(126)
+				ELSE (* not sysval *) (* int -> real *)
+					;(*ASSERT(m # Undef, 7)*);
+					IF y.mode = Reg THEN CPush(y) END;
+					IF m = Xmm THEN L.LGenRMove(y, x)
+					ELSIF m = Stk THEN HALT(126)
+					ELSIF m = Reg THEN
+						CLoadR(y)
+					ELSIF m # Undef THEN
+						CLoadR(y); CFree(y); L.LGenFStore(x, TRUE) 
+					END
+				END
+			ELSE
+				y.what := w;
+				IF m = Stk THEN
+					IF (w IN L.bytes (*+ L.words*)) & (y.mode # Reg) THEN CLoadL(y, hint + { toQuad }, stop) END;
+					CPush(y)
+				ELSIF m # Undef THEN
+					(**)
+						IF y.mode # Reg THEN CLoadW(y, hint, stop) END;
+						ASSERT(y.mode = Reg);
+						CFree(y); L.LGenMove(y, x)
+					(*END*)
+				END
+			END
+		END	
+	END CConvMove;
+
+	PROCEDURE Convert* (VAR x: DevCPL486.Item; f: BYTE; size: INTEGER; hint, stop: SET);	(* size >= 0: sysval *)
+		VAR y: DevCPL486.Item;
+	BEGIN
+		ASSERT(x.mode # Con);
+		IF (size >= 0)
+			& ((size # x.typ.size) & ((size > 4) OR (x.typ.size > 4))
+				OR (f IN {Comp, Real64}) & (x.mode IN {Reg, Stk})
+				OR (f = Int64) & (x.mode = Stk)) THEN
+					DevCPM.err(261); Free(x); x.mode := Stk; x.form := f
+		ELSE
+			y.mode := Undef; y.form := f; ConvMove(y, x, size >= 0, hint, stop)
+		END
+	END Convert;
+
+	PROCEDURE CConvert* (VAR x: L.Item; towhat, size: INTEGER; hint, stop: SET);	(* size >= 0: sysval *)
+		VAR y: L.Item;
+	BEGIN
+		ASSERT(x.mode # Con);
+		IF (size >= 0)
+			& ((size # x.type.size) & ((size > 8) OR (x.type.size > 8))
+				OR (towhat IN T.structures + { T.fReal64 }) & (x.mode IN {Reg, Stk})
+				(*OR (towhat = T.fInt64) & (x.mode = Stk)*)) THEN
+					M.err(-261); CFree(x); x.mode := Stk; x.what := towhat
+		ELSE
+			y.mode := Undef; y.what := towhat; CConvMove(y, x, size >= 0, hint, stop)
+			(* Undef signals to CConvMove that all checks and type transformations should be done, but the actual move of data should not. This is because at this point the destination is yet unknown. It will be determined later. *)
+		END;
+		IF (deferred IN stop) & (towhat IN T.reals) & (x.mode IN { Abs, Ind}) THEN CLoadR(x) END
+	END CConvert;
+
+	PROCEDURE LoadCond* (VAR x, y: DevCPL486.Item; F, T: DevCPL486.Label; hint, stop: SET);
+		VAR end, T1: DevCPL486.Label; c, r: DevCPL486.Item;
+	BEGIN
+		IF mem IN stop THEN GetReg(x, Bool, hint, stop) END;
+		IF (F = DevCPL486.NewLbl) & (T = DevCPL486.NewLbl) THEN (* no label used *)
+			IF y.offset >= 0 THEN DevCPL486.GenSetCC(y.offset, x)
+			ELSIF y.offset = ccAlways THEN Free(x); DevCPL486.MakeConst(x, 1, Bool)
+			ELSIF y.offset = ccNever THEN Free(x); DevCPL486.MakeConst(x, 0, Bool)
+			ELSE HALT(100) (* internal error *)
+			END
+		ELSE
+			end := DevCPL486.NewLbl; T1 := DevCPL486.NewLbl;
+			DevCPL486.GenJump(y.offset, T1, TRUE);	(* T1 to enable short jump *)
+			DevCPL486.SetLabel(F);
+			DevCPL486.MakeConst(c, 0, Bool); DevCPL486.GenMove(c, x);
+			DevCPL486.GenJump(ccAlways, end, TRUE);
+			DevCPL486.SetLabel(T); DevCPL486.SetLabel(T1); 
+			DevCPL486.MakeConst(c, 1, Bool); DevCPL486.GenMove(c, x);
+			DevCPL486.SetLabel(end)
+		END;
+		IF x.mode # Reg THEN Free(x) END
+	END LoadCond;
+	
+	PROCEDURE CLoadCond* (VAR x, y: L.Item; F, T: L.Label; hint, stop: SET);
+		VAR end, T1: L.Label; c, r: L.Item;
+	BEGIN
+		IF mem IN stop THEN CGetReg(x, Bool, hint, stop) END;
+		IF (F = L.NewLbl) & (T = L.NewLbl) THEN (* no label used *)
+			IF y.offset >= 0 THEN L.LGenSetCC(y.offset, x)
+			ELSIF y.offset = ccAlways THEN CFree(x); L.LMakeConst(x, 1, Bool)
+			ELSIF y.offset = ccNever THEN CFree(x); L.LMakeConst(x, 0, Bool)
+			ELSE HALT(100) (* internal error *)
+			END
+		ELSE
+			end := L.NewLbl; T1 := L.NewLbl;
+			L.GenJump(y.offset, T1, TRUE);	(* T1 to enable short jump *)
+			L.LSetLabel(F);
+			L.LMakeConst(c, 0, Bool); L.LGenMove(c, x);
+			L.GenJump(ccAlways, end, TRUE);
+			L.LSetLabel(T); L.LSetLabel(T1); 
+			L.LMakeConst(c, 1, Bool); L.LGenMove(c, x);
+			L.LSetLabel(end)
+		END;
+		IF x.mode # Reg THEN CFree(x) END
+	END CLoadCond;
+	
+	PROCEDURE IntDOp* (VAR x, y: DevCPL486.Item; subcl: BYTE; rev: BOOLEAN);
+		VAR local: DevCPL486.Label;
+	BEGIN
+		ASSERT((x.mode = Reg) OR (y.mode = Reg) OR (y.mode = Con));
+		CASE subcl OF
+		| eql..geq:
+				DevCPL486.GenComp(y, x); Free(x);
+				setCC(x, subcl, rev, x.typ.form IN {Int8..Int32})
+		| times: 
+				IF x.form = Set THEN DevCPL486.GenAnd(y, x) ELSE DevCPL486.GenMul(y, x, ovflchk) END
+		| slash:
+				DevCPL486.GenXor(y, x)
+		| plus:
+				IF x.form = Set THEN DevCPL486.GenOr(y, x) ELSE DevCPL486.GenAdd(y, x, ovflchk) END
+		| minus, msk:
+				IF (x.form = Set) OR (subcl = msk) THEN (* and not *)
+					IF rev THEN DevCPL486.GenNot(x); DevCPL486.GenAnd(y, x)								(* y and not x *)
+					ELSIF y.mode = Con THEN y.offset := -1 - y.offset; DevCPL486.GenAnd(y, x)	(* x and y' *)
+					ELSIF y.mode = Reg THEN DevCPL486.GenNot(y); DevCPL486.GenAnd(y, x)			(* x and not y *)
+					ELSE DevCPL486.GenNot(x); DevCPL486.GenOr(y, x); DevCPL486.GenNot(x)					(* not (not x or y) *)
+					END
+				ELSE	(* minus *)
+					IF rev THEN	(* y - x *)
+						IF (y.mode = Con) & (y.offset = -1) THEN DevCPL486.GenNot(x)
+						ELSE DevCPL486.GenNeg(x, ovflchk); DevCPL486.GenAdd(y, x, ovflchk)	(* ??? *)
+						END
+					ELSE	(* x - y *)
+						DevCPL486.GenSub(y, x, ovflchk)
+					END
+				END
+		| min, max:
+				local := DevCPL486.NewLbl;
+				DevCPL486.GenComp(y, x);
+				IF subcl = min THEN 
+					IF x.typ.form IN {Char8, Char16} THEN DevCPL486.GenJump(ccBE, local, TRUE)
+					ELSE DevCPL486.GenJump(ccLE, local, TRUE)
+					END
+				ELSE
+					IF x.typ.form IN {Char8, Char16} THEN DevCPL486.GenJump(ccAE, local, TRUE)
+					ELSE DevCPL486.GenJump(ccGE, local, TRUE)
+					END
+				END;
+				DevCPL486.GenMove(y, x);
+				DevCPL486.SetLabel(local)
+		END;
+		Free(y);
+		IF x.mode # Reg THEN Free(x) END
+	END IntDOp;
+	
+	PROCEDURE CIntDOp* (VAR x, y: L.Item; what: INTEGER; reverse: BOOLEAN);
+	(** y := x OP y; reverse => ~ for comparisons, y OP x for others *)
+		VAR local: DevCPL486.Label;
+	BEGIN
+		ASSERT((x.mode = Reg) OR (y.mode = Reg) OR (y.mode = Con));
+		IF (y.mode = Con) & (y.what IN L.quads) & ~((y.offset < 0) & (y.scale = -1) OR (y.offset >= 0) & (y.scale = 0)) THEN
+			CASE what OF T.plusfn, T.minusfn, T.eqlfn..T.geqfn: CLoad(y, {}, {con}) 
+			| T.timesfn, T.divfn, T.modfn, T.slashfn:
+			ELSE HALT(126)
+			END
+			(* check that this branch is in sync with V.VAssign optimizations *)
+		END;
+		CASE what OF
+		| T.eqlfn..T.geqfn: L.LGenComp(y, x); CFree(x); CsetCC(x, what, reverse, x.type.what IN T.integers)
+		| T.slashfn: L.LGenXor(y, x)
+		| T.plusfn: IF x.what = T.fSet THEN L.LGenOr(y, x) ELSE L.LGenAdd(y, x, ovflchk) END
+		| T.timesfn: IF x.what = T.fSet THEN L.LGenAnd(y, x) ELSE L.LGenMul(y, x, ovflchk) END
+		| T.minusfn, T.mskfn:
+				IF (x.what = T.fSet) OR (what = T.mskfn) THEN (* and not *) 
+					IF reverse THEN L.LGenNot(x); L.LGenAnd(y, x)								(* y and not x *)
+					ELSIF y.mode = Con THEN y.offset := -1 - y.offset; L.LGenAnd(y, x)	(* x and y' *)
+					ELSIF y.mode = Reg THEN L.LGenNot(y); L.LGenAnd(y, x)			(* x and not y *)
+					ELSE L.LGenNot(x); L.LGenOr(y, x); L.LGenNot(x)					(* not (not x or y) *)
+					END
+				ELSE	(* minus *)
+					IF reverse THEN	(* y - x *)
+						IF (y.mode = Con) & (y.what IN T.integers - { T.fInt64 }) & (y.offset = -1) THEN L.LGenNot(x)
+						ELSE L.LGenNeg(x, ovflchk); L.LGenAdd(y, x, ovflchk)	(* ??? *)
+						END
+					ELSE	(* x - y *)
+						L.LGenSub(y, x, ovflchk)
+					END
+				END
+		| T.minfn, T.maxfn:
+				local := L.NewLbl;
+				L.LGenComp(y, x);
+				IF what = T.minfn THEN 
+					IF x.type.what IN T.chars THEN L.GenJump(ccBE, local, TRUE)
+					ELSE L.GenJump(ccLE, local, TRUE)
+					END
+				ELSE
+					IF x.type.what IN T.chars THEN L.GenJump(ccAE, local, TRUE)
+					ELSE L.GenJump(ccGE, local, TRUE)
+					END
+				END;
+				L.LGenMove(y, x);
+				L.LSetLabel(local)
+		ELSE HALT(126)
+		END;
+		CFree(y);
+		IF x.mode # Reg THEN CFree(x) END
+	END CIntDOp;
+	
+	PROCEDURE LargeInc* (VAR x, y: DevCPL486.Item; dec: BOOLEAN);	(* INC(x, y) or DEC(x, y) *)
+	BEGIN
+		ASSERT(x.form = Int64);
+		IF ~(y.mode IN {Reg, Con}) THEN LoadLong(y, {}, {}) END;
+		Free(x); Free(y); x.form := Int32; y.form := Int32;
+		IF dec THEN DevCPL486.GenSubC(y, x, TRUE, FALSE) ELSE DevCPL486.GenAddC(y, x, TRUE, FALSE) END;
+		INC(x.offset, 4);
+		IF y.mode = Reg THEN y.reg := y.index ELSE y.offset := y.scale END;
+		IF dec THEN DevCPL486.GenSubC(y, x, FALSE, ovflchk) ELSE DevCPL486.GenAddC(y, x, FALSE, ovflchk) END;
+	END LargeInc;
+	
+	PROCEDURE FloatDOp* (VAR x, y: DevCPL486.Item; subcl: BYTE; rev: BOOLEAN);
+		VAR local: DevCPL486.Label; a, b: DevCPL486.Item;
+	BEGIN
+		ASSERT(x.mode = Reg);
+		IF y.form = Int64 THEN LoadR(y) END;
+		IF y.mode = Reg THEN rev := ~rev END;
+		CASE subcl OF
+		| eql..geq: DevCPL486.GenFDOp(FCOMP, y)
+		| times: DevCPL486.GenFDOp(FMUL, y)
+		| slash: IF rev THEN DevCPL486.GenFDOp(FDIVR, y) ELSE DevCPL486.GenFDOp(FDIV, y) END
+		| plus: DevCPL486.GenFDOp(FADD, y)
+		| minus: IF rev THEN DevCPL486.GenFDOp(FSUBR, y) ELSE DevCPL486.GenFDOp(FSUB, y) END
+		| min, max:
+			IF y.mode = Reg THEN
+				DevCPL486.GenFMOp(0D1H);	(* FCOM ST1 *)
+				CheckAv(AX); DevCPL486.GenFMOp(FSTSW); (* DevCPL486.GenCode(WAIT); *) DevCPL486.GenCode(SAHF);
+				local := DevCPL486.NewLbl;
+				IF subcl = min THEN DevCPL486.GenJump(ccAE, local, TRUE) ELSE DevCPL486.GenJump(ccBE, local, TRUE) END;
+				DevCPL486.GenFMOp(5D1H);	(* FST ST1 *)
+				DevCPL486.SetLabel(local);
+				DevCPL486.GenFMOp(5D8H)	(* FSTP ST0 *)
+			ELSE
+				DevCPL486.GenFDOp(FCOM, y);
+				CheckAv(AX); DevCPL486.GenFMOp(FSTSW); (* DevCPL486.GenCode(WAIT); *) DevCPL486.GenCode(SAHF);
+				local := DevCPL486.NewLbl;
+				IF subcl = min THEN DevCPL486.GenJump(ccBE, local, TRUE) ELSE DevCPL486.GenJump(ccAE, local, TRUE) END;
+				DevCPL486.GenFMOp(5D8H);	(* FSTP ST0 *)
+				DevCPL486.GenFLoad(y);
+				DevCPL486.SetLabel(local)
+			END
+		(* largeint support *)
+		| div:
+			IF y.mode # Reg THEN LoadR(y); rev := ~rev END;
+			IF rev THEN DevCPL486.GenFDOp(FDIVR, y) ELSE DevCPL486.GenFDOp(FDIV, y) END;
+			Floor(y, FALSE)
+		| mod:
+			IF y.mode # Reg THEN LoadR(y); rev := ~rev END;
+			IF rev THEN DevCPL486.GenFMOp(1C9H); (* FXCH ST1 *) END;
+			DevCPL486.GenFMOp(1F8H);	(* FPREM *)
+			DevCPL486.GenFMOp(1E4H);	(* FTST *)
+			CheckAv(AX);
+			DevCPL486.GenFMOp(FSTSW);
+			DevCPL486.MakeReg(a, AX, Int32); GetReg(b, Int32, {}, {AX});
+			DevCPL486.GenMove(a, b);
+			DevCPL486.GenFMOp(0D1H);	(* FCOM *)
+			DevCPL486.GenFMOp(FSTSW);
+			DevCPL486.GenXor(b, a); Free(b);
+			(* DevCPL486.GenCode(WAIT); *) DevCPL486.GenCode(SAHF);
+			local := DevCPL486.NewLbl; DevCPL486.GenJump(ccBE, local, TRUE);
+			DevCPL486.GenFMOp(0C1H);	(* FADD ST1 *)
+			DevCPL486.SetLabel(local);
+			DevCPL486.GenFMOp(5D9H);	(* FSTP ST1 *)
+		| ash:
+			IF y.mode # Reg THEN LoadR(y); rev := ~rev END;
+			IF rev THEN DevCPL486.GenFMOp(1C9H); (* FXCH ST1 *) END;
+			DevCPL486.GenFMOp(1FDH);	(* FSCALE *)
+			Floor(y, TRUE)
+		END;
+		IF y.mode = Stk THEN IncStack(y.form) END;
+		Free(y);
+		IF (subcl >= eql) & (subcl <= geq) THEN
+			Free(x); CheckAv(AX);
+			DevCPL486.GenFMOp(FSTSW);
+			(* DevCPL486.GenCode(WAIT); *) DevCPL486.GenCode(SAHF);
+			setCC(x, subcl, rev, FALSE)
+		END
+	END FloatDOp;
+
+	PROCEDURE CFloatDOp* (VAR x, y: L.Item; what: INTEGER; rev: BOOLEAN);
+		VAR local: L.Label; a, b: L.Item;
+	BEGIN
+		ASSERT(x.mode = Reg);
+		IF y.what = T.fInt64 THEN CLoadR(y) END;
+		IF y.mode = Reg THEN rev := ~rev END;
+		CASE what OF
+		| T.eqlfn..T.geqfn: L.LGenFDOp(FCOMP, y)
+		| T.timesfn: L.LGenFDOp(FMUL, y)
+		| T.slashfn: IF rev THEN L.LGenFDOp(FDIVR, y) ELSE L.LGenFDOp(FDIV, y) END
+		| T.plusfn: L.LGenFDOp(FADD, y)
+		| T.minusfn: IF rev THEN L.LGenFDOp(FSUBR, y) ELSE L.LGenFDOp(FSUB, y) END
+		
+		ELSE HALT(126)
+		END;
+		IF y.mode = Stk THEN CIncStack(y.what) END;
+		CFree(y);
+		IF (what >= T.eqlfn) & (what <= T.geqfn) THEN 
+			CFree(x); CCheckAv(AX);
+			L.LGenFMOp(FSTSW);
+			(* L.LGenCode(WAIT); *) L.LGenCode(SAHF);
+			CsetCC(x, what, rev, FALSE)
+		END;
+		x.o := NIL; x.lit := NIL (* How many more of these, and where, need to be inserted in order to avoid interference? This is needed here, because later, i.e. in LGenFStore, .lit is analyzed; it should not hold a value from the operand item *)
+	END CFloatDOp;
+	
+	PROCEDURE IntMOp* (VAR x: DevCPL486.Item; subcl: BYTE);
+		VAR L: DevCPL486.Label; c: DevCPL486.Item;
+	BEGIN
+		CASE subcl OF
+		| minus:
+				IF x.form = Set THEN DevCPL486.GenNot(x) ELSE DevCPL486.GenNeg(x, ovflchk) END
+		| abs:
+				L := DevCPL486.NewLbl; DevCPL486.MakeConst(c, 0, x.form);
+				DevCPL486.GenComp(c, x);
+				DevCPL486.GenJump(ccNS, L, TRUE);
+				DevCPL486.GenNeg(x, ovflchk);
+				DevCPL486.SetLabel(L)
+		| cap:
+				DevCPL486.MakeConst(c, -1 - 20H, x.form);
+				DevCPL486.GenAnd(c, x)
+		| not:
+				DevCPL486.MakeConst(c, 1, x.form);
+				DevCPL486.GenXor(c, x)
+		END;
+		IF x.mode # Reg THEN Free(x) END
+	END IntMOp;
+	
+	PROCEDURE CIntMOp* (VAR x: L.Item; what: INTEGER);
+		VAR l: L.Label; c: L.Item;
+	BEGIN
+		CASE what OF
+		| T.minusfn:
+				IF x.what = T.fSet THEN L.LGenNot(x) ELSE L.LGenNeg(x, ovflchk) END
+		ELSE HALT(126)
+		END;
+		IF x.mode # Reg THEN CFree(x) END
+	END CIntMOp;
+	
+	PROCEDURE FloatMOp* (VAR x: DevCPL486.Item; subcl: BYTE);
+	BEGIN
+		ASSERT(x.mode = Reg);
+		IF subcl = minus THEN DevCPL486.GenFMOp(FCHS)
+		ELSE ASSERT(subcl = abs); DevCPL486.GenFMOp(FABS)
+		END
+	END FloatMOp;
+
+	PROCEDURE MakeSet* (VAR x: DevCPL486.Item; range, neg: BOOLEAN; hint, stop: SET);
+		(* range neg	result
+				F	F		{x}
+				F	T		-{x}
+				T	F		{x..31}
+				T	T		-{0..x}	*)
+		VAR c, r: DevCPL486.Item; val: INTEGER;
+	BEGIN
+		IF x.mode = Con THEN
+			IF range THEN
+				IF neg THEN val := -2 ELSE val := -1 END;
+				x.offset := SYSTEM.LSH(val, x.offset)
+			ELSE
+				val := 1; x.offset := SYSTEM.LSH(val, x.offset);
+				IF neg THEN x.offset := -1 - x.offset END
+			END
+		ELSE
+			Check(x, 0, 31);
+			IF neg THEN val := -2
+			ELSIF range THEN val := -1
+			ELSE val := 1
+			END;
+			DevCPL486.MakeConst(c, val, Set); GetReg(r, Set, hint, stop); DevCPL486.GenMove(c, r);
+			IF range THEN DevCPL486.GenShiftOp(SHL, x, r) ELSE DevCPL486.GenShiftOp(ROL, x, r) END;
+			Free(x); x.reg := r.reg
+		END;
+		x.typ := DevCPT.settyp; x.form := Set
+	END MakeSet;
+	
+	PROCEDURE CMakeSet* (VAR x: L.Item; range, neg: BOOLEAN; hint, stop: SET);
+		(* range neg	result
+				F	F		{x}
+				F	T		-{x}
+				T	F		{x..31}
+				T	T		-{0..x}	*)
+		VAR c, r: L.Item; val: INTEGER;
+	BEGIN
+		IF x.mode = Con THEN
+			IF range THEN
+				IF neg THEN val := -2 ELSE val := -1 END;
+				x.offset := SYSTEM.LSH(val, x.offset)
+			ELSE
+				val := 1; x.offset := SYSTEM.LSH(val, x.offset);
+				IF neg THEN x.offset := -1 - x.offset END
+			END
+		ELSE
+			CCheck(x, 0, 31);
+			IF neg THEN val := -2 ELSIF range THEN val := -1 ELSE val := 1 END;
+			L.LMakeConst(c, val, T.fSet); CGetReg(r, T.fSet, hint, stop); L.LGenMove(c, r);
+			IF range THEN L.LGenShiftOp(SHL, x, r) ELSE L.LGenShiftOp(ROL, x, r) END;
+			CFree(x); x.reg := r.reg
+		END;
+		x.type := T.settp; x.what := T.fSet
+	END CMakeSet;
+	
+	PROCEDURE MakeCond* (VAR x: DevCPL486.Item);
+		VAR c: DevCPL486.Item;
+	BEGIN
+		IF x.mode = Con THEN
+			setCC(x, SHORT(SHORT(x.offset)), FALSE, FALSE)
+		ELSE
+			DevCPL486.MakeConst(c, 0, x.form);
+			DevCPL486.GenComp(c, x); Free(x);
+			setCC(x, neq, FALSE, FALSE)
+		END
+	END MakeCond;
+	
+	PROCEDURE CMakeCond* (VAR x: L.Item);
+		VAR c: L.Item;
+	BEGIN
+		IF x.mode = Con THEN
+			CsetCC(x, SHORT(SHORT(x.offset)), FALSE, FALSE)
+		ELSE
+			L.LMakeConst(c, 0, x.what);
+			L.LGenComp(c, x); CFree(x);
+			CsetCC(x, T.neqfn, FALSE, FALSE)
+		END
+	END CMakeCond;
+	
+	PROCEDURE Not* (VAR x: DevCPL486.Item);
+	BEGIN
+		x.offset := Inverted(x.offset); (* invert cc *)
+	END Not;
+	
+	PROCEDURE CNot* (VAR x: L.Item);
+	BEGIN
+		x.offset := Inverted(x.offset); (* invert cc *)
+	END CNot;
+	
+	PROCEDURE Odd* (VAR x: DevCPL486.Item);
+		VAR c: DevCPL486.Item;
+	BEGIN
+		IF x.mode = Stk THEN Pop(x, x.form, {}, {}) END;
+		Free(x); DevCPL486.MakeConst(c, 1, x.form);
+		IF x.mode = Reg THEN
+			IF x.form IN {Int16, Int64} THEN x.form := Int32; c.form := Int32 END;
+			DevCPL486.GenAnd(c, x)
+		ELSE
+			c.form := Int8; x.form := Int8; DevCPL486.GenTest(c, x)
+		END;
+		setCC(x, neq, FALSE, FALSE)
+	END Odd;
+	
+	PROCEDURE In* (VAR x, y: DevCPL486.Item);
+	BEGIN
+		IF y.form = Set THEN Check(x, 0, 31) END;
+		DevCPL486.GenBitOp(BT, x, y); Free(x); Free(y);
+		setCC(x, lss, FALSE, FALSE); (* carry set *)
+	END In;
+	
+	PROCEDURE CIn* (VAR x, y: L.Item);
+	BEGIN
+		IF y.what = T.fSet THEN CCheck(x, 0, 31) END;
+		L.LGenBitOp(BT, x, y); CFree(x); CFree(y);
+		CsetCC(x, lss, FALSE, FALSE); (* carry set *)
+	END CIn;
+	
+	PROCEDURE Shift* (VAR x, y: DevCPL486.Item; subcl: BYTE);	(* ASH, LSH, ROT *)
+		VAR L1, L2: DevCPL486.Label; c: DevCPL486.Item; opl, opr: INTEGER;
+	BEGIN
+		IF subcl = ash THEN opl := SHL; opr := SAR
+		ELSIF subcl = lsh THEN opl := SHL; opr := SHR
+		ELSE opl := ROL; opr := ROR
+		END;
+		IF y.mode = Con THEN
+			IF y.offset > 0 THEN
+				DevCPL486.GenShiftOp(opl, y, x)
+			ELSIF y.offset < 0 THEN
+				y.offset := -y.offset;
+				DevCPL486.GenShiftOp(opr, y, x)
+			END
+		ELSE
+			ASSERT(y.mode = Reg);
+			Check(y, -31, 31);
+			L1 := DevCPL486.NewLbl; L2 := DevCPL486.NewLbl; 
+			DevCPL486.MakeConst(c, 0, y.form); DevCPL486.GenComp(c, y);
+			DevCPL486.GenJump(ccNS, L1, TRUE);
+			DevCPL486.GenNeg(y, FALSE);
+			DevCPL486.GenShiftOp(opr, y, x);
+			DevCPL486.GenJump(ccAlways, L2, TRUE);
+			DevCPL486.SetLabel(L1);
+			DevCPL486.GenShiftOp(opl, y, x);
+			DevCPL486.SetLabel(L2);
+			Free(y)
+		END;
+		IF x.mode # Reg THEN Free(x) END
+	END Shift;
+
+	PROCEDURE DivMod* (VAR x, y: DevCPL486.Item; mod: BOOLEAN);
+		VAR r: DevCPL486.Item; pos: BOOLEAN;
+	BEGIN
+		ASSERT((x.mode = Reg) & (x.reg = AX)); pos := FALSE;
+		IF y.mode = Con THEN pos := (y.offset > 0) & (y.obj = NIL); Load(y, {}, {AX, DX, con}) END;
+		DevCPL486.GenDiv(y, mod, pos); Free(y);
+		IF mod THEN
+			r := x; GetReg(x, x.form, {}, wreg - {AX, DX}); Free(r) (* ax -> dx; al -> ah *)	(* ??? *)
+		END
+	END DivMod;
+
+	PROCEDURE CDivMod* (VAR x, y: L.Item; mod: BOOLEAN);
+		VAR r: L.Item; pos: BOOLEAN;
+	BEGIN
+		ASSERT((x.mode = Reg) & (x.reg = AX)); pos := FALSE;
+		IF y.mode = Con THEN pos := (y.offset > 0) & ((y.what # T.fInt64) OR (y.scale > 0)) & (y.o = NIL); 
+			CLoad(y, {}, {AX, DX, con}) 
+		END;
+		L.LGenDiv(y, mod, pos); CFree(y);
+		IF mod THEN
+			r := x; CGetReg(x, x.what, {}, wreg - {AX, DX}); CFree(r) (* ax -> dx; al -> ah *)	(* ??? *)
+		END
+	END CDivMod;
+
+	PROCEDURE Mem* (VAR x: DevCPL486.Item; offset: INTEGER; typ: DevCPT.Struct);	(* x := Mem[x+offset] *)
+	BEGIN
+		IF x.mode = Con THEN x.mode := Abs; x.obj := NIL; INC(x.offset, offset)
+		ELSE ASSERT(x.mode = Reg); x.mode := Ind; x.offset := offset
+		END;
+		x.scale := 0; x.typ := typ; x.form := typ.form
+	END Mem;
+	
+	PROCEDURE SysMove* (VAR len: DevCPL486.Item);	(* implementation of SYSTEM.MOVE *)
+	BEGIN
+		IF len.mode = Con THEN
+			IF len.offset > 0 THEN DevCPL486.GenBlockMove(1, len.offset) END
+		ELSE
+			Load(len, {}, wreg - {CX} + {short, mem, stk}); DevCPL486.GenBlockMove(1, 0); Free(len)
+		END;
+		FreeWReg(SI); FreeWReg(DI)
+	END SysMove;
+	
+	PROCEDURE Len* (VAR x, y: DevCPL486.Item);
+		VAR typ: DevCPT.Struct; dim: INTEGER;
+	BEGIN
+		dim := y.offset; typ := x.typ;
+		IF typ.untagged THEN DevCPM.err(136) END;
+		WHILE dim > 0 DO typ := typ.BaseTyp; DEC(dim) END;
+		LenDesc(x, x, typ);
+	END Len;
+	
+	PROCEDURE CLen* (VAR x, y: L.Item);
+		VAR t: T.Array; dim: INTEGER;
+	BEGIN
+		dim := y.offset; t := x.type(T.Array);
+		IF T.untagged IN t.flags THEN M.err(-136) END;
+		WHILE dim > 0 DO t := t.elTyp(T.Array); DEC(dim) END;
+		CLenDesc(x, x, t);
+	END CLen;
+	
+	PROCEDURE StringWSize (VAR x: DevCPL486.Item): INTEGER;
+	BEGIN
+		CASE x.form OF
+		| String8, VString8: RETURN 1
+		| String16, VString16: RETURN 2
+		| VString16to8: RETURN 0
+		| Comp: RETURN x.typ.BaseTyp.size
+		END
+	END StringWSize;
+
+	PROCEDURE CStringWSize (VAR x: L.Item): INTEGER;
+		VAR res: INTEGER;
+	BEGIN
+		CASE x.what OF
+		| T.fString8, VString8: res := 1
+		| T.fString16, VString16: res := 2
+		| VString16to8: res := 0
+		| T.fArray: res := x.type(T.Array).elTyp.size
+		END;
+		RETURN res
+	END CStringWSize;
+
+	PROCEDURE CmpString* (VAR x, y: DevCPL486.Item; rel: BYTE; rev: BOOLEAN);
+	BEGIN
+		CheckAv(CX);
+		IF (x.typ = DevCPT.guidtyp) OR (y.typ = DevCPT.guidtyp) THEN
+			DevCPL486.GenBlockComp(4, 4)
+		ELSIF x.form = String8 THEN DevCPL486.GenBlockComp(1, x.index)
+		ELSIF y.form = String8 THEN DevCPL486.GenBlockComp(1, y.index)
+		ELSIF x.form = String16 THEN DevCPL486.GenBlockComp(2, x.index)
+		ELSIF y.form = String16 THEN DevCPL486.GenBlockComp(2, y.index)
+		ELSE DevCPL486.GenStringComp(StringWSize(y), StringWSize(x))
+		END;
+		FreeWReg(SI); FreeWReg(DI); setCC(x, rel, ~rev, FALSE);
+	END CmpString;
+
+	PROCEDURE CCmpString* (VAR x, y: L.Item; rel: INTEGER; rev: BOOLEAN);
+	BEGIN
+		CCheckAv(CX);
+		(*IF (x.typ = DevCPT.guidtyp) OR (y.typ = DevCPT.guidtyp) THEN
+			DevCPL486.GenBlockComp(4, 4)
+		ELS*)
+		IF x.lit # NIL THEN
+			IF x.what = T.fString8 THEN L.LGenBlockComp(1, x.index)
+			ELSIF y.what = T.fString8 THEN L.LGenBlockComp(1, y.index)
+			ELSIF x.what = T.fString16 THEN L.LGenBlockComp(2, x.index)
+			ELSIF y.what = T.fString16 THEN L.LGenBlockComp(2, y.index)
+			END
+		ELSE L.LGenStringComp(CStringWSize(y), CStringWSize(x))
+		END;
+		CFreeWReg(SI); CFreeWReg(DI); CsetCC(x, rel, ~rev, FALSE);
+	END CCmpString;
+
+	PROCEDURE VarParDynArr (ftyp: DevCPT.Struct; VAR y: DevCPL486.Item);
+		VAR len, z: DevCPL486.Item; atyp: DevCPT.Struct;
+	BEGIN
+		atyp := y.typ;
+		WHILE ftyp.comp = DynArr DO
+			IF ftyp.BaseTyp = DevCPT.bytetyp THEN
+				IF atyp.comp = DynArr THEN
+					IF atyp.untagged THEN DevCPM.err(137) END;
+					LenDesc(y, len, atyp);
+					IF y.tmode = VarPar THEN Free(len) END;	(* ??? *)
+					GetReg(z, Int32, {}, {}); DevCPL486.GenMove(len, z);
+					len.mode := Reg; len.reg := z.reg; atyp := atyp.BaseTyp;
+					WHILE atyp.comp = DynArr DO
+						LenDesc(y, z, atyp); DevCPL486.GenMul(z, len, FALSE);
+						IF y.tmode = VarPar THEN Free(z) END;	(* ??? *)
+						atyp := atyp.BaseTyp
+					END;
+					DevCPL486.MakeConst(z, atyp.size, Int32); DevCPL486.GenMul(z, len, FALSE);
+					Free(len)
+				ELSE
+					DevCPL486.MakeConst(len, atyp.size, Int32)
+				END
+			ELSE
+				IF atyp.comp = DynArr THEN LenDesc(y, len, atyp);
+					IF atyp.untagged THEN DevCPM.err(137) END;
+					IF y.tmode = VarPar THEN Free(len) END;	(* ??? *)
+				ELSE DevCPL486.MakeConst(len, atyp.n, Int32)
+				END
+			END;
+			DevCPL486.GenPush(len);
+			ftyp := ftyp.BaseTyp; atyp := atyp.BaseTyp
+		END
+	END VarParDynArr;
+
+	PROCEDURE CVarParOpenArr (ftyp: T.Array; VAR y: L.Item);
+		VAR len, z: L.Item; atyp: T.Array; t: T.Type;
+	BEGIN
+		atyp := y.type(T.Array);
+		WHILE (ftyp # NIL) & (T.open IN ftyp.flags) DO
+			(*IF ftyp.BaseTyp = DevCPT.bytetyp THEN bytetp is Oberon's SYSTEM.BYTE, which is gone from CP 
+				IF atyp.comp = DynArr THEN
+					IF atyp.untagged THEN DevCPM.err(137) END;
+					LenDesc(y, len, atyp);
+					IF y.tmode = VarPar THEN Free(len) END;	(* ??? *)
+					GetReg(z, Int32, {}, {}); DevCPL486.GenMove(len, z);
+					len.mode := Reg; len.reg := z.reg; atyp := atyp.BaseTyp;
+					WHILE atyp.comp = DynArr DO
+						LenDesc(y, z, atyp); DevCPL486.GenMul(z, len, FALSE);
+						IF y.tmode = VarPar THEN Free(z) END;	(* ??? *)
+						atyp := atyp.BaseTyp
+					END;
+					DevCPL486.MakeConst(z, atyp.size, Int32); DevCPL486.GenMul(z, len, FALSE);
+					Free(len)
+				ELSE
+					DevCPL486.MakeConst(len, atyp.size, Int32)
+				END
+			ELSE*)
+				IF T.open IN atyp.flags THEN CLenDesc(y, len, atyp);
+					IF T.untagged IN atyp.flags THEN M.err(-137) END;
+					IF y.tmode = VarPar THEN CFree(len) END;	(* ??? *)
+				ELSE L.LMakeConst(len, atyp.len, T.fInt64)
+				END;
+			(*END;*)
+			L.LGenPush(len);
+			t := ftyp.elTyp; WITH t: T.Array DO ftyp := t ELSE ftyp := NIL END;
+			t := atyp.elTyp; WITH t: T.Array DO atyp := t ELSE atyp := NIL END
+		END
+	END CVarParOpenArr;
+
+	PROCEDURE Assign* (VAR x, y: DevCPL486.Item); (* x := y *)
+	BEGIN
+		IF y.mode = Con THEN
+			IF y.form IN {Real32, Real64} THEN
+				DevCPL486.GenFLoad(y); GetReg(y, Real32, {}, {});
+				IF x.mode # Reg THEN Free(y); DevCPL486.GenFStore(x, TRUE) END	(* ??? move const *)
+			ELSIF x.form = Int64 THEN
+				ASSERT(x.mode IN {Ind, Abs});
+				y.form := Int32; x.form := Int32; DevCPL486.GenMove(y, x);
+				y.offset := y.scale; INC(x.offset, 4); DevCPL486.GenMove(y, x);
+				DEC(x.offset, 4); x.form := Int64
+			ELSE
+				DevCPL486.GenMove(y, x)
+			END
+		ELSE
+			IF y.form IN {Comp, String8, String16, VString8, VString16} THEN	(* convert to pointer *)
+				ASSERT(x.form = Pointer);
+				GetAdr(y, {}, {}); y.typ := x.typ; y.form := Pointer
+			END;
+			IF ~(x.form IN realSet) OR ~(y.form IN intSet) THEN Assert(y, {}, {stk}) END;
+			ConvMove(x, y, FALSE, {}, {})
+		END;
+		Free(x)
+	END Assign;
+	
+	PROCEDURE CAssign* (VAR x, y: L.Item);	(* x := y *)
+	BEGIN 
+		IF y.mode = Con THEN
+			IF y.what IN T.reals THEN
+				L.LGenFLoad(y); CGetReg(y, T.fReal32, {}, {});
+				IF x.mode # Reg THEN CFree(y); L.LGenFStore(x, TRUE) END	(* ??? move const *)
+			(*ELSIF x.what = T.int64 THEN	int64 is treated the same way as all other basic types
+				ASSERT(x.mode IN {Ind, Abs});
+				y.form := Int32; x.form := Int32; DevCPL486.GenMove(y, x);
+				y.offset := y.scale; INC(x.offset, 4); DevCPL486.GenMove(y, x);
+				DEC(x.offset, 4); x.form := Int64*)
+			ELSE
+				IF (y.what IN T.chars + T.integers + { T.fSet, T.fBool } ) & (x.what IN T.chars + T.integers + { T.fSet, T.fBool }) 
+				THEN y.what := x.what 	(* i.e. var(BYTE) := 7: 7 is fInt32, change to fInt8 *)
+				END;
+				(* well, since all checks have passed, maybe if y.what := x.what should be unconditional? *)
+				y.what := x.what;
+				L.LGenMove(y, x)
+			END
+		ELSE
+			IF y.what IN T.structures + T.strings + { VString8, VString16 } THEN	(* convert to pointer *)
+				ASSERT(x.what IN T.pointers);
+				CGetAdr(y, {}, {}); y.type := x.type; y.what := T.fArrayPtr
+			END;
+			IF ~(x.what IN T.reals) OR ~(y.what IN T.integers) THEN CAssert(y, {}, {stk}) END;
+			CConvMove(x, y, FALSE, {}, {})
+		END;
+		CFree(x)
+	END CAssign;
+	
+	PROCEDURE ArrayLen* (VAR x, len: DevCPL486.Item; hint, stop: SET);
+		VAR c: DevCPL486.Item;
+	BEGIN
+		IF x.typ.comp = Array THEN DevCPL486.MakeConst(c, x.typ.n, Int32); GetReg(len, Int32, hint, stop); DevCPL486.GenMove(c, len)
+		ELSIF ~x.typ.untagged THEN LenDesc(x, c, x.typ); GetReg(len, Int32, hint, stop); DevCPL486.GenMove(c, len)
+		ELSE len.mode := Con
+		END;
+		len.typ := DevCPT.int32typ
+	END ArrayLen;
+
+	PROCEDURE CArrayLen* (VAR x, len: L.Item; hint, stop: SET);
+		VAR c: L.Item; t: T.Type;
+	BEGIN t := x.type;
+		WITH t: T.Array DO
+			IF ~(T.open IN t.flags) THEN L.LMakeConst(c, t.len, T.fInt32);
+				CGetReg(len, T.fInt32, hint, stop); L.LGenMove(c, len)
+			ELSIF ~(T.untagged IN t.flags) THEN 
+				CLenDesc(x, c, t); CGetReg(len, T.fInt32, hint, stop); L.LGenMove(c, len)
+			ELSE len.mode := Con
+			END;
+			len.type := T.longtp
+		ELSE HALT(20)
+		END
+	END CArrayLen;
+
+(*
+		src		dest	zero
+sx	= sy	x b		y b
+SHORT(lx)	= sy	x b+	x w	y b
+SHORT(lx)	= SHORT(ly)	x b+	x w	y b+
+
+lx	= ly	x w		y w
+LONG(sx)	= ly	x b		y w	*
+LONG(SHORT(lx))	= ly	x b+	x w*	y w	*
+
+sx	:= sy	y b		x b
+sx	:= SHORT(ly)	y b+	y w	x b
+
+lx	:= ly	y w		x w
+lx	:= LONG(sy)	y b		x w	*
+lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
+*)
+	
+	PROCEDURE AddCopy* (VAR x, y: DevCPL486.Item; last: BOOLEAN); (* x := .. + y + .. *)
+	BEGIN
+		IF (x.typ.comp = DynArr) & x.typ.untagged THEN
+			DevCPL486.GenStringMove(~last, StringWSize(y), StringWSize(x), -1)
+		ELSE
+			DevCPL486.GenStringMove(~last, StringWSize(y), StringWSize(x), 0)
+		END;
+		FreeWReg(SI); FreeWReg(DI)
+	END AddCopy;
+	
+	PROCEDURE CAddCopy* (VAR x, y: L.Item; last: BOOLEAN); (* x := .. + y + .. *)
+		CONST openUntagged = { T.untagged, T.open };
+	BEGIN
+		IF (openUntagged * x.type.flags = openUntagged) & (x.type.what = T.fArray) THEN
+			L.LGenStringMove(~last, CStringWSize(y), CStringWSize(x), -1)
+		ELSE
+			L.LGenStringMove(~last, CStringWSize(y), CStringWSize(x), 0)
+		END;
+		FreeWReg(SI); FreeWReg(DI)
+	END CAddCopy;
+	
+	
+	PROCEDURE Copy* (VAR x, y: DevCPL486.Item; short: BOOLEAN); (* x := y *)
+		VAR sx, sy, sy2, sy4: INTEGER; c, r: DevCPL486.Item;
+	BEGIN
+		sx := x.typ.size; CheckAv(CX);
+		IF y.form IN {String8, String16} THEN
+			sy := y.index * y.typ.BaseTyp.size;
+			IF x.typ.comp = Array THEN	(* adjust size for optimal performance *)
+				sy2 := sy + sy MOD 2; sy4 := sy2 + sy2 MOD 4;
+				IF sy4 <= sx THEN sy := sy4
+				ELSIF sy2 <= sx THEN sy := sy2
+				ELSIF sy > sx THEN DevCPM.err(114); sy := 1
+				END
+			ELSIF inxchk & ~x.typ.untagged THEN	(* check array length *)
+				Free(x); LenDesc(x, c, x.typ);
+				DevCPL486.MakeConst(y, y.index, Int32);
+				DevCPL486.GenComp(y, c); DevCPL486.GenAssert(ccAE, copyTrap);
+				Free(c)
+			END;
+			DevCPL486.GenBlockMove(1, sy)
+		ELSIF x.typ.comp = DynArr THEN
+			IF x.typ.untagged THEN
+				DevCPL486.GenStringMove(FALSE, StringWSize(y), StringWSize(x), -1)
+			ELSE
+				Free(x); LenDesc(x, c, x.typ); DevCPL486.MakeReg(r, CX, Int32); DevCPL486.GenMove(c, r); Free(c);
+				DevCPL486.GenStringMove(FALSE, StringWSize(y), StringWSize(x), 0)
+			END
+		ELSIF y.form IN {VString16to8, VString8, VString16} THEN
+			DevCPL486.GenStringMove(FALSE, StringWSize(y), StringWSize(x), x.typ.n);
+			ASSERT(y.mode # Stk)
+		ELSIF short THEN	(* COPY *)
+			sy := y.typ.size;
+			IF (y.typ.comp # DynArr) & (sy < sx) THEN sx := sy END;
+			DevCPL486.GenStringMove(FALSE, StringWSize(y), StringWSize(x), x.typ.n);
+			IF y.mode = Stk THEN AdjustStack(sy) END
+		ELSE	(* := *)
+			IF sx > 0 THEN DevCPL486.GenBlockMove(1, sx) END;
+			IF y.mode = Stk THEN AdjustStack(sy) END
+		END;
+		FreeWReg(SI); FreeWReg(DI)
+	END Copy;
+	
+	PROCEDURE CCopy* (VAR x, y: L.Item; short: BOOLEAN); (* x := y *)
+		VAR sx, sy, sy2, sy4: INTEGER; c, r: L.Item;
+	BEGIN
+		sx := x.type.size; CheckAv(CX);
+		IF y.what IN T.strings THEN
+			IF strCon IN y.flags THEN	(* s := 'literal' *)
+				sy := y.index * y.type(T.Array).elTyp.size;
+				IF ~(T.open IN x.type.flags) & (x.type.what = T.fArray) THEN	(* adjust size for optimal performance *)
+					sy2 := sy + sy MOD 2; sy4 := sy2 + sy2 MOD 4;
+					IF sy4 <= sx THEN sy := sy4
+					ELSIF sy2 <= sx THEN sy := sy2
+					ELSIF sy > sx THEN M.err(-114); sy := 1
+					END
+				ELSIF inxchk & ~(T.untagged IN x.type.flags) THEN	(* check array length *)
+					CFree(x); CLenDesc(x, c, x.type(T.Array));
+					L.LMakeConst(y, y.index, T.fInt64);
+					L.LGenComp(y, c); L.LGenAssert(ccAE, copyTrap);
+					CFree(c)
+				END;
+				L.LGenBlockMove(1, sy)
+			ELSE	(* s := t$ *)
+				L.LGenStringMove(FALSE, CStringWSize(y), CStringWSize(x), x.type(T.Array).len);
+				ASSERT(y.mode # Stk)
+			END
+		ELSIF (T.open IN x.type.flags) & (x.type.what = T.fArray) THEN 
+			IF T.untagged IN x.type.flags THEN
+				L.LGenStringMove(FALSE, CStringWSize(y), CStringWSize(x), -1)
+			ELSE
+				CFree(x); CLenDesc(x, c, x.type(T.Array)); L.LMakeReg(r, CX, T.fInt32); L.LGenMove(c, r); CFree(c);
+				L.LGenStringMove(FALSE, CStringWSize(y), CStringWSize(x), 0)
+			END
+		ELSIF y.what IN {VString16to8, VString8, VString16} THEN 	(* s := t$ *)HALT(126)
+		ELSIF short THEN	(* COPY *) HALT(126)
+		ELSE	(* := *)
+			IF sx > 0 THEN L.LGenBlockMove(1, sx) END;
+			IF y.mode = Stk THEN CAdjustStack(sy) END
+		END;
+		FreeWReg(SI); FreeWReg(DI)
+	END CCopy;
+	
+	PROCEDURE StrLen* (VAR x: DevCPL486.Item; typ: DevCPT.Struct; incl0x: BOOLEAN);
+		VAR c: DevCPL486.Item;
+	BEGIN
+		CheckAv(AX); CheckAv(CX);
+		DevCPL486.GenStringLength(typ.BaseTyp.size, -1);
+		Free(x); GetReg(x, Int32, {}, wreg - {CX});
+		DevCPL486.GenNot(x);
+		IF ~incl0x THEN DevCPL486.MakeConst(c, 1, Int32); DevCPL486.GenSub(c, x, FALSE) END;
+		FreeWReg(DI)
+	END StrLen;
+
+	PROCEDURE CStrLen* (VAR x: L.Item; type: T.Type; incl0x: BOOLEAN);
+		VAR c: L.Item;
+	BEGIN
+		CheckAv(AX); CheckAv(CX);
+		L.LGenStringLength(type(T.Array).elTyp.size, -1);
+		CFree(x); CGetReg(x, T.fInt32, {}, wreg - {CX});
+		L.LGenNot(x);
+		IF ~incl0x THEN L.LMakeConst(c, 1, T.fInt32); L.LGenSub(c, x, FALSE) END;
+		FreeWReg(DI)
+	END CStrLen;
+
+	PROCEDURE MulDim* (VAR y, z: DevCPL486.Item; VAR fact: INTEGER; dimtyp: DevCPT.Struct);	(* z := z * y *)
+		VAR c: DevCPL486.Item;
+	BEGIN
+		IF y.mode = Con THEN
+			IF y.offset <= MAX(INTEGER) DIV fact THEN fact := fact * y.offset
+			ELSE fact := 1; DevCPM.err(214)
+			END
+		ELSE
+			IF ranchk OR inxchk THEN
+				DevCPL486.MakeConst(c, 0, Int32); DevCPL486.GenComp(c, y); DevCPL486.GenAssert(ccG, ranTrap)
+			END;
+			DevCPL486.GenPush(y);
+			IF z.mode = Con THEN z := y
+			ELSE DevCPL486.GenMul(y, z, ovflchk OR inxchk); Free(y)
+			END
+		END
+	END MulDim;
+	
+	PROCEDURE SetDim* (VAR x, y: DevCPL486.Item; dimtyp: DevCPT.Struct); (* set LEN(x^, -dimtyp.n) *)
+		(* y const or on stack *) 
+		VAR z: DevCPL486.Item; end: DevCPL486.Label;
+	BEGIN
+		ASSERT((x.mode = Reg) & (x.form = Pointer));
+		z.mode := Ind; z.reg := x.reg; z.offset := ArrDOffs + 4 + dimtyp.n * 4; z.scale := 0; z.form := Int32;
+		IF y.mode = Con THEN y.form := Int32
+		ELSE Pop(y, Int32, {}, {})
+		END;
+		end := DevCPL486.NewLbl; DevCPL486.GenJump(ccE, end, TRUE);	(* flags set in New *)
+		DevCPL486.GenMove(y, z);
+		DevCPL486.SetLabel(end);
+		IF y.mode = Reg THEN Free(y) END
+	END SetDim;
+
+	PROCEDURE SysNew* (VAR x: DevCPL486.Item);
+	BEGIN
+		DevCPM.err(141)
+	END SysNew;
+
+	PROCEDURE New* (VAR x, nofel: DevCPL486.Item; fact: INTEGER);
+		(* x.typ.BaseTyp.comp IN {Record, Array, DynArr} *)
+		VAR p, tag, c: DevCPL486.Item; nofdim, dlen, n: INTEGER; typ, eltyp: DevCPT.Struct; lbl: DevCPL486.Label;
+	BEGIN
+		typ := x.typ.BaseTyp;
+		IF typ.untagged THEN DevCPM.err(138) END;
+		IF typ.comp = Record THEN	(* call to Kernel.NewRec(tag: Tag): ADDRESS *)
+			DevCPL486.MakeConst(tag, 0, Pointer); tag.obj := DevCPE.TypeObj(typ);
+			IF ContainsIPtrs(typ) THEN INC(tag.offset) END;
+			DevCPL486.GenPush(tag);
+			p.mode := XProc; p.obj := DevCPE.KNewRec;
+		ELSE eltyp := typ.BaseTyp;
+			IF typ.comp = Array THEN
+				nofdim := 0; nofel.mode := Con; nofel.form := Int32; fact := typ.n
+			ELSE (* DynArr *)
+				nofdim := typ.n+1;
+				WHILE eltyp.comp = DynArr DO eltyp := eltyp.BaseTyp END
+			END ;
+			WHILE eltyp.comp = Array DO fact := fact * eltyp.n; eltyp := eltyp.BaseTyp END;
+			IF eltyp.comp = Record THEN
+				IF eltyp.untagged THEN DevCPM.err(138) END;
+				DevCPL486.MakeConst(tag, 0, Pointer); tag.obj := DevCPE.TypeObj(eltyp);
+				IF ContainsIPtrs(eltyp) THEN INC(tag.offset) END;
+			ELSIF eltyp.form = Pointer THEN
+				IF ~eltyp.untagged THEN
+					DevCPL486.MakeConst(tag, 0, Pointer)	(* special TDesc in Kernel for ARRAY OF pointer *)
+				ELSIF eltyp.sysflag = interface THEN
+					DevCPL486.MakeConst(tag, -1, Pointer)	(* special TDesc in Kernel for ARRAY OF interface pointer *)
+				ELSE
+					DevCPL486.MakeConst(tag, 12, Pointer)
+				END
+			ELSE	(* eltyp is pointerless basic type *)
+				CASE eltyp.form OF
+				| Undef, Byte, Char8: n := 1;
+				| Int16: n := 2;
+				| Int8: n := 3;
+				| Int32: n := 4;
+				| Bool: n := 5;
+				| Set: n := 6;
+				| Real32: n := 7;
+				| Real64: n := 8;
+				| Char16: n := 9;
+				| Int64: n := 10;
+				| ProcTyp: n := 11;
+				END;
+				DevCPL486.MakeConst(tag, n, Pointer)
+(*
+				DevCPL486.MakeConst(tag, eltyp.size, Pointer)
+*)
+			END;
+			IF nofel.mode = Con THEN nofel.offset := fact; nofel.obj := NIL
+			ELSE DevCPL486.MakeConst(p, fact, Int32); DevCPL486.GenMul(p, nofel, ovflchk OR inxchk)
+			END;
+			DevCPL486.MakeConst(p, nofdim, Int32); DevCPL486.GenPush(p);
+			DevCPL486.GenPush(nofel); Free(nofel); DevCPL486.GenPush(tag);
+			p.mode := XProc; p.obj := DevCPE.KNewArr;
+		END;
+		DevCPL486.GenCall(p); GetReg(x, Pointer, {}, wreg - {AX});
+		IF typ.comp = DynArr THEN	(* set flags for nil test *)
+			DevCPL486.MakeConst(c, 0, Pointer); DevCPL486.GenComp(c, x)
+		ELSIF typ.comp = Record THEN
+			n := NumOfIntProc(typ);
+			IF n > 0 THEN	(* interface method table pointer setup *)
+				DevCPL486.MakeConst(c, 0, Pointer); DevCPL486.GenComp(c, x);
+				lbl := DevCPL486.NewLbl; DevCPL486.GenJump(ccE, lbl, TRUE);
+				tag.offset := - 4 * (n + numPreIntProc);
+				p.mode := Ind; p.reg := AX; p.offset := 0; p.scale := 0; p.form := Pointer;
+				DevCPL486.GenMove(tag, p);
+				IF nofel.mode # Con THEN	(* unk pointer setup *)
+					p.offset := 8;
+					DevCPL486.GenMove(nofel, p);
+					Free(nofel)
+				END;
+				DevCPL486.SetLabel(lbl);
+			END
+		END
+	END New;
+	
+	PROCEDURE CNew* (VAR x, nofel: L.Item; fact: INTEGER);
+		(* x.typ.BaseTyp.comp IN {Record, Array, DynArr} *)
+		VAR reg, p, tag, c: L.Item; nofdim, dlen, n: INTEGER; typ, eltyp: T.Type; lbl: L.Label; isRec: BOOLEAN;
+	BEGIN
+		typ := x.type;
+		IF T.untagged IN typ.flags THEN M.err(138) END;
+		WITH typ: T.RecPtr DO	 (* call to Kernel.NewRec(tag: Tag): ADDRESS *)
+			isRec := TRUE; 
+			x.type := typ.base; INCL(x.type.flags, T.used);
+			CTyp(x, {}, {}); L.LGenPush(x);
+			p.mode := XProc; p.o := E.ENewRec() (*p.obj := DevCPE.KNewRec;*)
+		| typ: T.ArrayPtr DO isRec := FALSE; HALT(126)
+		ELSE HALT(20)
+		END;
+		L.LGenCall(p); (*CGetReg(x, Pointer, {}, wreg - {AX}); this generated an illegal instruction, test GC151*)
+		IF isRec THEN
+			n := CNumOfIntProc(typ);
+			IF n > 0 THEN	(* interface method table pointer setup *)
+				HALT(126)
+			END
+		ELSIF T.open IN typ.flags THEN 	(* set flags for nil test *)
+			HALT(126)
+		ELSE HALT(126)
+		END
+	END CNew;
+
+	PROCEDURE Param* (fp: DevCPT.Object; rec, niltest: BOOLEAN; VAR ap, tag: DevCPL486.Item);	(* returns tag if rec *)
+		VAR f: BYTE; s, ss: INTEGER; par, a, c: DevCPL486.Item; recTyp: DevCPT.Struct;
+	BEGIN
+		par.mode := Stk; par.typ := fp.typ; par.form := par.typ.form;
+		IF ODD(fp.sysflag DIV nilBit) THEN niltest := FALSE END;
+		IF ap.typ = DevCPT.niltyp THEN
+			IF ((par.typ.comp = Record) OR (par.typ.comp = DynArr)) & ~par.typ.untagged THEN
+				DevCPM.err(142)
+			END;
+			DevCPL486.GenPush(ap)
+		ELSIF par.typ.comp = DynArr THEN
+			IF ap.form IN {String8, String16} THEN
+				IF ~par.typ.untagged THEN
+					DevCPL486.MakeConst(c, ap.index (* * ap.typ.BaseTyp.size *), Int32); DevCPL486.GenPush(c)
+				END;
+				ap.mode := Con; DevCPL486.GenPush(ap);
+			ELSIF ap.form IN {VString8, VString16} THEN	(* ap in eax *)
+				DevCPL486.MakeReg(a, DX, Pointer); DevCPL486.GenLoadAdr(ap, a);	(* mov edx, eax *)
+				IF ~par.typ.untagged THEN
+					DevCPL486.MakeReg(c, DI, Pointer); DevCPL486.GenMove(a, c);	(* mov edi, edx *)
+					Free(ap); StrLen(c, ap.typ, TRUE);	(* blabla for StrLen *)
+					DevCPL486.GenPush(c); Free(c)	(* push ecx *)
+				END;
+				DevCPL486.GenPush(a)	(* push edx *)
+			ELSE
+				IF ~par.typ.untagged THEN
+					IF ap.typ.comp = DynArr THEN niltest := FALSE END;	(* ap dereferenced for length descriptor *)
+					VarParDynArr(par.typ, ap)
+				END;
+				PushAdr(ap, niltest)
+			END
+		ELSIF fp.mode = VarPar THEN
+			recTyp := ap.typ;
+			IF recTyp.form = Pointer THEN recTyp := recTyp.BaseTyp END;
+			IF (par.typ.comp = Record) & (~fp.typ.untagged) THEN
+				Tag(ap, tag);
+				IF rec & (tag.mode # Con) THEN
+					GetReg(c, Pointer, {}, {}); DevCPL486.GenMove(tag, c); tag := c
+				END;
+				DevCPL486.GenPush(tag);
+				IF tag.mode # Con THEN niltest := FALSE END;
+				PushAdr(ap, niltest);
+				IF rec THEN Free(tag) END
+			ELSE PushAdr(ap, niltest)
+			END;
+			tag.typ := recTyp
+		ELSIF par.form = Comp THEN
+			s := par.typ.size;
+			IF initializeStr & (ap.form IN {String8, String16, VString8, VString16, VString16to8}) THEN
+				s := (s + 3) DIV 4 * 4; AdjustStack(-s);
+				IF ap.form IN {String8, String16} THEN
+					IF ap.index > 1 THEN	(* nonempty string *)
+						ss := (ap.index * ap.typ.BaseTyp.size + 3) DIV 4 * 4;
+						DevCPL486.MakeReg(c, SI, Pointer); DevCPL486.GenLoadAdr(ap, c); Free(ap);
+						DevCPL486.MakeReg(c, DI, Pointer); DevCPL486.GenLoadAdr(par, c);
+						DevCPL486.GenBlockMove(1, ss);
+					ELSE
+						ss := 0;
+						DevCPL486.MakeReg(c, DI, Pointer); DevCPL486.GenLoadAdr(par, c)
+					END;
+					IF s > ss THEN
+						DevCPL486.MakeReg(a, AX, Int32); DevCPL486.MakeConst(c, 0, Int32); DevCPL486.GenMove(c, a);
+						DevCPL486.GenBlockStore(1, s - ss)
+					END;
+				ELSE
+					DevCPL486.MakeReg(c, SI, Pointer); DevCPL486.GenLoadAdr(ap, c); Free(ap);
+					DevCPL486.MakeReg(c, DI, Pointer); DevCPL486.GenLoadAdr(par, c);
+					DevCPL486.GenStringMove(TRUE, StringWSize(ap), StringWSize(par), par.typ.n);
+					DevCPL486.MakeReg(a, AX, Int32); DevCPL486.MakeConst(c, 0, Int32); DevCPL486.GenMove(c, a);
+					DevCPL486.GenBlockStore(StringWSize(par), 0)
+				END
+			ELSE
+				IF (ap.form IN {String8, String16}) & (ap.index = 1) THEN	(* empty string *)
+					AdjustStack((4 - s) DIV 4 * 4);
+					DevCPL486.MakeConst(c, 0, Int32); DevCPL486.GenPush(c)
+				ELSE
+					AdjustStack((-s) DIV 4 * 4);
+					DevCPL486.MakeReg(c, SI, Pointer); DevCPL486.GenLoadAdr(ap, c); Free(ap);
+					DevCPL486.MakeReg(c, DI, Pointer); DevCPL486.GenLoadAdr(par, c);
+					IF ap.form IN {String8, String16} THEN
+						DevCPL486.GenBlockMove(1, (ap.index * ap.typ.BaseTyp.size + 3) DIV 4 * 4)
+					ELSIF ap.form IN {VString8, VString16, VString16to8} THEN
+						DevCPL486.GenStringMove(FALSE, StringWSize(ap), StringWSize(par), par.typ.n)
+					ELSE
+						DevCPL486.GenBlockMove(1, (s + 3) DIV 4 * 4)
+					END
+				END
+			END
+		ELSIF ap.mode = Con THEN
+			IF ap.form IN {Real32, Real64} THEN	(* ??? push const *)
+				DevCPL486.GenFLoad(ap); DecStack(par.typ.form); DevCPL486.GenFStore(par, TRUE)
+			ELSE
+				ap.form := Int32;
+				IF par.form = Int64 THEN DevCPL486.MakeConst(c, ap.scale, Int32); DevCPL486.GenPush(c) END;
+				DevCPL486.GenPush(ap)
+			END
+		ELSIF ap.typ.form = Pointer THEN
+			recTyp := ap.typ.BaseTyp;
+			IF rec THEN
+				Load(ap, {}, {}); Tag(ap, tag);
+				IF tag.mode = Con THEN	(* explicit nil test needed *)
+					DevCPL486.MakeReg(a, AX, Int32);
+					c.mode := Ind; c.form := Int32; c.offset := 0; c.scale := 0; c.reg := ap.reg;
+					DevCPL486.GenTest(a, c)
+				END
+			END;
+			DevCPL486.GenPush(ap); Free(ap);
+			tag.typ := recTyp
+		ELSIF ap.form IN {Comp, String8, String16, VString8, VString16} THEN	(* convert to pointer *)
+			ASSERT(par.form = Pointer);
+			PushAdr(ap, FALSE)
+		ELSE
+			ConvMove(par, ap, FALSE, {}, {high});
+		END
+	END Param;
+	
+	PROCEDURE CCPlaceParam (VAR fp, ap: L.Item; niltest, addr: BOOLEAN);
+		VAR stop: SET;
+	BEGIN
+				(*;IF ap.o # NIL THEN ASSERT(ap.o.name^ # "r", 8) END;*)
+		IF fp.mode = Reg THEN stop := WReg - { fp.reg } ELSE stop := {} END;
+		IF addr THEN 
+			IF (ap.mode = Abs) & (ap.scale = 0) THEN CGetAdr(ap, {}, stop)	(*!*) (*merge*)
+			ELSIF niltest THEN HALT(126)
+			ELSIF ap.mode = DInd THEN ap.mode := Ind; ap.what := T.fSysPtr
+			ELSE CGetAdr(ap, {}, stop)
+			END;
+			CFree(ap)
+		END;
+		IF fp.mode = Stk THEN IF ap.what # T.fInt64 THEN ap.what := T.fInt32 END; L.LGenPush(ap)
+		ELSIF fp.mode = Reg THEN 
+			IF ap.mode # Reg THEN CLoad(ap, {}, WReg - { fp.reg }) END;
+			fp.what := ap.what; CFree(fp); L.LGenMove(ap, fp)
+		ELSE HALT(126)
+		END
+	END CCPlaceParam;
+	
+	PROCEDURE CPushAdr (VAR x: L.Item; niltest: BOOLEAN; pass: INTEGER; hint, stop: SET);
+		VAR r, v, y: L.Item;
+	BEGIN
+		IF (x.mode = Abs) & (x.scale = 0) THEN CGetAdr(x, hint, stop)	(*!*) (*merge*)
+		ELSIF niltest THEN HALT(126)
+		ELSIF x.mode = DInd THEN HALT(126)
+		ELSE CGetAdr(x, hint, stop)
+		END;
+		IF pass = Y.stk THEN L.LGenPush(x) 
+		ELSIF pass < 0 THEN HALT(126)
+		ELSIF x.reg # pass THEN M.MMark(-215, 1, x.o.textpos) 
+		END;
+		CFree(x)
+	END CPushAdr;
+
+	PROCEDURE CParam* (fp: T.Par; rec, niltest: BOOLEAN; VAR ap, tag: L.Item(*; VAR used: SET; 
+		VAR pushed: INTEGER*)
+	); (* returns tag if rec(*; updates set of used registers and number of pushed bytes (to clean up after call in sysvcall*) *)
+		CONST addr = TRUE;
+		VAR f: BYTE; s, ss: INTEGER; par, a, c: L.Item; t: T.Type; baseTyp: T.Type;
+			pass, w: INTEGER; stop: SET;
+	BEGIN
+		par.type := fp.type; 
+		pass := fp(Y.Par).pass; 
+		IF (pass # Y.stk) & (pass >= 0) THEN stop := { high } + WReg - { pass } ELSE stop := {high} END;
+		IF pass = Y.stk THEN par.mode := Stk; par.what := par.type.what 
+		ELSIF pass >= 0 THEN par.mode := Reg; par.reg := pass; par.what := par.type.what
+		ELSE par.mode := Xmm; par.reg := -pass - 1; par.what := par.type.what
+		END;
+		(*!!! sysflags need to be totally reworked IF ODD(fp.sysflag DIV nilBit) THEN niltest := FALSE END;*)
+		IF fp.flags * T.varparMask = T.nilPF THEN niltest := FALSE END;
+		IF ap.type.what = T.fNil THEN
+			IF ((par.type.what = T.fRecord) OR (par.type.what = T.fArray) & (T.open IN par.type.flags)) 
+			& ~(T.untagged IN par.type.flags) THEN
+				M.err(142)	(* tagged structures not allowed for NIL compatible var parameters -what? revisit *)
+			END;
+			CCPlaceParam(par, ap, FALSE, ~addr)	(*$GC119*)
+		ELSIF (fp.type.what = T.fArray) & (T.open IN fp.type.flags) THEN 		(* formal open arrays *)
+			ASSERT(pass = Y.stk);
+			IF ap.what IN T.strings THEN 
+				IF ap.lit # NIL THEN ASSERT(ap.lit IS T.StringLit);
+					IF ~(T.untagged IN fp.type.flags) THEN
+						L.LMakeConst(c, ap.index (* * ap.typ.BaseTyp.size *), T.fInt32); L.LGenPush(c)
+					END;
+					(*remove ap.mode := Con;*) CCPlaceParam(par, ap, niltest, addr)	(*$GC118*)
+				ELSE (* This was: ELSIF ap.what IN {VString8, VString16} THEN*)	 (* unfinished branch *)
+					L.LMakeReg(a, DX, T.fSysPtr); L.LGenLoadAdr(ap, a);
+					IF ~(T.untagged IN fp.type.flags) THEN
+						L.LMakeReg(c, DI, T.fSysPtr); L.LGenMove(a, c);
+						CFree(ap); CStrLen(c, ap.type, TRUE);
+						L.LGenPush(c); CFree(c)
+					END;
+					L.LGenPush(a)
+				END
+			ELSE
+				IF ~(T.untagged IN fp.type.flags) THEN
+					IF T.open IN ap.type.flags THEN niltest := FALSE END;	(* ap dereferenced for length descriptor *)
+					CVarParOpenArr(fp.type(T.Array), ap)
+				END;
+				CCPlaceParam(par, ap, niltest, addr)	(*$GC70*)
+			END
+		ELSIF fp.flags * T.kindMask # T.valK THEN 							(* variable parameters *)
+			t := ap.type; WITH t: T.RecPtr DO baseTyp := t.base | t: T.Record DO baseTyp := t ELSE END;
+			IF (par.type.what = T.fRecord) & ~(T.untagged IN fp.type.flags) THEN 
+				CTag(ap, tag);
+				IF rec & (tag.mode # Con) THEN
+					CGetReg(c, T.fSysPtr, {}, {}); L.LGenMove(tag, c); tag := c
+				END;
+				L.LGenPush(tag);
+				IF tag.mode # Con THEN niltest := FALSE END;
+				CCPlaceParam(par, ap, niltest, addr);
+				IF rec THEN CFree(tag) END
+			ELSE CCPlaceParam(par, ap, niltest, addr)	(*$GC116, $GC117, $GC132*)
+			END;
+			tag.type := baseTyp										(* following are ↓↓ value parameters *)
+		ELSIF par.what IN T.structures THEN 								(* formal structured value parameters *)
+			s := par.type.size;
+			IF initializeStr THEN HALT(126)
+			ELSE
+				IF (ap.what IN T.strings) & (ap.index = 1) THEN	(* empty string *)
+					CAdjustStack((4 - s) DIV 4 * 4);
+					L.LMakeConst(c, 0, T.fInt32); L.LGenPush(c)
+				ELSE
+					CAdjustStack((-s) DIV 4 * 4);
+					L.LMakeReg(c, SI, T.fSysPtr); L.LGenLoadAdr(ap, c); CFree(ap);
+					L.LMakeReg(c, DI, T.fSysPtr); L.LGenLoadAdr(par, c);
+					IF ap.what IN T.strings THEN ASSERT((ap.lit # NIL) & (ap.lit IS T.StringLit), 126);
+						L.LGenBlockMove(1, (ap.index * ap.type(T.Array).elTyp.size + 3) DIV 4 * 4)
+					ELSIF ap.what IN {VString8, VString16, VString16to8} THEN HALT(126)
+					ELSE
+						L.LGenBlockMove(1, (s + 3) DIV 4 * 4)
+					END
+				END
+			END
+		ELSIF ap.mode = Con THEN																	(* actual constants *)
+			IF ap.what IN T.reals THEN HALT(126) (*unreachable? real consts are usually Abs*)
+			ELSE
+				CCPlaceParam(par, ap, FALSE, ~addr)	(*$GC114, $GC115*)
+			END
+		ELSIF ap.type.what IN T.pointers THEN 							(* pointer actual *)	
+			IF ap.type.what = T.fRecPtr THEN baseTyp := ap.type(T.RecPtr).base 
+			ELSIF ap.type.what = T.fArrayPtr THEN baseTyp := ap.type(T.ArrayPtr).base
+			ELSIF ap.type.what = T.fProcedure THEN	(*ok, baseTyp = NIL *)
+			ELSE HALT(126)
+			END ;
+			IF rec THEN
+				CLoad(ap, {}, {}); CTag(ap, tag);
+				IF tag.mode = Con THEN	(* explicit nil test needed *)
+					L.LMakeReg(a, AX, T.fInt64);
+					c.mode := Ind; c.what := T.fInt64; c.offset := 0; c.scale := 0; c.reg := ap.reg;
+					L.LGenTest(a, c)
+				END
+			END;
+			CCPlaceParam(par, ap, FALSE, ~addr); CFree(ap);	(*$GC112, $GC113*)
+			tag.type := baseTyp
+		ELSIF ap.what IN T.structures + T.strings (*{...VString8, VString16}*) THEN	(* convert to pointer *)
+			ASSERT(par.type.what IN T.pointers); 
+			CCPlaceParam(par, ap, FALSE, addr)(*CPlaceAdr(ap, FALSE, fp(Y.Par).pass)*)	(*$GC111*)
+		(*ELSIF (par.what = T.fReal32) & (pass = Y.stk) THEN 	(* SHORTREAL *)
+			L.LGenFLoad(ap); CDecStack(T.fReal32); L.LGenFStore(par, TRUE)*) (*this is now covered in CConvMove↓ *)
+		ELSE
+			CConvMove(par, ap, FALSE, {}, stop(*{high}*))	(*$GC96*) 				(* basic and procedural  *)
+		END
+	END CParam;
+	
+	PROCEDURE Result* (proc: DevCPT.Object; VAR res: DevCPL486.Item);
+		VAR r: DevCPL486.Item;
+	BEGIN
+		DevCPL486.MakeReg(r, AX, proc.typ.form);	(* don't allocate AX ! *)
+		IF res.mode = Con THEN
+			IF r.form IN {Real32, Real64} THEN DevCPL486.GenFLoad(res);
+			ELSIF r.form = Int64 THEN
+				r.form := Int32; res.form := Int32; DevCPL486.GenMove(res, r);
+				r.reg := DX; res.offset := res.scale; DevCPL486.GenMove(res, r)
+			ELSE DevCPL486.GenMove(res, r);
+			END
+		ELSIF res.form IN {Comp, String8, String16, VString8, VString16} THEN	(* convert to pointer *)
+			ASSERT(r.form = Pointer);
+			GetAdr(res, {}, wreg - {AX})
+		ELSE
+			r.index := DX;	(* for int64 *)
+			ConvMove(r, res, FALSE, wreg - {AX} + {high}, {});
+		END;
+		Free(res)
+	END Result;
+
+	PROCEDURE CResult* (proc: T.Proc; VAR res: L.Item);
+		VAR r: L.Item;
+	BEGIN
+		IF (proc.flags * T.pfMask = T.ms64F) & (proc.type.what IN T.reals) THEN 
+			L.LMakeReg(r, L.XMM0, proc.type.what); r.mode := Xmm
+		ELSE L.LMakeReg(r, AX, proc.type.what);	(* don't allocate AX ! *)
+		END;
+		IF res.mode = Con THEN
+			IF r.what IN T.reals THEN L.LGenFLoad(res);	(* so, a REAL proc result sits on the top of x87 stack! *)
+				IF proc.flags * T.pfMask = T.ms64F THEN
+					E.GenWord(1CDD006AH); E.GenWord(100FF224H);	(* PUSH 0; FSTP dbl [RSP] *)
+					E.GenByte(4); E.GenByte(24H); E.GenByte(58H);	(*  MOVSD XMM0, [RSP]; POP RAX *)
+				END
+			ELSE L.LGenMove(res, r);
+			END
+		ELSIF res.what IN T.structures + T.strings (*{Comp, String8, String16, VString8, VString16}*) THEN	(* convert to pointer *)
+			ASSERT(r.what IN T.pointers);
+			CGetAdr(res, {}, wreg - {AX})
+		ELSE
+			(*r.index := DX;	(* for int64 *)*)
+			CConvMove(r, res, FALSE, wreg - {AX} + {high}, {})
+		END;
+		CFree(res)
+	END CResult;
+	
+	PROCEDURE InitFpu;
+		VAR x: DevCPL486.Item;
+	BEGIN
+		DevCPL486.MakeConst(x, FpuControlRegister, Int32); DevCPL486.GenPush(x);
+		DevCPL486.GenFMOp(12CH); DevCPL486.GenCode(24H);	(* FLDCW 0(SP) *)
+		DevCPL486.MakeReg(x, CX, Int32); DevCPL486.GenPop(x);	(* reset stack *)
+	END InitFpu;
+
+	PROCEDURE CInitFpu;
+		VAR c, x: L.Item;
+	BEGIN
+		(*E.GenByte(49H); E.GenByte(89H); E.GenByte(0E3H);	(* MOV R11, RSP *)*)
+		L.LMakeConst(x, FpuControlRegister, T.fInt32); L.LGenPush(x);
+		L.LGenFMOp(12CH); L.LGenCode(24H);	(* FLDCW 0(SP) *)
+		L.LMakeReg(x, SP, T.fInt64); L.LMakeConst(c, 8, T.fInt64); L.LGenAdd(c, x, FALSE)	(* reset stack *)
+		(*
+		;E.GenByte(4CH); E.GenByte(39H); E.GenByte(0DCH);	(* CMP RSP, R11 *)
+		;E.GenByte(74H); E.GenByte(3); 	(* JE +3 *)
+		;E.GenByte(8DH); E.GenByte(0F0H); E.GenByte(9);	(* HALT(9) *)
+		*)
+	END CInitFpu;
+	
+	PROCEDURE PrepCall* (proc: DevCPT.Object);
+		VAR lev: BYTE; r: DevCPL486.Item;
+	BEGIN
+		lev := proc.mnolev;
+		IF (slNeeded IN proc.conval.setval) & (imLevel[lev] > 0) & (imLevel[DevCPL486.level] > imLevel[lev]) THEN
+			DevCPL486.MakeReg(r, BX, Pointer); DevCPL486.GenPush(r)
+		END
+	END PrepCall;
+	
+	(* ccall16:  Prologue / epilogue *)
+	PROCEDURE PreCcall16* (val: INTEGER); 
+		VAR c, sp,cx: DevCPL486.Item; 
+	BEGIN
+		CheckAv(CX);
+		DevCPL486.MakeReg(cx, CX, Int32); 
+		DevCPL486.MakeReg(sp, SP, Int32); 
+		DevCPL486.GenMove(sp, cx);              (* MOVE ECX, ESP *)
+		
+		DevCPL486.MakeConst(c, -16, Int32); 
+		DevCPL486.GenAnd(c, sp);			 (* AND ESP,-16*)
+		DevCPL486.GenPush(cx);               (* push ecx *)
+		val:= (-4 - val) MOD 16;
+		IF val # 0 THEN
+			DevCPL486.MakeConst(c, val, Int32); 
+			DevCPL486.GenSub(c, sp, FALSE) (* sub ESP, val *)
+		END
+	END PreCcall16;
+	
+	PROCEDURE PostCcall16* (val: INTEGER); 
+		VAR c, sp: DevCPL486.Item;
+	BEGIN
+		val := (-4 - val) MOD 16 + val;
+		DevCPL486.MakeConst(c, val, Int32); 
+		DevCPL486.MakeReg(sp, SP, Int32); 
+		DevCPL486.GenAdd(c, sp, FALSE); (* ADD ESP, val *)
+		DevCPL486.GenPop(sp)                  (* POP ESP*)
+	END PostCcall16;
+
+	PROCEDURE CCallParSize* (proc: DevCPT.Object; typ: DevCPT.Struct): INTEGER;
+		VAR p: DevCPT.Object; n: INTEGER; t: DevCPT.Struct;
+	BEGIN
+		n := 0;
+		IF proc # NIL THEN p := proc.link; ELSE p := typ.link; END;
+		WHILE p # NIL DO
+			IF p.mode = VarPar THEN
+				IF (p.typ.comp = DynArr) & ~p.typ.untagged THEN INC(n, p.typ.size)
+				ELSIF (p.typ.comp = Record) & ~p.typ.untagged THEN INC(n, 4 + 4)
+				ELSE INC(n, 4)
+				END
+			ELSE
+				INC(n, (p.typ.size + 3) DIV 4 * 4)
+			END;
+			p := p.link
+		END;
+		RETURN n
+	END CCallParSize;
+	
+	PROCEDURE Call* (VAR x, tag: DevCPL486.Item);	(* TProc: tag.typ = actual receiver type *)
+		CONST
+			ccall16 = -12;
+		VAR i, n: INTEGER; r, y: DevCPL486.Item; typ: DevCPT.Struct; lev: BYTE; saved: BOOLEAN;
+	BEGIN
+		IF x.mode IN {LProc, XProc, IProc} THEN
+			lev := x.obj.mnolev; saved := FALSE;
+			IF (slNeeded IN x.obj.conval.setval) & (imLevel[lev] > 0) THEN	(* pass static link *)
+				n := imLevel[DevCPL486.level] - imLevel[lev];
+				IF n > 0 THEN
+					saved := TRUE;
+					y.mode := Ind; y.scale := 0; y.form := Pointer; y.reg := BX; y.offset := -4;
+					DevCPL486.MakeReg(r, BX, Pointer);
+					WHILE n > 0 DO DevCPL486.GenMove(y, r); DEC(n) END
+				END
+			END;
+			DevCPL486.GenCall(x);
+			IF (x.obj.sysflag = ccall) OR (x.obj.sysflag = ccall16) THEN
+				n:=CCallParSize(x.obj, NIL);
+				IF (x.obj.sysflag = ccall) THEN 
+					AdjustStack(n)
+				ELSE (* ccall16*)
+					PostCcall16(n)
+				END;
+			END;
+			IF saved THEN DevCPL486.GenPop(r) END;
+		ELSIF x.mode = TProc THEN
+			IF x.scale = 1 THEN (* super *)
+				DevCPL486.MakeConst(tag, 0, Pointer); tag.obj := DevCPE.TypeObj(tag.typ.BaseTyp)
+			ELSIF x.scale = 2 THEN (* static call *)
+				DevCPL486.MakeConst(tag, 0, Pointer); typ := x.obj.link.typ;
+				IF typ.form = Pointer THEN typ := typ.BaseTyp END;
+				tag.obj := DevCPE.TypeObj(typ)
+			ELSIF x.scale = 3 THEN (* interface method call *)
+				DevCPM.err(200)
+			END;
+			IF tag.mode = Con THEN
+				y.mode := Abs; y.offset := tag.offset; y.obj := tag.obj; y.scale := 0
+			ELSIF (x.obj.conval.setval * {absAttr, empAttr, extAttr} = {}) & ~(DevCPM.oberon IN DevCPM.options) THEN	(* final method *)
+				y.mode := Abs; y.offset := 0; y.obj := DevCPE.TypeObj(tag.typ); y.scale := 0;
+				IF tag.mode = Ind THEN	(* nil test *)
+					DevCPL486.MakeReg(r, AX, Int32); tag.offset := 0; DevCPL486.GenTest(r, tag)
+				END
+			ELSE
+				IF tag.mode = Reg THEN y.reg := tag.reg
+				ELSE GetReg(y, Pointer, {}, {}); DevCPL486.GenMove(tag, y)
+				END;
+				y.mode := Ind; y.offset := 0; y.scale := 0
+			END;
+			IF (tag.typ.sysflag = interface) & (y.mode = Ind) THEN y.offset := 4 * x.offset
+			ELSIF tag.typ.untagged THEN DevCPM.err(140)
+			ELSE
+				IF x.obj.link.typ.sysflag = interface THEN	(* correct method number *)
+					x.offset := numPreIntProc + NumOfIntProc(tag.typ) - 1 - x.offset
+				END;
+				INC(y.offset, Mth0Offset - 4 * x.offset)
+			END;
+			DevCPL486.GenCall(y); Free(y)
+		ELSIF x.mode = CProc THEN
+			IF x.obj.link # NIL THEN	(* tag = first param *)
+				IF x.obj.link.mode = VarPar THEN
+					GetAdr(tag, {}, wreg - {AX} + {stk, mem, con}); Free(tag)
+				ELSE 
+					(* Load(tag, {}, wreg - {AX} + {con}); Free(tag) *)
+					Result(x.obj.link, tag)	(* use result load for first parameter *)
+				END
+			END;
+			IF x.obj.conval.ext # NIL THEN i := 0; n := LEN(x.obj.conval.ext^);
+				WHILE i < n DO DevCPL486.GenCode(ORD(x.obj.conval.ext^[i])); INC(i) END
+			END
+		ELSE	(* proc var *)
+			DevCPL486.GenCall(x); Free(x);
+			IF (x.typ.sysflag = ccall) OR (x.typ.sysflag = ccall16) THEN	
+				n:=CCallParSize(NIL, x.typ);
+				IF x.typ.sysflag = ccall THEN 
+					AdjustStack(n)
+				ELSE (* ccall16*)
+					PostCcall16(n)
+				END
+			END;
+			x.typ := x.typ.BaseTyp
+		END;
+		IF procedureUsesFpu & (x.mode = XProc) & (x.obj.mnolev < 0) & (x.obj.mnolev > -128)
+				& ((x.obj.library # NIL) OR (DevCPT.GlbMod[-x.obj.mnolev].library # NIL)) THEN	(* restore fpu *)
+			InitFpu
+		END;
+		CheckReg;
+		IF x.typ.form = Int64 THEN
+			GetReg(x, Int32, {}, wreg - {AX}); GetReg(y, Int32, {}, wreg - {DX});
+			x.index := y.reg; x.form := Int64
+		ELSIF x.typ.form # NoTyp THEN GetReg(x, x.typ.form, {}, wreg - {AX} + {high})
+		END
+	END Call;
+	
+	PROCEDURE CPrepMs64Call* (parSize: INTEGER);
+	(** Prepare to call an ms64 procedure: align stack on 16-byte boundary *)
+		VAR r, sp: L.Item;
+	BEGIN
+		ASSERT((parSize MOD 16 = 0) OR (parSize MOD 8 = 0), 20);
+		CGetReg(r, T.fInt64, {}, {}); L.LMakeReg(sp, SP, T.fInt64);
+		L.LGenMove(sp, r);
+		E.GenWord(0F0E48348H);	(* AND RSP, -16 *)
+		IF (parSize <= 32) OR (parSize MOD 16 = 0) THEN E.GenShort(56AH) (* PUSH monthOfMyBirth :) *) END;
+		L.LGenPush(r); 
+		CFree(r)
+		(* could insert a RSP MOD 16 = 0 assertion here... *)
+	END CPrepMs64Call;
+	
+	PROCEDURE FreeParRegs (used: SET);
+		VAR reg: INTEGER;
+	BEGIN reg := regMin; WHILE reg <= regMax DO IF reg IN used THEN CFreeReg(reg, T.fInt64) END; INC(reg) END
+	END FreeParRegs;
+	
+	PROCEDURE CCall* (VAR x, tag: L.Item; procFlags: SET);	(* TProc: tag.typ = actual receiver type *)
+		CONST ccall16 = -12;
+		VAR padr, nst, i, n: INTEGER; r, y: L.Item; t: T.Type; saved: BOOLEAN; p: T.Object; pf: SET; proc: T.XProc;
+	BEGIN
+		IF procFlags = T.ms64F THEN E.GenWord(20EC8348H) END;	(* SUB RSP, 30H *)
+		IF x.mode = XProc THEN p := x.o;
+			WITH 
+			| p: T.TProc DO HALT(126) 
+			| p: T.SProc DO HALT(20)
+			| p: T.CProc DO ASSERT(p.par = NIL, 126); 
+				IF p.code # NIL THEN i := 0; n := LEN(p.code^);
+					WHILE i < n DO L.LGenCode(ORD(p.code^[i])); INC(i) END
+				END
+			| p: T.IProc DO HALT(126)
+			| p: T.LProc DO HALT(21)
+			| p: Y.XProc DO proc := p;
+				nst := p.owner.nesting; saved := FALSE; pf := p.flags * T.pfMask;
+				IF (pf = T.callsNestedF) & (imLevel[nst] > 0) THEN	(* pass static link *)HALT(126)
+				END;
+				(*IF p.imno # 0 THEN CGetAdr(x, {}, {}); CFree(x) END;*)
+				L.LGenCall(x);
+				FreeParRegs(p.used);
+				IF (*(pf = T.ccallF) OR*) (pf = T.ccall16F) THEN HALT(126);
+				END;
+				IF saved THEN L.LGenPop(r) END;
+				padr := p.padr	(* for ms64 *)
+			ELSE HALT(22)
+			END;
+		ELSE	(* proc var *) HALT(126)
+		END;
+		IF procedureUsesFpu  & (proc # NIL) & (proc.nesting = 0) & ((proc.lib # NIL) OR (proc.owner(T.Mod).lib # NIL))  THEN
+			CInitFpu 	(* restore fpu *)
+		END;
+		(*i := 0; WHILE i < MAX(SET) DO IF i IN used THEN CFree*)
+		CCheckReg;
+		(*IF x.typ.form = Int64 THEN
+			GetReg(x, Int32, {}, wreg - {AX}); GetReg(y, Int32, {}, wreg - {DX});
+			x.index := y.reg; x.form := Int64
+		ELS*)IF x.type # NIL THEN CGetReg(x, x.type.what, {}, wreg - {AX} + {high})
+		END;
+		IF procFlags = T.ms64F THEN
+			IF (p # NIL) & (p.type # NIL) & (p.type.what IN T.reals) THEN	(* ST(0) := XMM0 *)
+				E.GenWord(04110FF2H); E.GenWord(2404DD24H)	(* MOVSD [RSP], XMM0; FLD [RSP] *)
+			END;
+			E.GenByte(48H); 
+			padr := MAX(32, padr);
+			IF padr < 128 THEN E.GenByte(83H); E.GenByte(0C4H); E.GenByte(padr)		(* ADD RSP, int8 *)
+			ELSE E.GenByte(81H); E.GenByte(0C4H); E.GenWord(padr)	(* ADD RSP, int32 *)
+			END;
+			E.GenByte(5CH)	(* POP RSP *)
+		END
+	END CCall;
+	
+	PROCEDURE CopyDynArray* (adr: INTEGER; typ: DevCPT.Struct);	(* needs CX, SI, DI *)
+		VAR len, ptr, c, sp, src, dst: DevCPL486.Item; bt: DevCPT.Struct;
+	BEGIN
+		IF typ.untagged THEN DevCPM.err(-137) END;
+		ptr.mode := Ind; ptr.reg := BP; ptr.offset := adr+4; ptr.scale := 0; ptr.form := Pointer;
+		DevCPL486.MakeReg(len, CX, Int32); DevCPL486.MakeReg(sp, SP, Int32);
+		DevCPL486.MakeReg(src, SI, Int32); DevCPL486.MakeReg(dst, DI, Int32);
+		DevCPL486.GenMove(ptr, len); bt := typ.BaseTyp;	(* mov ecx, -4[ebp/ecx?!?!?]*)
+		WHILE bt.comp = DynArr DO
+			INC(ptr.offset, 4); DevCPL486.GenMul(ptr, len, FALSE); bt := bt.BaseTyp	(* ? add ecx, ecx *)
+		END;
+		ptr.offset := adr; DevCPL486.GenMove(ptr, src);	(* mov esi, -4[ebp] *)
+		DevCPL486.MakeConst(c, bt.size, Int32); DevCPL486.GenMul(c, len, FALSE);
+		(* CX = length in bytes *)
+		StackAlloc; 
+		(* CX = length in 32bit words *)
+		DevCPL486.GenMove(sp, dst); DevCPL486.GenMove(dst, ptr);
+		DevCPL486.GenBlockMove(4, 0)  (* 32bit moves *)
+	END CopyDynArray;
+	
+	PROCEDURE CCopyOpenArray* (adr: INTEGER; type: T.Array);	(* needs CX, SI, DI *)
+		VAR len, ptr, c, sp, src, dst: L.Item; et: T.Type;
+	BEGIN 
+		IF T.untagged IN type.flags THEN M.err(-137) END;
+		ptr.mode := Ind; ptr.reg := BP; ptr.offset := adr + 8; ptr.scale := 0; ptr.what := T.fSysPtr;
+		L.LMakeReg(len, CX, T.fInt64); L.LMakeReg(sp, SP, T.fSysPtr);
+		L.LMakeReg(src, SI, T.fSysPtr); L.LMakeReg(dst, DI, T.fSysPtr);
+		L.LGenMove(ptr, len); 
+		WHILE type # NIL DO et := type.elTyp;
+			WITH et: T.Array DO 
+				IF T.open IN et.flags THEN INC(ptr.offset, 8); L.LGenMul(ptr, len, FALSE); type := et ELSE type := NIL END
+			ELSE type := NIL
+			END
+		END;
+		ptr.offset := adr; L.LGenMove(ptr, src);
+		L.LMakeConst(c, et.size, T.fInt64); L.LGenMul(c, len, FALSE);
+		(* CX = length in bytes *)
+		(*CStackAlloc; *)
+
+		E.GenByte(49H); E.GenByte(0C7H); E.GenByte(0C1H); 	(* MOV R9,  *)
+		E.GenByte(78H); E.GenByte(19H); E.GenByte(0); E.GenByte(0); 	(* 1978H *)
+		E.GenByte(49H); E.GenByte(89H); E.GenByte(0C8H); 	(* MOV R8, RCX *)
+		(*E.GenByte(80H); E.GenByte(0E1H); E.GenByte(0F8H); 	(* AND CL, F8*)*)
+
+
+		E.GenByte(48H); E.GenByte(83H); E.GenByte(0F9H); E.GenByte(07H);	(* CMP RCX, 7 *)
+		E.GenByte(77H); E.GenByte(03H);  	(* JG +LBL *)
+		E.GenByte(48H); E.GenByte(31H); E.GenByte(0C9H); 	(* XOR RCX, RCX *)
+
+		E.GenByte(49H); E.GenByte(0C7H); E.GenByte(0C2H); 	(* MOV R10,  *)
+		E.GenByte(28H); E.GenByte(0); E.GenByte(0); E.GenByte(0); 	(* 28H *)
+		(*E.GenByte(8DH); E.GenByte(0DFH); 	(* bad - trap *)*)
+
+		E.GenByte(49H); E.GenByte(0C7H); E.GenByte(0C2H); 	(* MOV R10,  *)
+		E.GenByte(5); E.GenByte(0); E.GenByte(0); E.GenByte(0); 	(* 5H *)
+
+		(*E.GenByte(8DH); E.GenByte(0DFH); 	(* bad - trap *)*)
+		
+		
+		E.GenByte(49H); E.GenByte(89H); E.GenByte(0C8H); 	(* MOV R8, RCX *)
+		E.GenByte(80H); E.GenByte(0E1H); E.GenByte(0F8H); 	(* AND CL, F8*)
+		
+		E.GenByte(48H); E.GenByte(83H); E.GenByte(0C1H); E.GenByte(08H); 	(* ADD RCX, 8 *)
+		
+		(* +LBL: *)
+		E.GenByte(49H); E.GenByte(89H); E.GenByte(0E3H);	(* MOV R11, RSP *)
+		E.GenByte(48H); E.GenByte(29H); E.GenByte(0CCH);	(* SUB RSP, RCX *)
+		E.GenByte(48H); E.GenByte(0C1H); E.GenByte(0E9H); E.GenByte(03H);	(* SHR RCX, 3 *)
+		E.GenByte(49H); E.GenByte(0C7H); E.GenByte(0C2H); 	(* MOV R10,  *)
+		E.GenByte(5); E.GenByte(28H); E.GenByte(0); E.GenByte(0); 	(* 2805H *)
+
+		(*E.GenByte(8DH); E.GenByte(0DFH); 	(* bad - trap *)*)
+
+		(* CX = length in 32bit words *)
+		L.LGenMove(sp, dst); L.LGenMove(dst, ptr);
+		L.LGenBlockMove(8, 0)  (* 64bit moves *)	(* could be 8-byte moves instead? *)
+	END CCopyOpenArray;
+	
+	PROCEDURE Sort (VAR tab: ARRAY OF INTEGER; VAR n: INTEGER);
+		VAR i, j, x: INTEGER;
+	BEGIN
+		(* align *)
+		i := 1;
+		WHILE i < n DO
+			x := tab[i]; j := i-1;
+			WHILE (j >= 0) & (tab[j] < x) DO tab[j+1] := tab[j]; DEC(j) END;
+			tab[j+1] := x; INC(i)
+		END;
+		(* eliminate equals *)
+		i := 1; j := 1;
+		WHILE i < n DO
+			IF tab[i] # tab[i-1] THEN tab[j] := tab[i]; INC(j) END;
+			INC(i)
+		END;
+		n := j
+	END Sort;
+	
+	PROCEDURE FindPtrs (typ: DevCPT.Struct; adr: INTEGER; VAR num: INTEGER);
+		VAR fld: DevCPT.Object; btyp: DevCPT.Struct; i, n: INTEGER;
+	BEGIN
+		IF typ.form IN {Pointer, ProcTyp} THEN
+			IF num < MaxPtrs THEN ptrTab[num] := adr DIV 4 * 4 END;
+			INC(num);
+			IF adr MOD 4 # 0 THEN
+				IF num < MaxPtrs THEN ptrTab[num] := adr DIV 4 * 4 + 4 END;
+				INC(num)
+			END
+		ELSIF typ.comp = Record THEN
+			btyp := typ.BaseTyp;
+			IF btyp # NIL THEN FindPtrs(btyp, adr, num) END ;
+			fld := typ.link;
+			WHILE (fld # NIL) & (fld.mode = Fld) DO
+				IF (fld.name^ = DevCPM.HdPtrName) OR
+					(fld.name^ = DevCPM.HdUtPtrName) OR
+					(fld.name^ = DevCPM.HdProcName) THEN
+					FindPtrs(DevCPT.sysptrtyp, fld.adr + adr, num)
+				ELSE FindPtrs(fld.typ, fld.adr + adr, num)
+				END;
+				fld := fld.link
+			END
+		ELSIF typ.comp = Array THEN
+			btyp := typ.BaseTyp; n := typ.n;
+			WHILE btyp.comp = Array DO n := btyp.n * n; btyp := btyp.BaseTyp END ;
+			IF (btyp.form = Pointer) OR (btyp.comp = Record) THEN
+				i := num; FindPtrs(btyp, adr, num);
+				IF num # i THEN i := 1;
+					WHILE (i < n) & (num <= MaxPtrs) DO
+						INC(adr, btyp.size); FindPtrs(btyp, adr, num); INC(i)
+					END
+				END
+			END
+		END
+	END FindPtrs;
+
+	PROCEDURE CFindPtrs (type: T.Type; adr: INTEGER; VAR num: INTEGER);
+	BEGIN HALT(126)
+	END CFindPtrs;
+
+	PROCEDURE InitOutPar (par: DevCPT.Object; VAR zreg: DevCPL486.Item);
+		VAR x, y, c, len: DevCPL486.Item; lbl: DevCPL486.Label; size, s: INTEGER; bt: DevCPT.Struct;
+	BEGIN
+		x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; x.offset := par.adr;
+		DevCPL486.MakeReg(y, DI, Int32);
+		IF par.typ.comp # DynArr THEN
+			DevCPL486.GenMove(x, y);
+			lbl := DevCPL486.NewLbl;
+			IF ODD(par.sysflag DIV nilBit) THEN
+				DevCPL486.GenComp(zreg, y);
+				DevCPL486.GenJump(ccE, lbl, TRUE)
+			END;
+			size := par.typ.size;
+			IF size <= 16 THEN
+				x.mode := Ind; x.reg := DI; x.form := Int32; x.offset := 0;
+				WHILE size > 0 DO
+					IF size = 1 THEN x.form := Int8; s := 1
+					ELSIF size = 2 THEN x.form := Int16; s := 2
+					ELSE x.form := Int32; s := 4
+					END;
+					zreg.form := x.form; DevCPL486.GenMove(zreg, x); INC(x.offset, s); DEC(size, s)
+				END;
+				zreg.form := Int32
+			ELSE
+				DevCPL486.GenBlockStore(1, size)
+			END;
+			DevCPL486.SetLabel(lbl)
+		ELSIF initializeDyn & ~par.typ.untagged THEN	(* untagged open arrays not initialized !!! *)
+			DevCPL486.GenMove(x, y);
+			DevCPL486.MakeReg(len, CX, Int32);
+			INC(x.offset, 4); DevCPL486.GenMove(x, len); (* first len *)
+			bt := par.typ.BaseTyp;
+			WHILE bt.comp = DynArr DO
+				INC(x.offset, 4); DevCPL486.GenMul(x, len, FALSE); bt := bt.BaseTyp
+			END;
+			size := bt.size;
+			IF size MOD 4 = 0 THEN size := size DIV 4; s := 4
+			ELSIF size MOD 2 = 0 THEN size := size DIV 2; s := 2
+			ELSE s := 1
+			END;
+			DevCPL486.MakeConst(c, size, Int32); DevCPL486.GenMul(c, len, FALSE);
+			DevCPL486.GenBlockStore(s, 0)
+		END
+	END InitOutPar;
+
+	PROCEDURE AllocAndInitAll (proc: DevCPT.Object; adr, size: INTEGER; VAR nofptrs: INTEGER);
+		VAR x, y, z, zero: DevCPL486.Item; par: DevCPT.Object; op: INTEGER;
+	BEGIN
+		op := 0; par := proc.link;
+		WHILE par # NIL DO	(* count out parameters [with COM pointers] *)
+			IF (par.mode = VarPar) & (par.vis = outPar) & (initializeOut OR ContainsIPtrs(par.typ)) THEN INC(op) END;
+			par := par.link
+		END;
+		DevCPL486.MakeConst(zero, 0, Int32);
+		IF (op = 0) & (size <= 8) THEN	(* use PUSH 0 *)
+			WHILE size > 0 DO DevCPL486.GenPush(zero); DEC(size, 4) END
+		ELSE
+			DevCPL486.MakeReg(z, AX, Int32); DevCPL486.GenMove(zero, z);
+			IF size <= 32 THEN	(* use PUSH reg *)
+				WHILE size > 0 DO DevCPL486.GenPush(z); DEC(size, 4) END
+			ELSE	(* use string store *)
+				AdjustStack(-size);
+				DevCPL486.MakeReg(x, SP, Int32); DevCPL486.MakeReg(y, DI, Int32); DevCPL486.GenMove(x, y);
+				DevCPL486.GenBlockStore(1, size)
+			END;
+			IF op > 0 THEN
+				par := proc.link;
+				WHILE par # NIL DO	(* init out parameters [with COM pointers] *)
+					IF (par.mode = VarPar) & (par.vis = outPar) & (initializeOut OR ContainsIPtrs(par.typ)) THEN InitOutPar(par, z) END;
+					par := par.link
+				END
+			END
+		END
+	END AllocAndInitAll;
+	
+	PROCEDURE CAllocAndInitAll (proc: T.Proc; adr, size: INTEGER; VAR nofptrs: INTEGER);
+	BEGIN HALT(126)
+	END CAllocAndInitAll;
+	
+	PROCEDURE AllocAndInitPtrs1 (proc: DevCPT.Object; adr, size: INTEGER; VAR nofptrs: INTEGER);	(* needs AX *)
+		VAR i, base, a, gaps: INTEGER; x, z: DevCPL486.Item; obj: DevCPT.Object;
+	BEGIN
+		IF ptrinit & (proc.scope # NIL) THEN
+			nofptrs := 0; obj := proc.scope.scope;	(* local variables *)
+			WHILE (obj # NIL) & (nofptrs <= MaxPtrs) DO
+				FindPtrs(obj.typ, obj.adr, nofptrs);
+				obj := obj.link
+			END;
+			IF (nofptrs > 0) & (nofptrs <= MaxPtrs) THEN
+				base := proc.conval.intval2;
+				Sort(ptrTab, nofptrs); i := 0; a := size + base; gaps := 0;
+				WHILE i < nofptrs DO
+					DEC(a, 4);
+					IF a # ptrTab[i] THEN a := ptrTab[i]; INC(gaps) END;
+					INC(i)
+				END;
+				IF a # base THEN INC(gaps) END;
+				IF (gaps <= (nofptrs + 1) DIV 2) & (size < stackAllocLimit) THEN
+					DevCPL486.MakeConst(z, 0, Pointer);
+					IF (nofptrs > 4) THEN x := z; DevCPL486.MakeReg(z, AX, Int32); DevCPL486.GenMove(x, z) END;
+					i := 0; a := size + base;
+					WHILE i < nofptrs DO
+						DEC(a, 4);
+						IF a # ptrTab[i] THEN AdjustStack(ptrTab[i] - a); a := ptrTab[i] END;
+						DevCPL486.GenPush(z); INC(i)
+					END;
+					IF a # base THEN AdjustStack(base - a) END
+				ELSE
+					AdjustStack(-size);
+					DevCPL486.MakeConst(x, 0, Pointer); DevCPL486.MakeReg(z, AX, Int32); DevCPL486.GenMove(x, z);
+					x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; i := 0; 
+					WHILE i < nofptrs DO
+						x.offset := ptrTab[i]; DevCPL486.GenMove(z, x); INC(i)
+					END
+				END
+			ELSE
+				AdjustStack(-size)
+			END
+		ELSE
+			nofptrs := 0;
+			AdjustStack(-size)
+		END
+	END AllocAndInitPtrs1;
+
+	PROCEDURE CAllocAndInitPtrs1 (proc: T.Proc; adr, size: INTEGER; VAR nofptrs: INTEGER);	(* needs AX *)
+		VAR i, base, a, gaps: INTEGER; x, z: DevCPL486.Item; obj: DevCPT.Object;
+	BEGIN
+		IF ptrinit THEN HALT(126)
+		ELSE
+			nofptrs := 0;
+			CAdjustStack(-size)
+		END
+	END CAllocAndInitPtrs1;
+
+	PROCEDURE InitPtrs2 (proc: DevCPT.Object; adr, size, nofptrs: INTEGER);	(* needs AX, CX, DI *)
+		VAR x, y, z, zero: DevCPL486.Item; obj: DevCPT.Object; zeroed: BOOLEAN; i: INTEGER; lbl: DevCPL486.Label;
+	BEGIN
+		IF ptrinit THEN
+			zeroed := FALSE; DevCPL486.MakeConst(zero, 0, Pointer);
+			IF nofptrs > MaxPtrs THEN
+				DevCPL486.MakeReg(z, AX, Int32); DevCPL486.GenMove(zero, z); zeroed := TRUE;
+				x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; x.offset := adr;
+				DevCPL486.MakeReg(y, DI, Int32); DevCPL486.GenLoadAdr(x, y);
+				DevCPL486.GenStrStore(size)
+			END;
+			obj := proc.link;	(* parameters *)
+			WHILE obj # NIL DO
+				IF (obj.mode = VarPar) & (obj.vis = outPar) THEN
+					nofptrs := 0;
+					IF obj.typ.comp = DynArr THEN	(* currently not initialized *)
+					ELSE FindPtrs(obj.typ, 0, nofptrs)
+					END;
+					IF nofptrs > 0 THEN
+						IF ~zeroed THEN
+							DevCPL486.MakeReg(z, AX, Int32); DevCPL486.GenMove(zero, z); zeroed := TRUE
+						END;
+						x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; x.offset := obj.adr;
+						DevCPL486.MakeReg(y, DI, Int32); DevCPL486.GenMove(x, y);
+						IF ODD(obj.sysflag DIV nilBit) THEN
+							DevCPL486.GenComp(zero, y);
+							lbl := DevCPL486.NewLbl; DevCPL486.GenJump(ccE, lbl, TRUE)
+						END;
+						IF nofptrs > MaxPtrs THEN
+							DevCPL486.GenStrStore(obj.typ.size)
+						ELSE
+							Sort(ptrTab, nofptrs);
+							x.reg := DI; i := 0;
+							WHILE i < nofptrs DO
+								x.offset := ptrTab[i]; DevCPL486.GenMove(z, x); INC(i)
+							END
+						END;
+						IF ODD(obj.sysflag DIV nilBit) THEN DevCPL486.SetLabel(lbl) END
+					END
+				END;
+				obj := obj.link
+			END
+		END
+	END InitPtrs2;
+	
+	PROCEDURE CInitPtrs2 (proc: T.Proc; adr, size, nofptrs: INTEGER);	(* needs AX, CX, DI *)
+		VAR x, y, z, zero: DevCPL486.Item; obj: DevCPT.Object; zeroed: BOOLEAN; i: INTEGER; lbl: DevCPL486.Label;
+	BEGIN
+		IF ptrinit THEN HALT(126)
+		END
+	END CInitPtrs2;
+	
+
+	PROCEDURE NeedOutPtrInit (proc: DevCPT.Object): BOOLEAN;
+		VAR obj: DevCPT.Object; nofptrs: INTEGER;
+	BEGIN
+		IF ptrinit THEN
+			obj := proc.link;
+			WHILE obj # NIL DO
+				IF (obj.mode = VarPar) & (obj.vis = outPar) THEN
+					nofptrs := 0;
+					IF obj.typ.comp = DynArr THEN	(* currently not initialized *)
+					ELSE FindPtrs(obj.typ, 0, nofptrs)
+					END;
+					IF nofptrs > 0 THEN RETURN TRUE END
+				END;
+				obj := obj.link
+			END
+		END;
+		RETURN FALSE
+	END NeedOutPtrInit;
+	
+	PROCEDURE CNeedOutPtrInit (proc: T.Proc): BOOLEAN;
+		VAR par: T.Par; i, len, nofptrs: INTEGER;
+	BEGIN
+		IF ptrinit THEN
+			IF proc.par = NIL THEN len := 0 ELSE len := LEN(proc.par) END;
+			i := 0; WHILE i < len DO par := proc.par[i];
+				IF par.flags * T.kindMask = T.outK THEN
+					nofptrs := 0;
+					IF (T.open IN par.type.flags) & (par.type IS T.Array) THEN	(* currently not initialized *)
+					ELSE CFindPtrs(par.type, 0, nofptrs)
+					END;
+					IF nofptrs > 0 THEN RETURN TRUE END
+				END;
+				INC(i)
+			END
+		END;
+		RETURN FALSE
+	END CNeedOutPtrInit;
+	
+	PROCEDURE EnterMod* (empty, useFpu: BOOLEAN);
+		VAR sp, fp, r, r1: L.Item; par: DevCPT.Object; adr, size, np: INTEGER;
+	BEGIN 
+		IF ~empty THEN (* enter module *)
+			procedureUsesFpu := useFpu;
+			SetReg({AX, CX, DX, SI, DI, R8, R9});
+			L.LMakeReg(fp, BP, T.fSysPtr); L.LMakeReg(sp, SP, T.fSysPtr);
+			L.LGenPush(fp);
+			L.LGenMove(sp, fp);
+			L.LMakeReg(r, DI, T.fInt64); L.LGenPush(r);
+			L.LMakeReg(r, SI, T.fInt64); L.LGenPush(r)
+		END;
+		IF useFpu THEN InitFpu END
+	END EnterMod;
+	
+	PROCEDURE Enter* (proc: DevCPT.Object; empty, useFpu: BOOLEAN);
+		VAR sp, fp, r, r1: DevCPL486.Item; par: DevCPT.Object; adr, size, np: INTEGER;
+	BEGIN
+		procedureUsesFpu := useFpu;
+		SetReg({AX, CX, DX, SI, DI});
+		DevCPL486.MakeReg(fp, BP, Pointer); DevCPL486.MakeReg(sp, SP, Pointer);
+		IF proc # NIL THEN (* enter proc *)
+			DevCPL486.SetLabel(proc.adr);
+			IF (~empty OR NeedOutPtrInit(proc)) & (proc.sysflag # noframe) THEN
+				DevCPL486.GenPush(fp);
+				DevCPL486.GenMove(sp, fp);
+				adr := proc.conval.intval2; size := -adr;
+				IF size < 0 THEN DevCPM.err(214); size := 256 END;
+				IF isGuarded IN proc.conval.setval THEN
+					DevCPL486.MakeReg(r, BX, Pointer); DevCPL486.GenPush(r);
+					DevCPL486.MakeReg(r, DI, Pointer); DevCPL486.GenPush(r);
+					DevCPL486.MakeReg(r, SI, Pointer); DevCPL486.GenPush(r);
+					r1.mode := Con; r1.form := Int32; r1.offset := proc.conval.intval - 8; r1.obj := NIL;
+					DevCPL486.GenPush(r1);
+					intHandler.used := TRUE;
+					r1.mode := Con; r1.form := Int32; r1.offset := 0; r1.obj := intHandler;
+					DevCPL486.GenPush(r1);
+					r1.mode := Abs; r1.form := Int32; r1.offset := 0; r1.scale := 0; r1.obj := NIL;
+					DevCPL486.GenCode(64H); DevCPL486.GenPush(r1);
+					DevCPL486.GenCode(64H); DevCPL486.GenMove(sp, r1);
+					DEC(size, 24)
+				ELSE
+					IF imVar IN proc.conval.setval THEN	(* set down pointer *)
+						DevCPL486.MakeReg(r, BX, Pointer); DevCPL486.GenPush(r); DEC(size, 4)
+					END;
+					IF isCallback IN proc.conval.setval THEN
+						DevCPL486.MakeReg(r, DI, Pointer); DevCPL486.GenPush(r);
+						DevCPL486.MakeReg(r, SI, Pointer); DevCPL486.GenPush(r); DEC(size, 8)
+					END
+				END;
+				ASSERT(size >= 0);
+				IF initializeAll THEN
+					AllocAndInitAll(proc, adr, size, np)
+				ELSE
+					AllocAndInitPtrs1(proc, adr, size, np);	(* needs AX *)
+					InitPtrs2(proc, adr, size, np);	(* needs AX, CX, DI *)
+				END;
+				par := proc.link;	(* parameters *)
+				WHILE par # NIL DO
+					IF (par.mode = Var) & (par.typ.comp = DynArr) THEN 
+						CopyDynArray(par.adr, par.typ)
+					END;
+					par := par.link
+				END;
+				IF imVar IN proc.conval.setval THEN
+					DevCPL486.MakeReg(r, BX, Pointer); DevCPL486.GenMove(fp, r)
+				END
+			END
+		ELSIF ~empty THEN (* enter module *)
+			DevCPL486.GenPush(fp);
+			DevCPL486.GenMove(sp, fp);
+			DevCPL486.MakeReg(r, DI, Int32); DevCPL486.GenPush(r);
+			DevCPL486.MakeReg(r, SI, Int32); DevCPL486.GenPush(r)
+		END;
+		IF useFpu THEN InitFpu END
+	END Enter;
+	
+	PROCEDURE CFillShadow* (proc: T.Proc; VAR x: ARRAY OF L.Item; len: INTEGER);
+	(** For ms64, copy register values to shadow area (on stack) *)
+		VAR src: L.Item; reg, w, i: INTEGER; kind: SET;
+	BEGIN
+		ASSERT(proc.flags * T.pfMask = T.ms64F, 20);
+		i := 0; WHILE i < len DO w := x[i].o.type.what; kind := x[i].o.flags * T.kindMask;
+			IF (w IN T.reals) & (kind = T.valK) THEN
+				CPrepare(x[i], {}, {});
+				L.LMakeReg(src, i, w); src.mode := Xmm;	 (*was -i-1 until I made XMM regnums positive *)
+				L.LGenRMove(src, x[i])
+			ELSIF kind # T.valK THEN ASSERT(x[i].mode = VarPar);
+				CLevelBase(x[i], 1, {}, {}); x[i].offset := x[i].o(T.Par).adr; x[i].what := T.fSysPtr;
+				CASE i OF 0: reg := CX | 1: reg := DX | 2: reg := R8 | 3: reg := R9 END;
+				L.LMakeReg(src, reg, T.fSysPtr);
+				L.LGenMove(src, x[i])
+			ELSIF w IN L.quads + L.doubles + L.words + L.bytes THEN
+				CPrepare(x[i], {}, {}); 
+				CASE i OF 0: reg := CX | 1: reg := DX | 2: reg := R8 | 3: reg := R9 END;
+				L.LMakeReg(src, reg, w);
+				L.LGenMove(src, x[i])
+			ELSE HALT(126)
+			END;
+			INC(i)
+		END
+	END CFillShadow;
+	
+	PROCEDURE CEnter* (proc: T.Proc; empty, useFpu: BOOLEAN);
+		VAR sp, fp, r, r1: L.Item; par: T.Par; i, len, adr, size, np: INTEGER; pflags: SET;
+	BEGIN
+		procedureUsesFpu := useFpu;
+		SetReg({AX, CX, DX, SI, DI, R8, R9});
+		L.LMakeReg(fp, BP, T.fSysPtr); L.LMakeReg(sp, SP, T.fSysPtr);
+		IF proc # NIL THEN (* enter proc *)
+			pflags := proc.flags * T.pfMask;
+			(*ASSERT(proc.adr = -1, 100 (*to be set in HrY *) ); proc.adr := 0;*) L.LSetLabel(proc.adr);
+			IF (~empty OR CNeedOutPtrInit(proc)) & (pflags # T.noframeF) THEN
+				L.LGenPush(fp);
+				L.LGenMove(sp, fp);
+				adr := proc.storage; size := -adr;
+				IF size < 0 THEN M.err(214); size := 256 END;
+				IF pflags = T.guardedF THEN HALT(126)
+				ELSE
+					IF pflags = T.imVarF THEN	(* set down pointer *)
+						L.LMakeReg(r, BX, T.fSysPtr); L.LGenPush(r); DEC(size, 8)
+					END;
+					(*callback and imVar are not mutually exclusive... this affects flag value allocations IF isCallback IN proc.conval.setval THEN
+						DevCPL486.MakeReg(r, DI, Pointer); DevCPL486.GenPush(r);
+						DevCPL486.MakeReg(r, SI, Pointer); DevCPL486.GenPush(r); DEC(size, 8(*16?*))
+					END*)
+				END;
+				ASSERT(size >= 0);
+				IF initializeAll THEN
+					CAllocAndInitAll(proc, adr, size, np)
+				ELSE
+					CAllocAndInitPtrs1(proc, adr, size, np);	(* needs AX *)
+					CInitPtrs2(proc, adr, size, np);	(* needs AX, CX, DI *)
+				END;
+				IF proc.par = NIL THEN len := 0 ELSE len := LEN(proc.par) END;
+				i := 0; WHILE i < len DO par := proc.par[i];
+					IF (par.flags * T.kindMask = T.valK) & (T.open IN par.type.flags) & (par.type.what = T.fArray) THEN 
+						CCopyOpenArray(par.adr, par.type(T.Array))
+					END;
+					INC(i)
+				END;
+				IF proc.flags * T.pfMask = T.imVarF THEN
+					L.LMakeReg(r, BX, T.fSysPtr); L.LGenMove(fp, r)
+				END
+			END
+		ELSIF ~empty THEN (* enter module *)
+			L.LGenPush(fp);
+			L.LGenMove(sp, fp);
+			L.LMakeReg(r, DI, T.fInt32); L.LGenPush(r);
+			L.LMakeReg(r, SI, T.fInt32); L.LGenPush(r)
+		END;
+		IF useFpu THEN CInitFpu END
+	END CEnter;
+	
+	PROCEDURE ExitMod* (empty: BOOLEAN);
+		VAR sp, fp, r, x: L.Item; size: INTEGER;
+	BEGIN
+		IF ~empty THEN
+			L.LMakeReg(r, SI, T.fInt64); L.LGenPop(r);
+			L.LMakeReg(r, DI, T.fInt64); L.LGenPop(r);
+			L.LMakeReg(sp, SP, T.fSysPtr); L.LMakeReg(fp, BP, T.fSysPtr);
+			L.LGenMove(fp, sp); L.LGenPop(fp)
+		END;
+		L.LGenReturn(0)
+	END ExitMod;
+	
+	PROCEDURE Exit* (proc: DevCPT.Object; empty: BOOLEAN);
+		VAR sp, fp, r, x: DevCPL486.Item; size: INTEGER;
+	BEGIN
+		DevCPL486.MakeReg(sp, SP, Pointer); DevCPL486.MakeReg(fp, BP, Pointer);
+		IF proc # NIL THEN (* exit proc *)
+			IF proc.sysflag # noframe THEN
+				IF ~empty OR NeedOutPtrInit(proc) THEN
+					IF isGuarded IN proc.conval.setval THEN	(* remove exception frame *)
+						x.mode := Ind; x.reg := BP; x.offset := -24; x.scale := 0; x.form := Int32;
+						DevCPL486.MakeReg(r, CX, Int32); DevCPL486.GenMove(x, r);
+						x.mode := Abs; x.offset := 0; x.scale := 0; x.form := Int32; x.obj := NIL;
+						DevCPL486.GenCode(64H); DevCPL486.GenMove(r, x);
+						size := 12
+					ELSE
+						size := 0;
+						IF imVar IN proc.conval.setval THEN INC(size, 4) END;
+						IF isCallback IN proc.conval.setval THEN INC(size, 8) END
+					END;
+					IF size > 0 THEN
+						x.mode := Ind; x.reg := BP; x.offset := -size; x.scale := 0; x.form := Int32;
+						DevCPL486.GenLoadAdr(x, sp);
+						IF size > 4 THEN
+							DevCPL486.MakeReg(r, SI, Int32); DevCPL486.GenPop(r);
+							DevCPL486.MakeReg(r, DI, Int32); DevCPL486.GenPop(r)
+						END;
+						IF size # 8 THEN
+							DevCPL486.MakeReg(r, BX, Int32); DevCPL486.GenPop(r)
+						END
+					ELSE
+						DevCPL486.GenMove(fp, sp)
+					END;
+					DevCPL486.GenPop(fp)
+				END;
+				IF proc.sysflag = ccall THEN DevCPL486.GenReturn(0)
+				ELSE DevCPL486.GenReturn(proc.conval.intval - 8)
+				END
+			END
+		ELSE (* exit module *)
+			IF ~empty THEN
+				DevCPL486.MakeReg(r, SI, Int32); DevCPL486.GenPop(r);
+				DevCPL486.MakeReg(r, DI, Int32); DevCPL486.GenPop(r);
+				DevCPL486.GenMove(fp, sp); DevCPL486.GenPop(fp)
+			END;
+			DevCPL486.GenReturn(0)
+		END
+	END Exit;
+	
+	PROCEDURE CExit* (proc: T.Proc; empty: BOOLEAN);
+		VAR sp, fp, r, x: L.Item; size: INTEGER; flags: SET;
+	BEGIN
+		L.LMakeReg(sp, SP, T.fSysPtr); L.LMakeReg(fp, BP, T.fSysPtr);
+		IF proc # NIL THEN (* exit proc *)
+			flags := proc.flags * T.pfMask;
+			IF flags # T.noframeF THEN
+				IF ~empty OR CNeedOutPtrInit(proc) THEN
+					IF flags = T.guardedF THEN	(* remove exception frame *) HALT(126)
+					ELSE
+						size := 0;
+						IF flags = T.imVarF THEN INC(size, 8) END;
+						(*Callback and imVar not mutually exclusive IF isCallback IN proc.conval.setval THEN INC(size, 8) END*)
+					END;
+					IF size > 0 THEN
+						x.mode := Ind; x.reg := BP; x.offset := -size; x.scale := 0; x.what := T.fSysPtr;
+						L.LGenLoadAdr(x, sp);
+						IF size > 8 THEN
+							L.LMakeReg(r, SI, T.fSysPtr); L.LGenPop(r);
+							L.LMakeReg(r, DI, T.fSysPtr); L.LGenPop(r)
+						END;
+						IF size # 16 THEN
+							L.LMakeReg(r, BX, T.fInt64); L.LGenPop(r)
+						END
+					ELSE
+						L.LGenMove(fp, sp)
+					END;
+					L.LGenPop(fp)
+				END;
+				IF (flags * T.ccallF = T.ccallF) OR (flags * T.ms64F = T.ms64F) OR (flags * T.sysvF = T.sysvF) THEN size := 0
+				ELSE size := proc.padr ;ASSERT(size >= 0)
+				END;
+				L.LGenReturn(size)
+			END
+		ELSE (* exit module *)
+			IF ~empty THEN
+				L.LMakeReg(r, SI, T.fInt32); L.LGenPop(r);
+				L.LMakeReg(r, DI, T.fInt32); L.LGenPop(r);
+				L.LMakeReg(sp, SP, T.fSysPtr); L.LMakeReg(fp, BP, T.fSysPtr);
+				L.LGenMove(fp, sp); L.LGenPop(fp)
+			END;
+			L.LGenReturn(0)
+		END
+	END CExit;
+	
+	PROCEDURE InstallStackAlloc*;
+		VAR name: ARRAY 32 OF SHORTCHAR; ax, cx, sp, c, x: DevCPL486.Item; l1, l2: DevCPL486.Label;
+	BEGIN
+		IF stkAllocLbl # DevCPL486.NewLbl THEN
+			DevCPL486.SetLabel(stkAllocLbl);
+			DevCPL486.MakeReg(ax, AX, Int32);
+			DevCPL486.MakeReg(cx, CX, Int32);
+			DevCPL486.MakeReg(sp, SP, Int32);
+			DevCPL486.GenPush(ax);
+			DevCPL486.MakeConst(c, -5, Int32); DevCPL486.GenAdd(c, cx, FALSE);
+			l1 := DevCPL486.NewLbl; DevCPL486.GenJump(ccNS, l1, TRUE);
+			DevCPL486.MakeConst(c, 0, Int32); DevCPL486.GenMove(c, cx);
+			DevCPL486.SetLabel(l1);
+			DevCPL486.MakeConst(c, -4, Int32); DevCPL486.GenAnd(c, cx);
+			DevCPL486.GenMove(cx, ax);
+			DevCPL486.MakeConst(c, 4095, Int32); DevCPL486.GenAnd(c, ax);
+			DevCPL486.GenSub(ax, sp, FALSE);
+			DevCPL486.GenMove(cx, ax);
+			DevCPL486.MakeConst(c, 12, Int32); DevCPL486.GenShiftOp(SHR, c, ax);
+			l2 := DevCPL486.NewLbl; DevCPL486.GenJump(ccE, l2, TRUE);
+			l1 := DevCPL486.NewLbl; DevCPL486.SetLabel(l1);
+			DevCPL486.MakeConst(c, 0, Int32); DevCPL486.GenPush(c);
+			DevCPL486.MakeConst(c, 4092, Int32); DevCPL486.GenSub(c, sp, FALSE);
+			DevCPL486.MakeConst(c, -1, Int32); DevCPL486.GenAdd(c, ax, FALSE);
+			DevCPL486.GenJump(ccNE, l1, TRUE);
+			DevCPL486.SetLabel(l2);
+			DevCPL486.MakeConst(c, 8, Int32); DevCPL486.GenAdd(c, cx, FALSE);
+			x.mode := Ind; x.form := Int32; x.offset := -4; x.index := CX; x.reg := SP; x.scale := 1;
+			DevCPL486.GenMove(x, ax);
+			DevCPL486.GenPush(ax);
+			DevCPL486.GenMove(x, ax);
+			DevCPL486.MakeConst(c, 2, Int32); DevCPL486.GenShiftOp(SHR, c, cx);
+			DevCPL486.GenReturn(0);
+			name := "$StackAlloc"; DevCPE.OutRefName(name);
+		END
+	END InstallStackAlloc;
+
+	PROCEDURE CInstallStackAlloc*;
+		CONST CDQE = 98H;
+		VAR rax, ax, cx, sp, c, x: L.Item; l1, l2: L.Label;
+	BEGIN
+		IF stkAllocLbl # L.NewLbl THEN
+			L.LSetLabel(stkAllocLbl);
+			L.LMakeReg(ax, AX, T.fInt32); L.LMakeReg(rax, AX, T.fInt64);
+			L.LMakeReg(cx, CX, T.fInt32);
+			L.LMakeReg(sp, SP, T.fSysPtr);
+			L.LGenPush(ax);
+			L.LMakeConst(c, -5, T.fInt32); L.LGenAdd(c, cx, FALSE);
+			l1 := L.NewLbl; L.GenJump(ccNS, l1, TRUE);
+			L.LMakeConst(c, 0, T.fInt32); L.LGenMove(c, cx);
+			L.LSetLabel(l1);
+			L.LMakeConst(c, -4, T.fInt32); L.LGenAnd(c, cx);
+			L.LGenMove(cx, ax);
+			L.LMakeConst(c, 4095, T.fInt32); L.LGenAnd(c, ax);
+			E.GenByte(CDQE);
+			L.LGenSub(rax, sp, FALSE);
+			L.LGenMove(cx, ax);
+			L.LMakeConst(c, 12, T.fInt32); L.LGenShiftOp(SHR, c, ax);
+			l2 := L.NewLbl; L.GenJump(ccE, l2, TRUE);
+			l1 := L.NewLbl; L.LSetLabel(l1);
+			L.LMakeConst(c, 0, T.fInt32); L.LGenPush(c);
+			L.LMakeConst(c, 4092, T.fInt64); L.LGenSub(c, sp, FALSE);
+			L.LMakeConst(c, -1, T.fInt32); L.LGenAdd(c, ax, FALSE);
+			L.GenJump(ccNE, l1, TRUE);
+			L.LSetLabel(l2);
+			L.LMakeConst(c, 8, T.fInt32); L.LGenAdd(c, cx, FALSE);
+			x.mode := Ind; x.what := T.fInt32; x.offset := -4; x.index := CX; x.reg := SP; x.scale := 1;
+			L.LGenMove(x, ax);
+			L.LGenPush(ax);
+			L.LGenMove(x, ax);
+			L.LMakeConst(c, 2, T.fInt32); L.LGenShiftOp(SHR, c, cx);
+			L.LGenReturn(0);
+			E.EOutRefName("$StackAlloc")
+		END
+	END CInstallStackAlloc;
+
+
+	PROCEDURE Trap* (n: INTEGER);
+	BEGIN
+		DevCPL486.GenAssert(ccNever, n)
+	END Trap;
+	
+	PROCEDURE CTrap* (n: INTEGER);
+	BEGIN
+		L.LGenAssert(ccNever, n)
+	END CTrap;
+	
+	PROCEDURE Jump* (VAR L: DevCPL486.Label);
+	BEGIN
+		DevCPL486.GenJump(ccAlways, L, FALSE)
+	END Jump;
+
+	PROCEDURE CJump* (VAR lbl: L.Label);
+	BEGIN
+		L.GenJump(ccAlways, lbl, FALSE)
+	END CJump;
+
+	PROCEDURE JumpT* (VAR x: DevCPL486.Item; VAR L: DevCPL486.Label);
+	BEGIN
+		DevCPL486.GenJump(x.offset, L, FALSE);
+	END JumpT; 
+	
+	PROCEDURE CJumpT* (VAR x: L.Item; VAR lbl: L.Label);
+	BEGIN
+		L.GenJump(x.offset, lbl, FALSE);
+	END CJumpT; 
+	
+	PROCEDURE JumpF* (VAR x: DevCPL486.Item; VAR L: DevCPL486.Label);
+	BEGIN
+		DevCPL486.GenJump(Inverted(x.offset), L, FALSE);
+	END JumpF;
+	
+	PROCEDURE CJumpF* (VAR x: L.Item; VAR lbl: L.Label);
+	BEGIN
+		L.GenJump(Inverted(x.offset), lbl, FALSE);
+	END CJumpF;
+	
+	PROCEDURE CaseTableJump* (VAR x: DevCPL486.Item; low, high: INTEGER; VAR else: DevCPL486.Label);
+		VAR c: DevCPL486.Item; n: INTEGER;
+	BEGIN
+		n := high - low + 1;
+		DevCPL486.MakeConst(c, low, Int32); DevCPL486.GenSub(c, x, FALSE);
+		DevCPL486.MakeConst(c, n, Int32); DevCPL486.GenComp(c, x);
+		DevCPL486.GenJump(ccAE, else, FALSE);
+		DevCPL486.GenCaseJump(x)
+	END CaseTableJump;
+	
+	PROCEDURE CaseJump* (VAR x: DevCPL486.Item; low, high: INTEGER; VAR this, else: DevCPL486.Label; tree, first: BOOLEAN);
+		VAR c: DevCPL486.Item;
+	BEGIN
+		IF high = low THEN
+			DevCPL486.MakeConst(c, low, Int32); DevCPL486.GenComp(c, x);
+			IF tree THEN DevCPL486.GenJump(ccG, else, FALSE) END;
+			DevCPL486.GenJump(ccE, this, FALSE)
+		ELSIF first THEN
+			DevCPL486.MakeConst(c, low, Int32); DevCPL486.GenComp(c, x);
+			DevCPL486.GenJump(ccL, else, FALSE);
+			DevCPL486.MakeConst(c, high, Int32); DevCPL486.GenComp(c, x);
+			DevCPL486.GenJump(ccLE, this, FALSE);
+		ELSE
+			DevCPL486.MakeConst(c, high, Int32); DevCPL486.GenComp(c, x);
+			DevCPL486.GenJump(ccG, else, FALSE);
+			DevCPL486.MakeConst(c, low, Int32); DevCPL486.GenComp(c, x);
+			DevCPL486.GenJump(ccGE, this, FALSE);
+		END
+	END CaseJump;
+
+BEGIN
+	imLevel[0] := 0
+END HrC.
+
+
+V.proc
+	↳V.stat
+		↳V.Assign
+			↳V.expr (right side)
+			↳V.expr (left side)
+				↳V.design
+				↳C.Prepare
+					↳L.MakeReg
+			↳C.Assign
+				↳L.GenMove
+					↳E.GenByte ...
+
+
+V.proc
+	↳V.stat
+		↳V.Assign
+			↳V.expr (right side)
+			↳V.expr (left side)
+				↳V.design
+				↳C.Prepare
+					↳L.MakeReg
+			↳C.Assign
+				↳L.GenMove
+					↳E.GenByte ...
+					
+					
+
+	V
+	↑	↖
+	C	←	E 
+	↑	↙
+	L
+
+
+
+Discussion points:
+* Why aren't ENTER and LEAVE used?
+* ARM: did you adapt CP2's register allocation strategy, or did you start yours from scratch? Could I use your text?

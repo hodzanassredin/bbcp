@@ -1,0 +1,473 @@
+MODULE HrPeFmt;
+
+(* Before moving PEheader to the 1st page *)
+
+	IMPORT SYSTEM, Files, Utf, 
+		Log, 
+		B := HrBinder;
+	
+	CONST
+		pageSize = 1000H; 
+		v32 = 0; v64 = 1;
+		version = v64;	(* should be a variable when/if 32bit is implemented *)
+		defMinStack = 10000H; defMaxStack = 200000H; 
+		defMinHeap = 10000H; defMaxHeap = 400000H;
+		peHdrPosOffs = 60;	(** offset of 'PE Header Position' field in the MZ header *)
+		addrSize = 8;
+		exeImageBase = 400000H; dllImageBase = 10000000H;
+		numOfSpecialDirs = 16;
+			(** special directories are the export and import tables, etc. aka NumOfRvaAndSizes; includes terminator *)
+		peHeaderSize = 112 + numOfSpecialDirs * 8;
+		
+		
+		(* Section header flags *)
+		codesec = 5; datasec = 6; executable = 29; readable = 30; writeable = 31;
+		
+		fileAlignment = 512;
+	
+	TYPE
+		Formatter = POINTER TO RECORD (B.Formatter) END;
+	
+	VAR
+		codeSize, metaSize: INTEGER;
+		availPos,	(** Available file position *)
+		availAddr: INTEGER;	(** Available RVA *)
+		minStack*, maxStack*, minHeap*, maxHeap*: LONGINT;
+		(*impDirAddr, impDirLen: INTEGER;*)
+		out: Files.Writer;
+		zero: ARRAY fileAlignment OF BYTE;
+		segments: INTEGER;
+		(*bndPos, bndAddr, bndLen: INTEGER;	(* properties of the BindData section *)*)
+		imageBase: INTEGER;
+		peFlags: SET;
+		formatter: Formatter;
+		peBkmrk: INTEGER;	(* a bookmark for the PE Header immediately following the DOS header *)
+
+	PROCEDURE OutSString (IN s: ARRAY OF SHORTCHAR);
+		VAR len: INTEGER;
+	BEGIN len := LEN(s$) + 1; out.WriteBytes(SYSTEM.THISARRAY(SYSTEM.ADR(s[0]), len), 0, len)
+	END OutSString;
+	
+	PROCEDURE OutByte (byte: SHORTCHAR);
+		VAR b: INTEGER;
+	BEGIN IF byte <= 7FX THEN b := ORD(byte) ELSE b := ORD(byte) - 100H END;
+		out.WriteByte(SHORT(SHORT(b))) 
+	END OutByte;
+	
+	PROCEDURE OutInt (x: INTEGER);
+	BEGIN out.WriteBytes(SYSTEM.THISARRAY(SYSTEM.ADR(x), 4), 0, 4)
+	END OutInt;
+	
+	PROCEDURE OutLong (x: LONGINT);
+	BEGIN out.WriteBytes(SYSTEM.THISARRAY(SYSTEM.ADR(x), 8), 0, 8)
+	END OutLong;
+	
+	PROCEDURE OutShort (x: INTEGER);
+	BEGIN out.WriteBytes(SYSTEM.THISARRAY(SYSTEM.ADR(x), 2), 0, 2)
+	END OutShort;
+	
+	PROCEDURE SkipTo (pos: INTEGER); 
+	BEGIN DEC(pos, out.Pos()); ASSERT(pos >= 0, 20); IF pos > 0 THEN out.WriteBytes(zero, 0, pos) END
+	END SkipTo;
+	
+	PROCEDURE Aligned (x, modulus: INTEGER): INTEGER;
+	BEGIN RETURN (x + modulus - 1) DIV modulus * modulus
+	END Aligned;
+	
+	PROCEDURE FileAligned (x: INTEGER): INTEGER;
+	BEGIN RETURN (x + fileAlignment - 1) DIV fileAlignment * fileAlignment
+	END FileAligned;
+	
+
+	
+	PROCEDURE OutDosStub;
+	CONST sizeOfStub = 128; (* >= 64 *)
+	BEGIN	(* dos stub has to fit under fileAlignment; cf availPos :=, availAddr := in NewJob *)
+		(* DOS header *)
+		OutInt(905A4DH); OutInt(3); OutInt(4); OutInt(0FFFFH);
+		OutInt(0B8H); OutInt(0); OutInt(40H); OutInt(0);
+		OutInt(0); OutInt(0); OutInt(0); OutInt(0);
+		OutInt(0); OutInt(0); OutInt(0); 
+		OutInt(-1);	(* PE header position *)
+		OutInt(0EBA1F0EH); OutInt(0CD09B400H); OutInt(4C01B821H); OutShort(21CDH);
+		OutSString("This program cannot be run in DOS mode.");
+		OutInt(240A0D0DH);
+		OutInt(0)
+	END OutDosStub;
+		
+	PROCEDURE (elf: Formatter) NewJob (f: Files.File);
+		CONST noRelocs = 0; exeImg = 1; largeAddr = 5; noDbg = 9; dllImage = 13; 
+			exeFlags = { noRelocs, exeImg, noDbg, largeAddr };
+			dllFlags = { exeImg, noDbg, largeAddr, dllImage };
+	BEGIN
+		out := f.NewWriter(NIL);
+		codeSize := 0; metaSize := 0;
+		(*IF B.terminal THEN*) availPos := fileAlignment; availAddr := fileAlignment;  (* skip DOS header + stub *)
+		(*ELSE HALT(126) *)
+		(*END;*)
+		IF B.terminal THEN imageBase := exeImageBase; peFlags := exeFlags
+		ELSE imageBase := dllImageBase; peFlags := dllFlags
+		END;
+		segments := 0;
+		out.SetPos(0);
+		OutDosStub;
+		peBkmrk := Aligned(out.Pos(), 8);
+		SkipTo(peBkmrk);
+		out.SetPos(peHdrPosOffs); OutInt(peBkmrk); out.SetPos(peBkmrk);
+		REPEAT SkipTo(MIN(out.Pos() + fileAlignment, 1000H)) UNTIL out.Pos() = 1000H; availPos := 1000H
+	END NewJob;
+
+	PROCEDURE OutSeg (IN s: B.Segment; a: ARRAY OF BYTE; b: POINTER TO ARRAY OF BYTE; check: BOOLEAN);
+	(** Output data in a and b (if any) into segment s *)
+	BEGIN
+		SkipTo(s.pos); ASSERT(s.pos = out.Pos());
+		out.WriteBytes(a, 0, LEN(a)); IF b # NIL THEN out.WriteBytes(b^, 0, LEN(b)) END;
+		IF check THEN ASSERT(out.Pos() = s.pos + s.len) END
+	END OutSeg;
+	
+	PROCEDURE PositionSeg (VAR s: B.Segment; len: INTEGER);
+	(** Assign s a position in the file; fileAligned *)
+	BEGIN s.pos := FileAligned(availPos); availPos := s.pos + len; s.len := len
+	END PositionSeg;
+	
+	PROCEDURE AllocSeg (VAR s: B.Segment; size: INTEGER);
+	(** Assign s a memory address *)
+	BEGIN s.addr := B.PageAligned(availAddr); availAddr := s.addr + size; s.size := size
+	END AllocSeg;
+
+	PROCEDURE (elf: Formatter) AllocateMod- (m: B.Module);
+	(** Allocate m's segments' virtual base addresses and file positions *)
+		CONST cnt_code=5; cnt_data= 6; cnt_udata= 7; discard = 25; 
+	BEGIN
+		B.DefSeg(m.meta, 0, pageSize, {datasec, readable, writeable});
+		PositionSeg(m.meta, B.AdAligned(m.ms) + (m.imps + m.exts)* addrSize);	(* file:  *)
+		AllocSeg(m.meta, B.AdAligned(m.ms) + (m.imps + m.exts) * addrSize); 
+		
+		B.DefSeg(m.code, 0 (*PT_LOAD*), pageSize, {codesec, readable, executable});
+		PositionSeg(m.code, m.cs);
+		AllocSeg(m.code, m.cs);
+		INC(codeSize, m.code.size);
+		
+		B.DefSeg(m.vars, 0 (*PT_LOAD*), pageSize, {datasec, readable, writeable});
+		PositionSeg(m.vars, m.ds);	(* in file, Vars holds DescBlk *)
+		AllocSeg(m.vars, B.AdAligned(m.ds) + B.AdAligned(m.vs));	(* in memory, Vars holds  *)
+		INC(metaSize, m.meta.len + m.vars.len);
+	END AllocateMod;
+	
+	PROCEDURE (elf: Formatter) WriteMod (m: B.Module; meta, imps, code, desc: POINTER TO ARRAY OF BYTE);
+		CONST check = TRUE;
+		VAR i: INTEGER;
+	BEGIN
+		OutSeg(m.meta, meta, imps, ~check);
+		i := m.exts; WHILE i > 0 DO OutLong(-1); DEC(i) END;
+		ASSERT(out.Pos() = m.meta.pos + m.meta.len);
+		OutSeg(m.code, code, NIL, check);
+		OutSeg(m.vars, desc, NIL, check);
+		INC(segments, 3)
+	END WriteMod;
+	
+	PROCEDURE OutExternals (baseAddr, basePos: INTEGER; OUT dirPos, dirLen: INTEGER);
+	(** baseAddr and basePos refer to the segment in which the binding info is written out. dirPos and dirLen refer to Import Directory Table *)
+		VAR addr, i, j, k, res: INTEGER; sh: SHORTCHAR; n: ARRAY 512 OF SHORTCHAR; m: B.Module;
+			r: POINTER TO B.RelocArr;
+	BEGIN
+		(*
+		ImportDirectory = { @UsedNames 0/4 0/4 @DllName @ResolvedAddresses } 0/4 0/4 0/4 0/4 0/4 .
+			= { @UsedName 0/4 0/4 @DllName @Proxy }
+		UsedNames = { @HintName } 0/8 .
+			UsedName = @HintName 0/8 HintName .
+			HintName = 0/2 Name 0X .
+
+		HintName = Hint Name [ 0X ] .
+		Hint = int/2 .
+		Name = { char } 0X .
+		DllName = { char } 0X .
+		
+		UsedNames = ImportLookupTable. ResolvedAddresses = ImportAddressTable. 
+		
+		It is convenient to out in reverse order: first, out each HintName; this will assign an RVA to each name; then, out ImportedNames for each DLL; this will assign an RVA to each DLL's ImportedNames; and lastly, out the DllNames, which might have to be at the start of .idata. 
+		This suggested order is reverse to what MS suggests; doing it their way would require two passes: first, walk thru the structures and allocate RVAs; then, walk thru the structures again to actually out data. *)
+		
+		(* out DLL names *)
+		m := B.modules; WHILE m # NIL DO
+			IF (m.name[0] = '$') & m.used THEN
+				m.nameInd := out.Pos() - basePos + baseAddr; 
+				Utf.StringToUtf8(m.name, n, res); ASSERT(res = 0);
+				j := 0; k := 1; REPEAT sh := n[k]; n[j] := sh; INC(j); INC(k) UNTIL sh = 0X;
+				OutSString(n)
+			END;
+			m := m.link
+		END;
+		
+		(* out ILT (index lookup table) entries and HintNames *)
+		i := 1; WHILE i < B.extIndex DO
+			addr := baseAddr + (out.Pos() - basePos);
+			(*IF ODD(pos) THEN INC(pos); out.WriteByte(0) END;	(* alignment to 2-byte boundary *)*)
+			B.SetExtNmPos(i, addr);
+			OutLong(addr + 16); 	(* +16 skips the two following quadwords *)
+			OutLong(0);
+			out.WriteBytes(zero, 0, 2); 	(* hint *)
+			Utf.StringToUtf8(B.externals[i].name, n, res); ASSERT(res = 0);
+			OutSString(n);
+			INC(i)
+		END;
+		
+		dirPos := out.Pos();
+
+		(* out Bindings into the Import Directory Table *)
+		k := LEN(B.RelocArr);
+		i := 0; WHILE i <= B.relPage DO 
+			r := B.elfReloc[i]; ASSERT((r # NIL) OR (B.relPage = 0) & (B.relModulus = 0));
+			IF i = B.relPage THEN k := B.relModulus END;
+			j := 0; WHILE j < k DO
+				OutInt(B.externals[r[j].symInd].nsoffs); 	(* @UsedName *)
+				OutInt(0); OutInt(0); 
+				OutInt(B.externals[r[j].symInd].mod.nameInd);	(* @DllName *)
+				OutInt(SHORT(r[j].virtAddr));	(* @Proxy *)
+				INC(j)
+			END;
+			INC(i)
+		END;
+		out.WriteBytes(zero, 0, 4*5);	(* null entry at the end of Import Directory Table *)
+		dirLen := out.Pos() - dirPos;
+		ASSERT((B.relPage * LEN(B.RelocArr) + B.relModulus + 1) * 20 = dirLen)
+		
+	END OutExternals;
+	
+	PROCEDURE OutHeader (imageSize, dirAddr, dirLen, expAddr, dllMainAddr: INTEGER);
+	(** Import directory address dirAddr and length dirLen; Export Directory Table address expAddr *)
+		CONST ssGUI = 2; (* ssCUI = 1; ssNATIVE = 1 *)
+		VAR i: INTEGER;
+	BEGIN
+		OutInt(4550H); (* signature "PE" *)
+		(* COFF header *)
+		OutShort(8664H); (* Machine  (x86-64) *)
+		OutShort(segments);
+		OutInt(0); 	(* TimeDateStamp *)
+		OutInt(0); 	(* PointerToSymbolTable *)
+		OutInt(0);	(* NumberOfSymbols *)
+		OutShort(peHeaderSize);	(* -8 is an euristic number ;-) *)	(* SizeOfOptionalHeader *)
+		OutShort(ORD(peFlags)) ;	(* Characteristics *)
+		(* 'Optional' header *)
+		OutShort(20BH); (* magic (normal ececutable file) *)
+		OutShort(0502H);	 (* linker version 2.5 *) 
+		OutInt(codeSize); (* SizeOfCode *)
+		OutInt(metaSize); (* SizeOfInitializedData  *)
+		OutInt(0); (* SizeOfUninitializedData *)
+		IF B.terminal THEN OutInt(B.entryMod.code.addr) 
+		ELSE OutInt(dllMainAddr) 	(* each module's BEGIN section has to be called *)
+		END; 	(* entry point *)
+		OutInt(B.entryMod.code.addr); (* BaseOfCode rva *)
+		OutLong(imageBase);
+		OutInt(pageSize); 	(* Section alignment *)
+		OutInt(fileAlignment); 
+		OutShort(5); OutShort(1); (* OperatingSystemVersion (Major, Minor) *)
+		OutShort(4); OutShort(0); (* ImageVersion *)
+		OutShort(5); OutShort(0); (* SubsystemVersion: 5.0 - Windows 2000 *) 
+		OutInt(0); (* reserved = 0*)
+		
+		OutInt(imageSize); 
+		OutInt(pageSize);
+		OutInt(0); (* CheckSum *)
+		OutShort(ssGUI);
+		IF B.terminal THEN OutShort(0) ELSE OutShort(64(*DYNAMIC_BASE*)) END; (* DllCharacteristics *)
+		OutLong(maxStack); 
+		OutLong(minStack); 
+		OutLong(maxHeap); 
+		OutLong(minHeap); 
+		OutInt(0);	(* LoaderFlags =0 *)
+
+		OutInt(numOfSpecialDirs); (* NumberOfRvaAndSizes *)
+		(* IMAGE_DIRECTORY: [numOfSpecialDirs] *)
+		IF B.terminal THEN OutLong(0) ELSE OutInt(expAddr); OutInt(40) END;	(* Export Table *)	
+		OutInt(dirAddr); OutInt(dirLen);	 (* Import Table  *)	
+		i := 2; WHILE i < numOfSpecialDirs DO OutLong(0); (* terminator? *) INC(i) END
+	END OutHeader;
+	
+	PROCEDURE OutSecHdr (IN name: ARRAY 8 OF CHAR; size, addr, pos, len: INTEGER; flags: SET);
+		VAR short: ARRAY 8 OF BYTE; i: INTEGER; ch: CHAR;
+	BEGIN
+		i := -1; REPEAT INC(i); ch := name[i]; 
+			IF ch < 80X THEN short[i] := SHORT(SHORT(ORD(ch)))
+			ELSIF ch < 100X THEN short[i] := SHORT(SHORT(ORD(ch) - 100H)) 
+			ELSE HALT(20) END
+		UNTIL ch = 0X;
+		WHILE i < 7 DO INC(i); short[i] := 0 END;
+		out.WriteBytes(short, 0, 8);	(* null name of segment *)
+		OutInt(size); OutInt(addr); OutInt(len); OutInt(pos);
+		OutLong(0);	(* no relocations, no linenums *)
+		OutInt(0);
+		OutInt(ORD(flags))
+	END OutSecHdr;
+	
+	PROCEDURE OutSegHdr (IN s: B.Segment; IN name: ARRAY 8 OF CHAR);
+	BEGIN OutSecHdr(name$, s.size, s.addr, s.pos, s.len, s.flags)
+	END OutSegHdr;
+	
+	PROCEDURE OutSectionHeaders;
+		VAR m: B.Module;
+	BEGIN
+		m := B.modules; WHILE m # NIL DO
+			IF m.name[0] # '$' THEN 
+				OutSegHdr(m.meta, "MetaBlk"); OutSegHdr(m.code, "CodeBlk"); OutSegHdr(m.vars, "DescBlk") 
+			END;
+			m := m.link
+		END
+	END OutSectionHeaders;
+	
+	PROCEDURE Traverse (e: B.Export; VAR entries, names: ARRAY OF INTEGER; VAR top: INTEGER);
+	BEGIN
+		IF e.left # NIL THEN Traverse(e.left, entries, names, top) END;
+		IF e.addr > 0 THEN entries[top] := e.mod.code.addr + e.addr
+		ELSE entries[top] := (e.mod.vars.addr + e.mod.vars.size - e.mod.vs) - e.addr
+		END;
+		names[top] := e.mod.meta.addr + e.nameOffs;
+		INC(top);
+		Log.String(e.name); Log.Ln;
+		IF e.right # NIL THEN Traverse(e.right, entries, names, top) END
+	END Traverse;
+	
+	PROCEDURE OutExportDirTab (base: INTEGER);
+	(** Assumes export data allocated at base RVA *)
+	BEGIN
+		OutInt(0);
+		OutInt(0);	(* timestamp *)
+		OutInt(0);	(* major minor ver *)
+		OutInt(base + 40 + B.nofExports * 10);	(* RVA of DLL name: outed after ExpAddrTab,  *)
+		OutInt(1);	(* Ordinal base *)
+		OutInt(B.nofExports);	(* Address Table Entries *)
+		OutInt(B.nofExports);	(* number of name pointers *)
+		OutInt(base + 40);	(* RVA of EAT *)
+		OutInt(base + 40 + B.nofExports * 4);	(* RVA of name pointers table *)
+		OutInt(base + 40 + B.nofExports * 8);	(* RVA of ordinals table *)
+	END OutExportDirTab;
+	
+	PROCEDURE OutExports (expAddr: INTEGER);
+		TYPE ExpRec = RECORD entry, name: INTEGER END;
+		VAR entries, names: POINTER TO ARRAY OF INTEGER; _, i, top: INTEGER; 
+			buf: ARRAY 512 OF SHORTCHAR;
+	BEGIN
+		(* ExportAddressTable ExportNamePointerTable ExportOrdinalTable *)
+		IF B.nofExports > 0 THEN
+			OutExportDirTab(expAddr);
+			NEW(entries, B.nofExports); NEW(names, B.nofExports); top := 0;
+			Traverse(B.exports, entries^, names^, top);
+			i := 0; WHILE i < top DO OutInt(entries[i]); INC(i) END;
+			i := 0; WHILE i < top DO OutInt(names[i]); INC(i) END;
+			i := 0; WHILE i < top DO OutShort(i); INC(i) END;
+			Utf.StringToUtf8(B.libName, buf, _);
+			OutSString(buf);
+		END
+	END OutExports;
+	
+	
+	PROCEDURE OutCallBegin (m: B.Module; VAR rip: INTEGER);
+	BEGIN	(* ASSERT each module has a BEGIN section, even if it's just a degenerate RET *)
+		IF m.link # NIL THEN OutCallBegin(m.link, rip) END;
+		IF m.name[0] # '$' THEN INC(rip, 5); 
+			OutByte(0E8X); OutInt(m.code.addr - rip)	(* CALL RIP - m.BEGIN *)
+		END
+	END OutCallBegin;
+	
+	PROCEDURE OutDllMain (rip: INTEGER);
+		VAR p, q, r: INTEGER;
+	BEGIN
+		p := out.Pos();
+		OutInt(840FD209H); q := out.Pos(); OutInt(0);	(* OR EDX, EDX; JZ ? *)
+		OutInt(0674CAFFH);	(* DEC EDX; JZ +6 *)
+		OutByte(0B8X); OutInt(1); 	(* MOV EAX, 1 *)
+		OutByte(0C3X);	(* RET *)
+		(* Init: *)
+		INC(rip, out.Pos() - p);
+		OutCallBegin(B.modules, rip);
+		OutByte(0B8X); OutInt(1); 	(* MOV EAX, 1 *)
+		OutByte(0C3X);	(* RET *)
+		(* Deinit: *)
+		r := out.Pos(); out.SetPos(q); OutInt(r - q - 4); out.SetPos(r);
+		(*m := B.modules; WHILE m # NIL DO ... END;*)
+		OutByte(0B8X); OutInt(1); 	(* MOV EAX, 1 *)
+		OutByte(0C3X);	(* RET *)
+	END OutDllMain;
+	
+			
+		
+	PROCEDURE (elf: Formatter) CloseJob;
+		CONST sectionHeaderSize = 40;
+		VAR peHdrPos, 
+			impsAddr, impsPos, impsLen, 	(* refers to the Import Address Table *)
+			expAddr, expPos, 	(* refers to the Export Directory Table *)
+			bndPos, bndAddr, bndLen: INTEGER;	(* refers to the 'binding segment', which holds externals (imports) and exports info *)
+			bndFlags: SET;
+			dllEntryAddr: INTEGER;
+	BEGIN
+		bndPos := FileAligned(availPos); bndAddr := B.PageAligned(availAddr);
+		SkipTo(bndPos);
+		OutExternals(bndAddr, bndPos, impsPos, impsLen);
+		impsAddr := bndAddr + impsPos - bndPos;
+		IF ~B.terminal THEN		(* out externals here! *)
+			expPos := Aligned(out.Pos(), 8); SkipTo(expPos);
+			expAddr :=  bndAddr + expPos - bndPos;
+			OutExports(expAddr)
+			;ASSERT(expPos + 40 + B.nofExports * 10 + LEN(B.libName$) + 1 = out.Pos(), 100);
+		ELSE expAddr := -1
+		END;
+		IF ~B.terminal THEN 
+			dllEntryAddr := out.Pos() - bndPos + bndAddr;
+			OutDllMain(dllEntryAddr)
+		END;
+		bndLen := out.Pos() - bndPos;
+		
+		INC(segments); (* this is for the bindings segment *)
+		peHdrPos := Aligned(out.Pos(), 8); SkipTo(peHdrPos);
+		out.SetPos(peBkmrk);
+		OutHeader(B.PageAligned(bndAddr + bndLen), impsAddr, impsLen, expAddr, dllEntryAddr);
+		OutSectionHeaders; 
+		IF B.terminal THEN bndFlags := { writeable, readable } ELSE bndFlags := { writeable, readable, executable } END;
+		(*bndLen := out.Pos() - bndPos + 40;*)	(* this way, Binder section covers the PE hdr and the section hdrs *)
+		OutSecHdr("Binder", bndLen, bndAddr, bndPos, bndLen, bndFlags);
+		(*out.SetPos(peHdrPosOffs); OutInt(peHdrPos);*)
+		out := NIL
+	END CloseJob;
+
+	PROCEDURE InitMod;
+		CONST EM_386 = 3; EM_X86_64 = 62;
+		VAR i: INTEGER;
+	BEGIN
+		i := 0; WHILE i < LEN(zero) DO zero[i] := 0; INC(i) END;
+		minStack := defMinStack; maxStack := defMaxStack;
+		minHeap := defMinHeap; maxHeap := defMaxHeap;
+		i := 0; WHILE i < LEN(zero) DO zero[i] := 0; INC(i) END;
+		NEW(formatter)
+	END InitMod;
+	
+	PROCEDURE Install*; BEGIN B.peFmt := formatter END Install;
+
+BEGIN InitMod
+END HrPeFmt.
+
+
+PE format outed by HrPeFmt:
+
+PE = dosHeader peHeader sectionHeaders Module { Module } Binder .
+Module = MetaBlk CodeBlk DescVarBlk .
+Binder = externals [ exports ] [ DLLMain ] .
+MetaBlk = section .
+CodeBlk = section .
+DescVarBlk = section .
+
+DLLMain = code to handle (de)initialization of the DLL - calling BEGIN/CLOSE sections of included modules.
+For specification of terminals (starting with lowercase) refer to public PE specifications.
+exports and DLLMain are only included for DLL files, not for executables.
+
+
+PE Header
+By convention (in the MS world), the PE header has to follow the DOS stub immediately; according to the PE spec, the section headers have to follow the PE header immediately.
+The first section can be loaded at page 1000H. This leaves 1000H bytes for 'dosHeader peHeader sectionHeaders'. The following calculation shows that, given the convetional dos stub, at most 30 Component Pascal modules can be lumped together into one dll; which sounds pretty reasonable.
+
+LEN(dosHeader) = 80H = 128
+LEN(peHeader) = 112 + 16*8 = 240
+This leaves 4096-240-128 = 3728 bytes for sectios headers; given that
+LEN(sectionHeader) = 40,
+3728 / 40 = 93 sections can be placed in a dll and still fit in the first memory page (before the first section).
+1 of those sections is the Binder; since 3 sections are required per module, 92/3 = 30 modules may be lumped together in one DLL without having to leave more pages for the section headers.
+

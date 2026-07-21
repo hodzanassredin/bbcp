@@ -1,0 +1,358 @@
+MODULE HrMarkers;
+(**
+	project	= "BlackBox"
+	organization	= "www.oberon.ch"
+	contributors	= "Oberon microsystems"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "Docu/BB-License"
+	changes	= ""
+	issues	= ""
+
+**)
+
+	IMPORT
+		Kernel, Files, Stores, Fonts, Ports, Models, Views, Controllers, Properties, Dialog,
+		TextModels, TextSetters, TextViews, TextControllers, TextMappers,
+		Log,
+		DevMarkers;
+
+	CONST
+		(** View.mode **)
+		undefined* = 0; mark* = 1; message* = 2; code* = 3;
+		firstMode = 1; lastMode = 3;
+
+		(** View.err **)
+		noCode* = 9999;
+
+		errFile = "Errors"; point = Ports.point; defSubsystem = "Hr";	(* used to look up error messages text *)
+
+	TYPE
+		View = POINTER TO RECORD (DevMarkers.View)
+			(*mode-: INTEGER;
+			err-,*) e-, sub-: INTEGER;
+			(*msg-: POINTER TO ARRAY OF CHAR;*)
+			id: ARRAY 16 OF CHAR;
+			(*era: INTEGER*)
+		END;
+
+		Directory* = POINTER TO RECORD (DevMarkers.Directory) 
+			msg*: RECORD 		(* Error messages are to be taken from subsystem/Rsrc/[lang/]doc *)
+				subsys*, doc*: ARRAY 64 OF CHAR
+			END
+		END;
+
+	VAR
+		dir-: Directory;
+
+		globR: TextModels.Reader; globW: TextModels.Writer;	(* recycling done in Load, Insert *)
+		
+		thisEra: INTEGER;
+
+
+	(** View **)
+
+	PROCEDURE (v: View) CopyFromSimpleView2- (source: DevMarkers.View);
+	BEGIN WITH source: View DO v.e := source.e; v.sub := source.sub; v.id := source.id$ END
+	END CopyFromSimpleView2;
+
+(*
+	PROCEDURE (v: View) InitContext* (context: Models.Context), EXTENSIBLE;
+	BEGIN
+		ASSERT(v.mode # undefined, 20);
+		v.InitContext^(context)
+	END InitContext;
+*)
+
+	PROCEDURE NumToStr (x: INTEGER; VAR s: ARRAY OF CHAR; VAR i: INTEGER);
+		VAR j: INTEGER; m: ARRAY 32 OF CHAR;
+	BEGIN
+		ASSERT(x >= 0, 20);
+		j := 0; REPEAT m[j] := CHR(x MOD 10 + ORD("0")); x := x DIV 10; INC(j) UNTIL x = 0;
+		(*i := 0;*) REPEAT DEC(j); s[i] := m[j]; INC(i) UNTIL j = 0;
+		s[i] := 0X
+	END NumToStr;
+
+	PROCEDURE (v: View) InitErr* (err: INTEGER)(*, NEW, EXTENSIBLE*);
+		VAR e, sub, i: INTEGER;
+	BEGIN
+		ASSERT(v.msg = NIL, 20);
+		IF v.err # err THEN v.InitErr^(err);	(* possibly unnecessary condition *)
+			e := ABS(err); sub := ASH(ASH(e, 8), -24); e := ORD(BITS(e) * BITS(0FFFFH));
+			v.e := e; v.sub := sub;
+			i := 0; NumToStr(e, v.id, i); IF sub # 0 THEN v.id[i] := "/"; INC(i); NumToStr(sub, v.id, i) END;
+		END;
+		ASSERT(v.msg = NIL);
+		v.SetMode(code); ASSERT(v.msg = NIL); ASSERT(v.mode = code, 60)
+	END InitErr;
+
+	PROCEDURE (v: View) InitMsg (msg: ARRAY OF CHAR);
+		VAR mode: INTEGER;
+	BEGIN mode := v.mode; v.InitMsg^(msg); 
+		IF (mode # DevMarkers.undefined) & (v.mode # mode) THEN v.SetMode^(mode) END
+	END InitMsg;
+
+	
+
+
+	PROCEDURE ToggleMode (v: View);
+		VAR mode: INTEGER;
+	BEGIN
+		IF ABS(v.err) # noCode THEN
+			IF v.mode < lastMode THEN mode := v.mode + 1 ELSE mode := firstMode END
+		ELSE
+			IF v.mode < message THEN mode := v.mode + 1 ELSE mode := firstMode END
+		END;
+		v.SetMode(mode)
+	END ToggleMode;
+
+
+	(* primitives for StdView *)
+
+	PROCEDURE Load (d: Directory; v: View);
+		VAR view: Views.View; t: TextModels.Model; s: TextMappers.Scanner;
+			err: INTEGER; i: INTEGER; ch: CHAR; loc, langLoc: Files.Locator;
+			msg: ARRAY 1024 OF CHAR; found: BOOLEAN;
+	BEGIN ASSERT(v.msg = NIL, 20); 
+		view := NIL;
+		err := v.e; i := 0; NumToStr(err, msg, i);
+		IF d # NIL THEN loc := Files.dir.This(d.msg.subsys) ELSE loc := Files.dir.This(defSubsystem) END;
+		IF loc.res # 0 THEN RETURN END;
+		loc := loc.This("Rsrc"); IF loc.res # 0 THEN RETURN END;
+		IF (Dialog.language # "") & (Dialog.language # "en") THEN
+			langLoc := loc.This(Dialog.language);
+			IF langLoc.res = 0 THEN
+				IF d = NIL THEN view := Views.OldView(langLoc, errFile)
+				ELSE view := Views.OldView(langLoc, d.msg.doc$)
+				END
+			END
+		END;
+		IF (view = NIL) OR ~ (view IS TextViews.View) THEN
+			view := Views.OldView(loc, errFile)
+		END;
+		IF (view # NIL) & (view IS TextViews.View) THEN
+			t := view(TextViews.View).ThisModel();
+			IF t # NIL THEN s.ConnectTo(t);
+				REPEAT
+					REPEAT s.Scan
+					UNTIL ((s.type = TextMappers.int) & (s.int = err)) OR (s.type = TextMappers.eot);
+					IF s.type = TextMappers.int THEN
+						IF v.sub # 0 THEN found := FALSE; s.Scan; 
+							IF (s.type = TextMappers.char) & (s.char = "/") THEN s.Scan; 
+								IF (s.type = TextMappers.int) & (s.int = v.sub) THEN found := TRUE END
+							END
+						ELSE found := TRUE
+						END;
+						IF found THEN
+							s.Skip(ch); i := 0;
+							WHILE (ch >= " ") & (i < LEN(msg) - 1) DO
+								msg[i] := ch; INC(i); s.rider.ReadChar(ch)
+							END;
+							msg[i] := 0X
+						END
+					END
+				UNTIL found OR (s.type = TextMappers.eot)
+			END
+		END;
+		IF found THEN v.InitMsg(msg$) ELSE v.InitMsg(v.id$) END
+	END Load;
+	
+	PROCEDURE DrawMsg (v: View; f: Views.Frame; font: Fonts.Font; color: Ports.Color);
+		VAR w, h, asc, dsc: INTEGER; err, sub: INTEGER; a, b: ARRAY 32 OF CHAR;
+	BEGIN
+		CASE v.mode OF
+		  mark:
+			v.context.GetSize(w, h);
+			f.DrawLine(point, 0, w - f.dot, h, 0, color);
+			f.DrawLine(point, h (*+ point*), w - f.dot,  0, 0, color)
+		| message:
+			font.GetBounds(asc, dsc, w);
+			f.DrawString(2 * point, asc, color, v.msg^, font)
+		| code: 
+			font.GetBounds(asc, dsc, w);
+			f.DrawString(2 * point, asc, color, v.id, font)
+		END
+	END DrawMsg;
+	
+	(*point, 0, w - point, h,*)
+	
+	PROCEDURE ShowMsg (v: View);
+	BEGIN
+		IF v.msg = NIL THEN Load(NIL, v) END;
+		IF v.mode = message THEN Dialog.ShowStatus(v.id) ELSE Dialog.ShowStatus(v.msg^) END
+	END ShowMsg;
+
+	PROCEDURE Track (v: View; f: Views.Frame; x, y: INTEGER; buttons: SET);
+		VAR c: Models.Context; t: TextModels.Model; u, w, h: INTEGER; isDown, in, in0: BOOLEAN; m: SET;
+	BEGIN
+		v.context.GetSize(w, h); u := f.dot; in0 := FALSE;
+		in := (0 <= x) & (x < w) & (0 <= y) & (y < h);
+		REPEAT
+			IF in # in0 THEN
+				f.MarkRect(u, 0, w - u, h, Ports.fill, Ports.invert, Ports.show); in0 := in
+			END;
+			f.Input(x, y, m, isDown);
+			in := (0 <= x) & (x < w) & (0 <= y) & (y < h)
+		UNTIL ~isDown;
+		IF in0 THEN
+			f.MarkRect(u, 0, w - u, h, Ports.fill, Ports.invert, Ports.hide);
+			IF Dialog.showsStatus & ~(Controllers.modify IN buttons) & ~(Controllers.doubleClick IN buttons) THEN
+				ShowMsg(v)
+			ELSE
+				ToggleMode(v)
+			END;
+			c := v.context;
+			WITH c: TextModels.Context DO
+				t := c.ThisModel();
+				TextControllers.SetCaret(t, c.Pos() + 1)
+			ELSE
+			END
+		END
+	END Track;
+
+	PROCEDURE SizePref (v: View; VAR p: Properties.SizePref);
+		VAR c: Models.Context; a: TextModels.Attributes; font: Fonts.Font; asc, dsc, w: INTEGER;
+	BEGIN
+		c := v.context;
+		IF (c # NIL) & (c IS TextModels.Context) THEN a := c(TextModels.Context).Attr(); font := a.font
+		ELSE font := Fonts.dir.Default()
+		END;
+		font.GetBounds(asc, dsc, w);
+		p.h := asc + dsc;
+		CASE v.mode OF
+		  mark:
+			p.w := p.h + 2 * point
+		| message:
+			IF v.msg = NIL THEN Load(NIL, v) END;
+			p.w := font.StringWidth(v.msg^) + 4 * point
+		| code: p.w := font.StringWidth(v.id) + 4 * point
+		END
+	END SizePref;
+
+
+	PROCEDURE (v: View) ExternalizeAs- (VAR s1: Stores.Store);
+	BEGIN
+		s1 := NIL
+	END ExternalizeAs;
+
+	PROCEDURE (v: View) SetMode(mode: INTEGER);
+	BEGIN v.SetMode^(mode); 
+		;ASSERT(v.mode = mode, 99);
+		(*ShowMsg(v)*)
+		;ASSERT(v.mode = mode, 98);
+		
+	END SetMode;
+	
+	PROCEDURE (v: View) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR c: Models.Context; a: TextModels.Attributes; font: Fonts.Font; color: Ports.Color;
+			w, h: INTEGER;
+	BEGIN
+		c := v.context; c.GetSize(w, h);
+		WITH c: TextModels.Context DO a := c.Attr(); font := a.font ELSE font := Fonts.dir.Default() END;
+		IF TRUE (*f.colors >= 4*) THEN color := Ports.grey50 ELSE color := Ports.defaultColor END;
+		IF v.err >= 0 THEN
+			f.DrawRect(point, 0, w - f.dot, h, Ports.fill, color);
+			DrawMsg(v, f, font, Ports.background)
+		ELSE
+			f.DrawRect(point, 0, w - f.dot, h, 0, 7F7F00H);
+			DrawMsg(v, f, font, 7F7F00H)
+		END
+	END Restore;
+
+	PROCEDURE (v: View) GetBackground (VAR color: Ports.Color);
+	BEGIN
+		color := Ports.background
+	END GetBackground;
+
+	PROCEDURE (v: View) HandleCtrlMsg (f: Views.Frame; VAR msg: Controllers.Message;
+																		VAR focus: Views.View);
+	BEGIN
+		WITH msg: Controllers.TrackMsg DO
+			Track(v, f, msg.x, msg.y, msg.modifiers)
+		ELSE
+		END
+	END HandleCtrlMsg;
+
+	PROCEDURE (v: View) HandlePropMsg (VAR msg: Properties.Message);
+		VAR c: Models.Context; a: TextModels.Attributes; font: Fonts.Font; asc, w: INTEGER;
+	BEGIN
+		WITH msg: Properties.Preference DO
+			WITH msg: Properties.SizePref DO
+				SizePref(v, msg)
+			| msg: Properties.ResizePref DO
+				msg.fixed := TRUE
+			| msg: Properties.FocusPref DO
+				msg.hotFocus := TRUE
+(*
+			| msg: Properties.StorePref DO
+				msg.view := NIL
+*)
+			| msg: TextSetters.Pref DO
+				c := v.context;
+				IF (c # NIL) & (c IS TextModels.Context) THEN
+					a := c(TextModels.Context).Attr(); font := a.font
+				ELSE
+					font := Fonts.dir.Default()
+				END;
+				font.GetBounds(asc, msg.dsc, w)
+			ELSE
+			END
+		ELSE
+		END
+	END HandlePropMsg;
+
+
+	(* StdDirectory *)
+
+	PROCEDURE (d: Directory) New* (err: INTEGER): View;
+		VAR v: View;
+	BEGIN
+		NEW(v); v.InitErr(err);
+		IF (d.msg.subsys = "") OR (d.msg.doc = "") THEN
+			Load(NIL, v);
+		ELSE
+			Load(d, v);
+		END;
+		RETURN v
+	END New;
+
+	PROCEDURE (d: Directory) NewMsg* (msg: ARRAY OF CHAR): View;
+		VAR v: View;
+	BEGIN
+		NEW(v); v.InitErr(noCode); ASSERT(v.msg = NIL); v.InitMsg(msg); RETURN v
+	END NewMsg;
+
+
+	(** Cleaner **)
+
+	PROCEDURE Cleanup;
+	BEGIN
+		globR := NIL; globW := NIL
+	END Cleanup;
+	
+
+	(** miscellaneous **)
+
+	
+	PROCEDURE InsertMarks* (t: TextModels.Model; cnt: INTEGER; IN pos, no: ARRAY OF INTEGER; IN subsystem, doc: ARRAY OF CHAR);
+		VAR i: INTEGER; wr: TextModels.Writer;
+	BEGIN
+		wr := t.NewWriter(NIL); 
+		dir.msg.subsys := subsystem$; dir.msg.doc := doc$;
+		IF cnt > 0 THEN Models.BeginModification(Models.clean, t) END;
+		i := cnt - 1; WHILE i >= 0 DO
+			wr.SetPos(pos[i]);
+			wr.WriteView(dir.New(no[i]), Views.undefined, Views.undefined);
+			DEC(i)
+		END;
+		IF cnt > 0 THEN Models.EndModification(Models.clean, t) END
+	END InsertMarks;
+	
+
+
+BEGIN
+	NEW(dir);
+	Kernel.InstallCleaner(Cleanup)
+CLOSE
+	Kernel.RemoveCleaner(Cleanup)
+END HrMarkers.

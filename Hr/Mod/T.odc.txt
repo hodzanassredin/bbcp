@@ -1,0 +1,3909 @@
+(* When forward declaration does not match actual declaration, the error message is "parameter does not match" and it is located at the semicolon after the actual signature. Not informative, not clear *)
+MODULE HrT; (* Herschel - Semantic graph definition (was: Symbol Table) *)
+
+	IMPORT 
+		SYSTEM, Kernel, Services, Dialog, Files, Strings, Utf,
+		TextModels, 
+		DevCPV := DevCPV486, DevCommanders,
+		TextMappers, (*VarLog, *)
+		HrM, T := HrCPT,
+		Log := StdLog;
+
+	CONST
+		deferred126 = FALSE;
+		MaxIdLen = 256;
+		none = -1; ok = 0;
+		showAlias* = TRUE;
+		typedSymbols = TRUE;
+		parMagic = 30;	(* added to T.Object.mode to distinguish proc params from glob/loc vars *)
+		capDimensions = 16; 	(* maximal number of array dimensions *)
+		eProcScopeExpected = 1; eNegativeParamLen = 2; eParExtected = 3; eModScopeExpected = 4;
+		eTypeExpected = 5; eScopeExpected = 6;
+		eObjectExpected = 7;
+		eElemTypeExpectedNilFound = 8;
+		eElemTypeExpected = 9;
+		eRecPtrBaseTypeExpectedNilFound = 10;
+		eRecPtrBaseTypeExpected = 11;
+		eRecBaseTypeExpectedNilFound = 12;
+		eRecBaseTypeExpected = 13;
+		eFieldExpectedNilFound = 14;
+		eFieldExpected = 15;
+		eNegativeVerbsLen = 16;
+		eVerbExpectedNilFound = 17;
+		eVerbExpected = 18;
+		eNegativeFieldsLen = 19;
+		eArrayElTypExpectedNilFound = 20;
+		eArrayElTypExpected = 21;
+		eResTypExpectedNilFound = 22;
+		eResTypExpected = 23;
+		eParExpectedNilFound = 24;
+		eParExpected = 25;
+		eTypeNameExpected = 26;
+		eTooManyErrors = 27;
+		eModuleExpectedNilFound = 28;
+		eModuleExpected = 29;
+		eTopExpectedNilFound = 30; 
+		eTopExpected = 31;
+		eBadImportsNr = 32;	(* bad number of modules in sym file: valid range 1..capImports *)
+		eExprExpectedNilFound = 33;
+		eExprExpected = 34;
+		eTypeExpectedNilFound = 35;
+		eLitExpectedNilFound = 36;
+		eLitExpected = 37;
+		eConstExpectedNilFound = 38;
+		eConstExpected = 39;
+		eBadTag = 40;
+		
+	
+	TYPE
+		ADDRESS = INTEGER;
+		Name* = ARRAY MaxIdLen OF (*SHORT*)CHAR;
+		String* = (*POINTER TO*) ARRAY OF (*SHORT*)CHAR;
+		
+		Symbol* = POINTER TO ABSTRACT RECORD END;
+		Literal* = POINTER TO ABSTRACT RECORD (Expression) END;
+		BadLiteral = POINTER TO RECORD (Literal) END;
+		Nil* = POINTER TO EXTENSIBLE RECORD (Literal) END;
+		Int* = POINTER TO EXTENSIBLE RECORD (Literal) long-: LONGINT END;
+		Char* = POINTER TO EXTENSIBLE RECORD (Literal) ch*: CHAR END;
+		Set* = POINTER TO EXTENSIBLE RECORD (Literal) set*: SET END;
+		Bool* = POINTER TO EXTENSIBLE RECORD (Literal) bool*: BOOLEAN END;
+		Real* = POINTER TO EXTENSIBLE RECORD (Literal) real*: REAL END;
+		StringLit* = POINTER TO EXTENSIBLE RECORD (Literal) 
+			str*: POINTER TO String;
+			len*: INTEGER	(* string length *)
+		END;
+		(* Rename StringLit -> String; String -> Str *)
+
+		Object* = POINTER TO ABSTRACT RECORD (Symbol)
+			flags*, sysflags*: SET;
+			class-: INTEGER; (* for backward compatibility; may be a pitfall *)
+			name*: POINTER TO Name;	(* name = null OR name^ # "" *)
+			(*fpdone*: BOOLEAN; flagged *)
+			fprint*: INTEGER;
+			left*, right*: Object;  (* Objcts are organized in a tree for faster retrieval *)
+			imno*: INTEGER;	(* number of imported module in Segraph.imports, 1 for top mod, 0 for Unvrs *)
+			pproclev*: INTEGER;	(* 09/20: obsolete .proclev in Object, replace it with Scope. *)
+			mmnolev*: INTEGER; (* todo: separate mno from lev for greater clarity *)
+				(* has a weird value -128, cf CpjsM.EnterTProc *)
+			(*used*: BOOLEAN;  (* flags if the object was ever looked up by FindImport *) flagged *)
+			textpos*: INTEGER;
+			next*: Object;	(* chain of objects of a scope in natural order (order of appearance),  *)
+			(* from TypedObj: *)
+			type*: Type;	(* actual type, changed in with statements *)
+			ptype*: Type;	(* original type if typ is changed. possibly 'proper type' UNNECESSARY? *)
+			typeName*: TypeName;	(* typename of the object. = NIL => object is of anonymous *)
+			(* Make sure .typeName is filled out!! *)
+			history*: BYTE;
+			modifiers*: POINTER TO ARRAY OF POINTER TO String;
+			owner*: SCope;	(* experimental: imno of every object has to be the same as imno of it's module; however, it is same size as a pointer; having a pointer to the owning scope makes it possible to 'dig thru' to the owning module. With .owner, the global array of modules may be eliminated *)
+			nlink*: Object;	(* list of names, used in E when writing OCF file; revisit! *)
+			onum*: INTEGER	(* object enumeration, used in E when writing OCF file; revisit! *)
+		END;
+		
+		SCope* = POINTER TO ABSTRACT RECORD (Object)
+			uup*: SCope;	(* if .owner is in Object, then Scope doesn't need .up *)
+			(* if I leave Object.owner in the structures, then .up is redundant *)
+			tree*: Object;
+			head*, tail: Object;	(* head of list of objects of scope, in natural order; includes bound proc *)
+			(* should be read-only; but requires changes in V.DisanonType *)
+			nesting-: INTEGER;	(* 0 for modules, 1 for global procedures, 2+ for nested procedures *)
+		END;
+
+		Var* = POINTER TO ABSTRACT RECORD (Object) 
+			adr*: INTEGER;	(* isn't this a backend field? *)
+		END;
+		
+		GlobVar* = POINTER TO EXTENSIBLE RECORD (Var)
+			lib*, ent*: POINTER TO Name;
+			(*sysflag*: BYTE; (* what is it? *) flagged *)
+		END;
+		
+		LocVar* = POINTER TO EXTENSIBLE RECORD (Var)
+			(*needsAddr*: BOOLEAN;	(* FALSE => can be allocated in a register:  *) flagged*)
+			ooffs*: INTEGER;	(* offset in procedure's stack frame *) (* doesn't this duplicate Var.adr? *)
+		END;
+		
+		Par* = POINTER TO EXTENSIBLE RECORD (LocVar)
+			num*: INTEGER;	(* ordinal number of par in signature and in proc's param array; 0-based *)
+			(*kind*: BYTE;	(* IN { fVal, fIn, fOut } *) flagged *)
+		END;
+		
+		Const* = POINTER TO EXTENSIBLE RECORD (Object)
+			val*: Literal;	(* value of .ex: for CONST a = 2 * 3, .val = 6 *)
+			ex*: Expression;	(* constant expression: for CONST a = 2 * 3, .ex = 2 * 3. .ex = .val  *)
+			lib*, ent*: POINTER TO Name;	(* DLL library name, entry name; may be NIL *)
+		END;
+		
+		Field* = POINTER TO EXTENSIBLE RECORD (Object)
+			(*link*: Field;  (* list of record fields, preserving declaration order *) decl order is  *)
+			offs*: INTEGER;
+		END;
+		
+		TypeName* = POINTER TO EXTENSIBLE RECORD (Object) 
+		(* TypeDec is a better name - see LR 6 *)
+			lib*, ent*: POINTER TO Name;	(* DLL library name, entry name; may be NIL *)
+			(* lib, ent not saved in symtab yet *)
+		END;
+		
+		(* ? replace leaf, sysflag with a generic flag field, and use exclusive constants in it? *)
+		Proc* = POINTER TO ABSTRACT RECORD (SCope)
+			(*leaf*: BOOLEAN; (* leaf procedure *) flagged *)
+			par*: POINTER TO ARRAY OF Par;	(* procedure parameters; was Object.link *)
+			parlen*: INTEGER;  (* used to be .conval.intval? parameters list size? *)
+			body*: Stat;
+			startPos*, endPos*: INTEGER;	(* textual positions near BEGIN and END *)
+			adr*: INTEGER;	(* backend field, actually; address of procedure in module's machine text *)
+			padr*: INTEGER;	(* backend field; parameters length; undefined for imported procedures *)
+			storage*: INTEGER;	(* backend field; local storage size (frame) *)
+			level*: INTEGER;	(* global procedures have level = 0, each nesting level adds 1 *)
+		END;
+		(* should LProc and XProc be merged? isn't the distinction minimal, and doesn't it just represent the visibility and related info? *)
+		
+		FProc* = POINTER TO EXTENSIBLE RECORD (Proc)
+			(** Forward procedure declaration; not to show up in the backend!! *)
+			actual*: Proc
+		END;
+		
+		LProc* = POINTER TO EXTENSIBLE RECORD (Proc)		(* local procedure *)	
+			lib*, ent*: POINTER TO Name;	(* DLL library name, entry name; may be NIL *)
+		END;
+		(* LProc and XProc to be represented by Proc and distinguished by visibility flags?
+		Definitely so, because CP2's B.MOp changes LProc to XProc *)
+
+		XProc* = POINTER TO EXTENSIBLE RECORD (Proc)	(* exported procedure *)
+			lib*, ent*: POINTER TO Name;	(* DLL library name, entry name; may be NIL *)
+		END;
+
+		SProc* = POINTER TO EXTENSIBLE RECORD (Proc)	(* standard procedure *)
+			num*: INTEGER; (* the number identifying the standard procedure. was Object.adr. *)
+		END;
+
+		CProc* = POINTER TO EXTENSIBLE RECORD (Proc)	(* code procedure *)
+			code*: POINTER TO ARRAY OF SHORTCHAR;	(* string or code for code proc *)
+			lib*, ent*: POINTER TO Name;
+			(* lib, ent not saved in symtab yet *)
+		END;
+
+		IProc* = POINTER TO EXTENSIBLE RECORD (Proc)	(* interrupt procedure. NIY? *)
+		END;
+
+		TProc* = POINTER TO EXTENSIBLE RECORD (Proc)	(* type-bound procedure *)
+			(*rcvr*: Var;	(* receiver; is not part of .pars! *) use par[0]? *)
+			num*: INTEGER;	(* mthno rename it to mthno or index? *)
+			lib*, ent*: POINTER TO Name;	(* DLL library name, entry name; may be NIL *)
+		END;
+
+		Mod* = POINTER TO EXTENSIBLE RECORD (SCope)  
+			begin*, close*: Stat;
+			realName*: POINTER TO Name;	(** IMPORT Name => .name = "Name", *)
+			lib*: POINTER TO Name;
+			endBegPos*, endClosePos*: INTEGER;
+		END;
+		
+		Segraph* = POINTER TO EXTENSIBLE RECORD (SCope(*Mod*))
+		(** represents the top module - subject of compilation *)
+			mod*: POINTER TO ARRAY OF Mod;	(* mod[1] is UNIVERSE, mod[0] is the top module *)
+			anon: INTEGER;	(* next available number for disanonymising anonymous objects *)
+		END;
+		
+		(* Proc and Mod could be RECORD (ScopeObj(Object)) instead of a separate Scope type! 
+		Then TypedObj would have to be eliminated, and type: Type promoted to Object. Proper
+		procedures and modules would have type = NIL. Proc would also have up: ScopeObj. 
+		Or maybe ScopeObj would have .up. ScopeObj would definitely have tree: Object *)
+
+
+		
+		(* On naming of entities. I find the naming of entities in OP2/Dev confusing and obfuscating. What is in the LR called a type, in the compiler is called a Struct. Structures in LR are a case of types. A type is a set of values which a variable of this type may assume. Structured types are array and record types. In Wirth's compiler, the record type representing the type of a variable is called Type. So I will adopt the terminology from the LR, and call a type a Type, and the object that represents the named type declaration I will call a TypeObj. Other options for the latter would be TypeDecl, TypeName, NamedType. *)
+
+		(* I want to "flatten" Type forms and get rid of .comp field. Wirth has it this way, too *)		
+		Type* = POINTER TO ABSTRACT RECORD (Symbol)
+			flags*: SET;
+			what*: INTEGER;  (* in OP2/Dev,  *)
+			(*pbused*, pvused*, exp*: BOOLEAN; (* these may only apply to StrucTypes! *) flagged*)
+			pbfp*, pvfp*:INTEGER;
+			typeName*: TypeName;
+			qualident*: POINTER TO String;	(** for foreign types, this is their qualident;  *)
+			size*: INTEGER;	(* .size and .align are backend fields; should they be defined in extensions? *)
+			align*: INTEGER;	(* alignment, was Struct.align. Could it be a flag? or flags? *)
+			pos*: INTEGER;
+			mod-: Mod;
+		END;
+		
+		AuxType* = POINTER TO EXTENSIBLE RECORD (Type) END;	(* auxiliary: for errors,  *)
+		EErrType* = POINTER TO EXTENSIBLE RECORD (Type) END;	(* erroneous type *)
+		
+		Basic* = POINTER TO EXTENSIBLE RECORD (Type) END;
+		(* I wanted to make Structure ABSTRACT, so I had to make Type ABSTRACT as well, and that made me have Basic for basic types. Previous thought on this matter:  *)
+		
+		Structure* = POINTER TO ABSTRACT RECORD (Type)
+			(*txtpos*: INTEGER;*)
+			mmno*: BYTE;	(*? eliminate? or make sure it's actualized! *)
+		END;
+		
+		Forward* = POINTER TO EXTENSIBLE RECORD (Type)
+			actual*: Type;
+			base*: Forward;	(* base # NIL => this is a POINTER TO Forward case *)
+			(*txtpos*: INTEGER;	(* valid IFF .base # NIL *)*)
+		END;
+		
+		Pointer* = POINTER TO ABSTRACT RECORD (Type) END;
+		NilPtr = POINTER TO RECORD (Pointer) END;	(* maybe nil pointer's type could be a Pointer? *)
+		SysPtr* = POINTER TO EXTENSIBLE RECORD (Pointer) END;
+		
+		ArrayPtr* = POINTER TO EXTENSIBLE RECORD (Pointer)
+			base*: Array
+		END;
+		
+		RecPtr* = POINTER TO EXTENSIBLE RECORD (Pointer)
+			base*: Record
+		END;	(* ANYPTR is represented as a pointer to ANYREC *)
+		
+		(* 'bound procedures' instead of 'type-bound procedures':  *)
+		Record* = POINTER TO EXTENSIBLE RECORD (Structure)
+			base*: Record;
+			tree*: Object;	(* tree of record members (fields and bound procedures *)
+			nproc*: INTEGER;	(* nof bound procedures. Attn! .nproc may be # LEN(.proc).  *)
+			fields*: POINTER TO ARRAY OF Field;	(* fields in declaration order *)
+			(* fields[0] is top of tree of fields, valpha-sorted *)
+			vverbs*, proc*: POINTER TO ARRAY OF TProc;	(* bound procs in declaration order *)
+			(* verbs[0] is top of tree of bound procs, alpha-sorted *)
+			(*ext*: String; ?*)	(* id string for interface records - the text in {} *)
+			level*: INTEGER;	(* extension level, was Struct.extlev  => order! extension order! *)
+			(*align*: INTEGER;	(* alignment, was Struct.align. Could it be a flag? or flags? *) *)
+		END;
+		(* ANYREC is represented as a record with base = NIL, extlev = -1 *)
+		(* extlev = 0 => base = NIL *)
+		
+		Array* = POINTER TO EXTENSIBLE RECORD (Structure)
+			elTyp*: Type;
+			len*: INTEGER;	(* ~.open => nof elems; .open => nof dimensions? was Struct.n *)
+			lenoffs*: INTEGER;	(* what is this? was Struct.align, see comments at end of DevCPT *)
+		END;			(*  *)
+		
+		Procedure* = POINTER TO EXTENSIBLE RECORD (Structure)
+			res*: Type;	(* result type for function procedures, NIL for proper procedures *)
+			par*: POINTER TO ARRAY OF Par
+		END;
+		
+		
+		Expression* = POINTER TO ABSTRACT RECORD (Symbol) 
+			type*: Type;
+			pos*: INTEGER;
+			flags*: SET
+		END;
+		(* Because .convfn is such a frequent operation, maybe it could be represented by an additional field in Expression rather than a whole other node? *)
+
+	CONST 
+		immutable* = 0; 	(* flag for IN params and imported RO vars, and derivative designators *)
+		const* = 1; 	(* flag for generic expressions: the expression is constant and only needs to  *)
+
+	TYPE
+		ErrEx = POINTER TO RECORD (Expression) END;
+		CConEx* = POINTER TO EXTENSIBLE RECORD (Expression) con*: Const; val*: Literal END;
+		GuardEx* = POINTER TO EXTENSIBLE RECORD (Expression) what*: Designator END;
+		Op* = POINTER TO EXTENSIBLE RECORD (Expression) 
+			what*: INTEGER; 
+			a*, b*: Expression 
+		END;
+		IsOp* = POINTER TO EXTENSIBLE RECORD (Expression) 
+			des*: Expression; 	(* Designator *)
+			typeName*: TypeName 
+		END;
+		
+		Designator* = POINTER TO ABSTRACT RECORD (Expression) END;
+		ErrDes = POINTER TO (*LIMITED*) RECORD (Designator) END;	(* erroneous designator *)
+		ConDes* = POINTER TO EXTENSIBLE RECORD (Designator) const*: Const END;
+		Target* = POINTER TO ABSTRACT RECORD (Designator) END;	(* designators that can be *)
+		VarDes* = POINTER TO EXTENSIBLE RECORD (Target) var*: Var END;
+		FieldDes* = POINTER TO EXTENSIBLE RECORD (Target) rec*: Designator; field*: Field END;
+		Deref* = POINTER TO EXTENSIBLE RECORD (Target) what*: Designator END;
+		StringSel* = POINTER TO EXTENSIBLE RECORD (Designator) what*: Designator END;
+		Expressions* = ARRAY capDimensions + 1 OF Expression;	(* NIL-terminated array *)
+		Index* = POINTER TO EXTENSIBLE RECORD (Target) 
+			(* SHOULD have a field with number of actual indices, so as not so evaluate it every time *)
+			arr*: Designator; 
+			dims*: ARRAY capDimensions OF INTEGER;	(* temp field; should be in an extension; *)
+			(*topDim*: INTEGER;*)
+			ipos*: ARRAY capDimensions OF INTEGER;
+			types*: ARRAY capDimensions OF Type;	(* temp field *)
+			dim*: Expressions	(* should be ind *)
+		END;
+		GuardDes* = POINTER TO EXTENSIBLE RECORD (Designator) what*: Designator END;
+			(* ASESRT .type IS T.Record even when pointer types are guarded *)
+		TypeDes* = POINTER TO EXTENSIBLE RECORD (Designator)
+			name*: TypeName;	(* # NIL *)
+			tthis*: Type;	(** .this = .name.type, # NIL; this is only used 1 or twice; eliminate? *)
+		END;	(* a TypeDes represents a type name reference in expressions. .name is the *)
+		ProcDes* = POINTER TO EXTENSIBLE RECORD (Designator) proc*: Proc END; (* procedure *)
+		CallDes* = POINTER TO EXTENSIBLE RECORD (Designator) 
+			proc*: Proc;	(* .proc # NIL XOR .what # NIL *)
+			super*: BOOLEAN;	(* valid iff .proc IS TProc; .super => it;s a super call, .proc is the super proc *)
+			what*: Designator;
+			apar*: POINTER TO ARRAY OF Expression
+			(* old AST also linked fpar: Object to Nproc node, but i think it can be derived from proc/what *)
+		END;
+		
+		Stat* = POINTER TO ABSTRACT RECORD (Symbol)
+			textpos*: INTEGER;
+			link*: Stat
+		END;
+		BadStat = POINTER TO RECORD (Stat) END;
+		
+		Exit* = POINTER TO EXTENSIBLE RECORD (Stat) END;
+		
+		Trap* = POINTER TO EXTENSIBLE RECORD (Stat) 
+			cond*, num*: Expression 
+		END; (* HALT(num) => .cond = NIL; ASSERT(cond[, num]) => .cond = cond, .num = 0 | num *)
+		
+		If* = POINTER TO EXTENSIBLE RECORD (Stat) 
+			cond*: Expression;
+			do*: Stat;
+			next*: If;
+		END;
+
+		With* = POINTER TO EXTENSIBLE RECORD (Stat)
+			clauses*: WithClause;
+			else*: Stat
+		END;
+		
+		WithClause* = POINTER TO EXTENSIBLE RECORD
+			pos*: INTEGER;
+			var*: Designator;
+			is*: Expression;
+			typeName*: TypeName;	(* eliminate: is is sufficient *)
+			do*: Stat;
+			next*: WithClause
+		END;
+		
+		Case* = POINTER TO EXTENSIBLE RECORD (Stat)
+			what*: Expression;
+			ranges*: POINTER TO ARRAY OF Range;	(* LEN(.ranges) = LEN(.stmts) *)
+			stmts*: POINTER TO ARRAY OF Stat;
+			else*: Stat;
+			labels*: INTEGER;	(* actual number of labels (ranges) in .ranges *)
+			cases*: INTEGER	(* ? how many distinguished cases (not counting else) this CASE hase *)
+		END;
+		Range* = RECORD from*, to*: INTEGER END;
+		
+		Call* = POINTER TO EXTENSIBLE RECORD (Stat)
+			proc*: Proc;	(* .proc # NIL XOR .what # NIL *)
+			super*: BOOLEAN;	(* valid iff .proc IS TProc; .super => it;s a super call, .proc is the super proc *)
+			what*: Designator;
+			actuals*: POINTER TO ARRAY OF Expression
+		END;
+		
+		Loop* = POINTER TO EXTENSIBLE RECORD (Stat) do*: Stat END;
+		
+		While* = POINTER TO EXTENSIBLE RECORD (Stat)
+			cond*: Expression;
+			do*: Stat
+		END;
+		
+		Repeat* = POINTER TO EXTENSIBLE RECORD (Stat)
+			do*: Stat;
+			until*: Expression
+		END;
+		
+		Return* = POINTER TO EXTENSIBLE RECORD (Stat) 
+			ex*: Expression;
+			proc*: SCope	(* a return from MODULE is also permissible smtms/ But isn't BEGIN/CLOSE synthesized as procedures? *)
+		END;
+		
+		Assign* = POINTER TO EXTENSIBLE RECORD (Stat)
+			kind*: INTEGER;
+			des*: Designator; 
+			expr*: Expression
+		END;
+		
+		New* = POINTER TO EXTENSIBLE RECORD (Stat)	
+			des*: Designator;
+			dim*: ARRAY 16 OF Expression
+		END;
+		
+		Put* = POINTER TO EXTENSIBLE RECORD (Stat)
+			adr*, expr*: Expression
+		END;
+		
+		PutReg* = POINTER TO EXTENSIBLE RECORD (Stat)
+			put*: BOOLEAN;	(** TRUE => SYSTEM.PUTREG, FALSE => SYSTEM.GETREG *)
+			reg*, expr*: Expression
+		END;
+		
+		Move* = POINTER TO EXTENSIBLE RECORD (Stat)
+			from*, to*, count*: Expression
+		END;
+		
+		Other* = POINTER TO ABSTRACT RECORD (Stat) END;	(* extension hook *)
+		
+		Dir* = POINTER TO ABSTRACT RECORD END;
+		StdDir = POINTER TO RECORD (Dir) END;
+		
+	CONST
+		(* nodes classes *)
+		Nvar = 0; Nvarpar = 1; Nfield = 2; Nderef = 3; Nindex = 4; Nguard = 5; Neguard = 6;
+		Nconst = 7; Ntype = 8; Nproc = 9; Nupto = 10; Nmop = 11; Ndop = 12; Ncall = 13;
+		Ninittd = 14; Nif = 15; Ncaselse = 16; Ncasedo = 17; Nenter = 18; Nassign = 19;
+		Nifelse = 20; Ncase = 21; Nwhile = 22; Nrepeat = 23; Nloop = 24; Nexit = 25;
+		Nreturn = 26; Nwith = 27; Ntrap = 28; Ncomp = 30;
+		
+		super = 1;	(* super call *)
+		(* symbol values or ops *)
+		(*sysbit = 0; 
+		times* = 1; slash* = 2; div* = 3; mod* = 4;
+		and* = 5; plus* = 6; minus* = 7; or* = 8; eql* = 9;
+		neq* = 10; lss* = 11; leq* = 12; gtr* = 13; geq* = 14;
+		in* = 15; is* = 16; ash* = 17; msk = 18; len* = 19;
+		conv = 32(*20*); abs = 21; cap* = 22; odd* = 23; not = 33;
+		(*SYSTEM*)
+		adr = 24; cc = 25; bit* = 26; lsh = 27; rot = 28; val = 29;
+		min = 34; max = 35; size* = 37;*)
+		
+		(* type codes. Important: Ta < Tb = Ca < Cb where Ta, Tb IN {numbers, chars, strings} *)
+		fUndef* = 0; fByte* = 1; 
+		fInt8* = 2; fInt16* = 3; fInt32* = 4; fInt64* = 5;
+		(* ATTENTIOIN! fByte (CPT.Byte) stands for SYSTEM.BYTE, which was no longer part of CP!!!
+		While BYTE is represented with fInt8 (CPT.Int8) *)
+		fReal32* = 6; fReal64* = 7; 
+		fSet* = 8; fBool* = 9; 
+		fChar8* = 10; fChar16* = 11;
+		fString8* = 12; fString16* = 13; 
+		(*fProc = 14; *)
+		fNil* = 14; 
+		fSysPtr* = 15; fProcedure* = 16; fArrayPtr* = 17; fRecPtr* = 18; fArray* = 19; fRecord* = 20;
+		fNoTyp = 21;	(* eliminate? *)
+		fJString* = 22;
+			(* out of place! Should be in a different module implementing JAVASCRIPT special module*)
+		fErr* = 23; fForward* = 24; 
+		fType* = 25;	(* type designator *)
+		
+		
+		fcComp = 15; fcNilTyp (*bckwrd compatibility name*) = 11; fcArrPtr = 22;
+		
+		integers* = { fByte, fInt8, fInt16, fInt32, fInt64 };
+		reals* = { fReal32, fReal64 };
+		numbers* = integers + reals;
+		sets* = { fSet };
+		chars* = { fChar8, fChar16 };
+		strings* = { fString8, fString16 };
+		booleans* = { fBool };
+		basics* = numbers + chars + sets + reals + { fBool, fJString };
+		pointers* = { fNil, fSysPtr, fArrayPtr, fRecPtr, fProcedure };
+		structures* = { fArray, fRecord };
+		procedures* = { fProcedure };
+		languageTypes* = basics + structures + pointers - { fNil };	(* types that can be identified  *)
+		
+		(* all dyadic operators in timesfn..isfn *)
+		fnstart = 0;
+		timesfn* = fnstart; slashfn* = fnstart + 1; divfn* = fnstart + 2; modfn* = fnstart + 3; andfn* = fnstart + 4; 
+		plusfn* = fnstart + 5; minusfn* = fnstart + 6; 
+		orfn* = fnstart + 7; 
+		
+		(* relations = # < <= > >= should be successive and in the range eqlfn..geqfn *)
+		eqlfn* = fnstart + 8; neqfn* = fnstart + 9; lssfn* = fnstart + 10; leqfn* = fnstart + 11;
+		gtrfn* = fnstart + 12; geqfn* = fnstart + 13;
+		
+		
+		infn* = fnstart + 14; isfn* = fnstart + 15; 
+		
+		ashfn* = fnstart + 16; mskfn* = fnstart + 17; lenfn* = fnstart + 18;
+		convfn* = fnstart + 19; absfn* = fnstart + 20; capfn* = fnstart + 21; oddfn* = fnstart + 22;
+		notfn* = fnstart + 23; 
+		
+		ssetel* = 48; range* = 49;
+		
+		(*function number*)
+		errorfn* = -1;	(* assignment stmt that is not type-compatible; basically a nop *)
+		newfn* = fnstart + 24; ordfn* = fnstart + 25;
+		entierfn* = fnstart + 26; minfn* = fnstart + 27; maxfn* = fnstart + 28; chrfn* = fnstart + 29;
+		(* are chrfn and the like even used? 'Cause CHR is represented as a convfn... *)
+		shortfn* = fnstart + 30; longfn* = fnstart + 31; sizefn* = fnstart + 32; incfn* = fnstart + 33;
+		decfn* = fnstart + 34;
+		inclfn* = fnstart + 35; exclfn* = fnstart + 36; copyfn* = fnstart + 37; assertfn* = fnstart + 38;
+		haltfn* = fnstart + 39; lentierfcn = fnstart + 40; typfn* = fnstart + 41; bitsfn* = fnstart + 42;
+		bytesfn = fnstart + 43; lchrfn = fnstart + 44; 
+		maxsetfn* = fnstart + 45; minsetfn* = fnstart + 46; 
+			(* MAX(SET) is converted from maxfn to maxsetfn, because, unlike other set fns, it  *)
+		assignfn* = fnstart + 47;
+
+		(*SYSTEM function number*)
+		adrfn* = fnstart + 60; ccfn* = fnstart + 61; lshfn* = fnstart + 62; rotfn* = fnstart + 63;
+		getfn* = fnstart + 64; putfn* = fnstart + 65; getrfn* = fnstart + 66; putrfn* = fnstart + 67;
+		bitfn*(*eliminat*) = fnstart + 68; valfn* = fnstart + 69; sysnewfn* = fnstart + 70; movefn* = fnstart + 71;
+		thisrecfn* = fnstart + 72; thisarrfn* = fnstart + 73;
+		
+		(* COM function number *)
+		validfn = fnstart + 80; iidfn = fnstart + 81; queryfn = fnstart + 82;
+		
+		
+		
+
+	CONST
+		maxImps = 127;	(* must be <= MAX(SHORTINT) *)
+		maxStruct = HrM.MaxStruct;	(* must be < MAX(INTEGER) DIV 2 *)
+		FirstRef = 32;
+		FirstRef0 = 16;	(* correction for version 0 *)
+		actVersion = 1;
+		dupIdent = 1; 	(* duplicate identifier error *)
+		
+		capProc = 16;
+		capDict = 1024;
+		capSymDict = 512;
+		capFixups = 32;
+		capReaderErrs = 16;
+		capImports = 16;	(* too small, to be upped in production *)
+		
+		capTypes = 64;
+		symVer = 1;
+		extExported* = 0; extSymbols* = 1; extEverything* = 2;
+
+	VAR
+		ttopScope*: SCope;
+		(*undftyp*, bytetyp*, booltyp*, char8typ*, int8typ*, int16typ*, int32typ*, int64typ*,
+		real32typ*, real64typ*, settyp*, niltyp*, notyp*, sysptrtyp*,
+		char16typ*, anyptrtyp*: Type;
+		string8typ*, string16typ*: Array;
+		anytyp*: Record;*)
+		
+		restyp*, iunktyp*, punktyp*, guidtyp*: Type; (* COM-related types; i consider them to be basic *)
+		
+		intrealtyp*, lreal64typ*, lint64typ*, lchar16typ*: Type; 
+			(* weird aliases: LONGCHAR, LARGEINT, LONGREAL, intrealtyp = real64typ 
+			shall I get rid of them? *)
+		(*nofGmod*: BYTE;	(*nof imports*)
+		GlbMod*: ARRAY maxImps OF Scope;	(* .right = first object, .name = module import name (not alias) *)
+		SelfName*: Name;	(* name of module being compiled *)
+		SYSimported*: BOOLEAN;
+		processor*, impProc*: SHORTINT;  (* impProc # 0 => module reported as non-portable by DevBrowser *)
+		libName*: Name;	(* library alias of module being compiled *)
+		null*: POINTER TO String;	(* "" *)*)
+		noname*: POINTER TO Name; (* '' *)
+		jslink*: T.Object;	(* objects in virtual module JAVASCRIPT *)
+		
+		
+	CONST
+		(* flag values for Type.flag *)
+		untagged* = HrM.untgd (*24*); open* = 25; (* open array? *)
+		abstract* = 17; limited* = 18; extensible* = 20;
+			(* mutually exclusive => redo? also used for bound proc...*)
+		(* duplicates: newAttr = 16; absAttr = 17; limAttr = 18; empAttr = 19; extAttr = 20; *)
+		js* = 29;
+		pbused* = 21; pvused* = 22; exp = 23;
+		interface* = 30;	(* com-related... to be reconsidered?*)
+		sized* = 31;	(* this type's .size field holds a valid value; otherwise the type hasn't been sized *)
+		
+		(* flags for bound procedures: *)
+			new* = 16; empty* = 19; (* abstract* = 17; limited* = 18; extensible* = 20; *)
+			(*!!!! empty overlaps with a flag in pfMask!! *)
+			(* BUMMER! certain procedure flags aren't mutually exclusive: callBackF and ms64F, i.e. *)
+		(* flags for procedures; 10 flags, 4 bits, starting with bit pfOfs. Used in Proc and Procedure! *)
+			pfOfs = 16;
+			codeF* = BITS(1 * pfOfs); 	(* cannot eliminate: used in procedural type flags! *)
+			callbackF* = BITS(2 * pfOfs); 
+			nostkchkF = BITS(3 * pfOfs);
+			ccallF* = BITS(4 * pfOfs); 
+			ccall16F* = BITS(5 * pfOfs); 
+			guardedF* = BITS(6 * pfOfs);
+			noframeF* = BITS(7 * pfOfs); 
+			nativeF = BITS(8 * pfOfs); 
+			bytecodeF = BITS(9 * pfOfs);
+			callsNestedF* = BITS(10 * pfOfs);	(* procedure calls nested procedures => static  *)
+			imVarF* = BITS(11 * pfOfs);	(* donno what it is; used in B and probably in codegen *)
+			ms64F* = BITS(12 * pfOfs);
+			sysvF* = BITS(13 * pfOfs);
+			pfMask* = codeF + callbackF + nostkchkF + ccallF + ccall16F + guardedF + noframeF + nativeF 
+				+ bytecodeF + callsNestedF + ms64F + sysvF;
+			(* it seems that some of these (staticLink, callback, etc) might not be mutually exclusive; cf V, C *)
+		(* flags for structured types *)
+			sfOfs = 256;
+			untaggedF* = BITS(0 + sfOfs); noAlignF* = BITS(1 + sfOfs); align2F* = BITS(2 + sfOfs); 
+			align4F = BITS(3 + sfOfs); align8F* = BITS(4 + sfOfs); unionF* = BITS(5 + sfOfs); 
+			interfaceF* = BITS(6 + sfOfs); jintF* = BITS(7 + sfOfs); jstrF* = BITS(8 + sfOfs); 
+			somF* = BITS(9 + sfOfs);
+			(* additionally for arrays: *)
+			jarrF* = BITS(10 + sfOfs); 
+			(* additionally for pointers: *)
+			handleF* = BITS(11 + sfOfs);
+			(* additionally for procedure types: ccallF and ccall16F *)
+			strucMask* = untaggedF + noAlignF + align2F + align4F + align8F + unionF + interfaceF + jintF
+				+ jstrF + somF + jarrF + handleF + ccallF + ccall16F;
+			
+
+		
+		(* flag values for Object.flag *)
+		(* duplicates: newAttr = 16; absAttr = 17; limAttr = 18; empAttr = 19; extAttr = 20; *)
+		leaf* = 0; ref* = 1; used* = 2; fpdone = 3;
+		pseudo* = 4;	(* valid for module flags only *)
+		(* In CP2, .leaf: BOOLEAN has multiple meanings. It was TRUE for global domestic varibales; it was FALSE for variable parameters *)
+		receiver* = 30;	(* flags that a Par is a receiver *)
+		(* formal parameter kinds *)
+			valK* = { }; varK* = { 12, 13 }; inK* = { 12 }; outK* = { 13 };
+			kindMask* = valK + varK + inK + outK;	(* check: flags * kindMask = varK *)
+		(* visibility flags *)
+			domestic* = {  }; exported* = 14; readOnly* = 15;
+			visMask* = domestic + { exported } + { readOnly };
+		(* VarParSysflags *)
+			vpfOfs = ASH(1, 26);	(* start with 26th bit, span 3 bits *)
+			nilPF* = BITS(0 + vpfOfs); inPF = BITS(1 + vpfOfs); outPF = BITS(2 + vpfOfs); 
+			newPF = BITS(3 + vpfOfs); iidPF = BITS(4 + vpfOfs);
+			varparMask* = nilPF + inPF + outPF + newPF + iidPF;
+		
+		(* object modes *)
+		cVar = 1; cVarPar = 2; cCon = 3; cFld = 4; cTyp = 5; cLProc = 6; cXProc = 7;
+		cSProc = 8; cCProc = 9; cIProc = 10; cMod = 11; cHead = 12; cTProc = 13; cAttr = 20;
+		mScope = 12;
+		cGVar = 13; cLVar = 14; cPar = 15; cTypeName* = 5;
+		(*	Head - root of a module's symtab means this object is Head of a Module's symbol table *)
+
+		(* structure forms *)
+		Undef = 0; Byte = 1; cBool = 2; Char8 = 3; Int8 = 4; Int16 = 5; Int32 = 6;
+		Real32 = 7; Real64 = 8; cSet = 9; String8 = 10; NilTyp = 11; NoTyp = 12;
+		cPointer = 13; 
+		ProcTyp = 14; Comp = 15;
+		AnyPtr = 14; AnyRec = 15;	(* sym file only *)
+		Char16 = 16; String16 = 17; Int64 = 18;
+		Res = 20; IUnk = 21; PUnk = 22; Guid = 23;
+		fArr = 24; fOpenArr = 25; fRec = 26;
+		
+		(* composite structure forms *) (* to be removed *)
+		(*Basic = 1;*) cArray = 2; DynArr = 3; cRecord = 4;
+		fcBasic = 1; fcArray = 2; fcDynArr = 3; fcRecord = 4;
+
+		(* sysflags *)
+		nilBit* = 1; newBit* = 8;
+		
+		(* JS function number *)
+		getstrfn = 50; putstrfn = 51;
+		
+		(* attribute flags (attr.adr, struct.attribute, proc.conval.setval) *)
+		newAttr* = 16; absAttr* = 17; limAttr* = 18; empAttr* = 19; extAttr* = 20;
+			(* record attributes: NEW, ABSTRACT, LIMITED, EMPTY, EXTENSIBLE. Used in StrDesc.attribute *)
+		
+		(* procedure flags (conval.setval) *)
+		isHidden = 29;
+
+		(* module visibility of objects *)
+		internal = 0; external = 1; externalR = 2; inPar = 3; outPar = 4;
+		(* formal parameter kinds *)
+		fNone = 0; fVal = 1; fVar = 2; fIn = 3; fOut = 4;
+
+		(* history of imported objects *)
+		inserted = 0; same = 1; pbmodified = 2; pvmodified = 3; removed = 4; inconsistent = 5;
+
+		(* sysflags *)
+		inBit = 2; outBit = 4; (*interface = 10; *)
+
+		(* symbol file items *)
+		Smname = 16; Send = 18; Stype = 19; Salias = 20; Svar = 21; Srvar = 22;
+		Svalpar = 23; Svarpar = 24; Sfld = 25; Srfld = 26; Shdptr = 27; Shdpro = 28; Stpro = 29; Shdtpro = 30;
+		Sxpro = 31; Sipro = 32; Scpro = 33; Sstruct = 34; Ssys = 35; Sptr = 36; Sarr = 37; Sdarr = 38; Srec = 39; Spro = 40;
+		Shdutptr = 41; Slib = 42; Sentry = 43; Sinpar = 25; Soutpar = 26;
+		Slimrec = 25; Sabsrec = 26; Sextrec = 27; Slimpro = 31; Sabspro = 32; Semppro = 33; Sextpro = 34; Simpo = 22;
+		
+		gvartg = 1; lvartg = 2; partg = 3; consttg = 4; fldtg = 5; typenametg = 6; lproctg = 7; xproctg = 8;
+		cproctg = 9; sproctg = 10; iproctg = 11; tproctg = 12; modtg = 13; segtg = 14;
+		sysptrtg = 20; arrayptrtg = 21; recptrtg = 22; recordtg = 23; arraytg = 24; proceduretg = 25;
+		basictg = 26;
+		inttg = 30; chartg = 31; settg = 32; booltg = 33; realtg = 34; stringtg = 35; sstringtg = 36;
+		bytetg = 40; shorttg = 41; longtg = 42;
+		symboltg = 50; symbolendtg = 51; reftg = 52;
+		(* tags for expressions *)
+		condestg = 60;
+		(* tags for basic types *)
+		int8tg = 70; int16tg = 71; int32tg = 72; int64tg = 73; real32tg = 74; real64tg = 75; booltptg = 76;
+		settptg = 77; char8tg = 78; char16tg = 79; jstrtp = 80;
+		
+	TYPE
+		ImpCtxt = RECORD
+			nextTag, reffp: INTEGER;
+			nofr, minr, nofm: SHORTINT;
+			self: BOOLEAN;
+			ref: ARRAY maxStruct OF Type;
+			old: ARRAY maxStruct OF Object;
+			pvfp: ARRAY maxStruct OF INTEGER;	(* set only if old # NIL *)
+			glbmno: ARRAY maxImps OF BYTE	(* index is local mno *)
+		END ;
+
+		ExpCtxt = RECORD
+			reffp: INTEGER;
+			ref: SHORTINT;
+			nofm: BYTE;
+			locmno: ARRAY maxImps OF BYTE	(* index is global mno *)
+		END ;
+		
+		Dict = POINTER TO ARRAY OF RECORD key: T.Object; val: TypeName END; 	(* NIL-terminated *)
+		Fixups = POINTER TO ARRAY OF RECORD def: Type; type: T.Object END;	(* NIL-terminated *)
+		(*ConDic*)
+		Types = POINTER TO ARRAY OF RECORD type: Type; struct: T.Struct END;
+		SymbolWriter* = EXTENSIBLE RECORD 
+			typed: BOOLEAN;	(* TRUE == type tags should be written for each write op *)
+			exported: BOOLEAN;	(* TRUE == only exported symbols should be externalized *)
+			bodies: BOOLEAN;	(* TRUE == procedure/module bodies should be externalized *)
+			rider-: Files.Writer;
+			mod: POINTER TO ARRAY OF Mod;
+		END;
+		SymbolReader* = EXTENSIBLE RECORD 
+			typed: BOOLEAN;	(* TRUE => type tags should be read and checked for each write op *)
+			rider-: Files.Reader;
+			dirTypeName: ARRAY 256 OF CHAR;
+			dirVer: INTEGER;
+			errs: ARRAY capReaderErrs OF RECORD pos*, code*: INTEGER END;
+			errTop: INTEGER;
+			imno: INTEGER;	(** read objects are marked with this imno *)
+			resetUsed: BOOLEAN; 	(* EXCL(used, .flags) for read objects; needed when IMPORTing SEG *)
+			mod: Mod;	(* the module being read currently *)
+		END;
+		
+		Typeref = POINTER TO RECORD	(* type/typename dictionary for segraph internalization *)
+			type: Type;	
+			qual: POINTER TO String;	(* Qualident of type. Actually, type.qualident could be used *)
+			left, right: Typeref
+		END;
+		
+		LinkList* = POINTER TO (*LinkDesc;
+		LinkDesc* =*) RECORD
+			offset*, 
+			linkadr*: INTEGER;	(* link's location in machine text *)
+			next*: LinkList;
+		END;
+
+		
+
+	VAR
+		universe: Mod;
+		nativeUniverse*: Mod;
+		system*: Mod;	(* SYSTEM module; this should possibly moved to the backend?  *)
+		syslink: Object; (* top of tree of objects of module SYSTEM *)
+		comlink: Object; (* top of tree of objects of module COM *)
+		(*syslink, comlink,*) infinity: Const;
+		impCtxt: ImpCtxt;
+		expCtxt: ExpCtxt;
+		nofhdfld: INTEGER;
+		sfpresent, symExtended, symNew: BOOLEAN;
+		version: INTEGER;
+		symChanges: INTEGER;
+		portable: BOOLEAN;
+		depth: INTEGER;
+		
+		nowScope*: SCope; 	(* the scope being processed by the latest activation ThisScope *)
+		nowPar: T.Object;	(* the param list of the proc processed by the latest activation of ThisObject *)
+		dict: Dict;
+		dicTop: INTEGER;	(* initial value 0 *)
+		fix: Fixups;
+		fixTop: INTEGER;	(* initial value 0 *)
+		types: Types;
+		typTop: INTEGER;	(* initial value 0 *)
+		symDict: POINTER TO ARRAY OF Symbol;	(* lookup dictionary for symtab ex-in-ternalization *)
+		refDict: Typeref;	(* lookup dictionary for internalizing type references *)
+		(* temporary; for error dumping in input symfile: *)
+		globalErrNo, globalErrPos: INTEGER;
+		markerMaker*: PROCEDURE (VAR log: TextMappers.Formatter; err: INTEGER);
+		globalDump*: TextModels.Model;	(* temp var to keep error log for internalization debugging *)
+		
+		
+		showTypes: BOOLEAN;	(* LogRec: show types of fields or not *)
+		log*: TextMappers.Formatter;
+		details*: BOOLEAN;	(* show technical details in output *)
+		anchor: T.Object;	(* anchor T.topScope for reference *)
+		
+		bytetp*, shorttp*, inttp*, longtp*, shortchartp*, chartp*, settp*, booltp*, 
+		shortrealtp*, realtp*: Basic;
+		errtp*: AuxType;
+		typetp*: AuxType;	(* type type: this type is to be used in type designators *)
+		procdestp*: AuxType;	(* procedure designator type: see comment for ProcDes *)
+		shortstrtp*, strtp*: Array;
+		anyrectp*: Record;
+		anyptrtp*: RecPtr;
+		sysptrtp*: SysPtr;
+		guidtp*: Type;	(* for future use with COM *)
+		addrtp*: Type;	(* for SYSTEM.ADR; not sure what exactly it will be; not initialized yet *)
+		niltp*: Pointer;	(* may not be needed because of nil* value *)
+		nil*: Nil; 
+		errdes*: ErrDes;	(* bad designator: one that contains an error and thus is not compilable *)
+		errid*: GlobVar;	(* bad identifier *)
+		errex*: ErrEx;	(* bad expression *)
+		errstat*: BadStat;	(* bad statement *)
+		errcon*: BadLiteral;	(* bad constant *)
+		true*, false*: Bool;
+		zero*, one*: Int;
+		null*: Char;
+		empset*: Set;	(* empty set {} *)	(* eliminate? *)
+		opNames: ARRAY 80, 16 OF CHAR;
+		parseModule*: PROCEDURE (VAR prog: T.Node);
+		module: Mod;	(* the ST of the recently parsed module *)
+		dir-: Dir;
+		stdDir-: StdDir;
+		swr: SymbolWriter;
+		nowTop*: Segraph; 	(* the top currently being processed *)	(* revisit... *)
+		openDepth: INTEGER;	(* open array depth counter, cf. GetNewTypeDef *)
+		logIndent*: INTEGER;
+		
+	PROCEDURE (d: Dir) SymVer* (): INTEGER, NEW, ABSTRACT;	(** Symbol format version *)
+	PROCEDURE (d: StdDir) SymVer (): INTEGER; BEGIN RETURN symVer END SymVer;
+	
+	PROCEDURE (s: Symbol) Externalize (VAR wr: SymbolWriter), NEW, EMPTY;
+	PROCEDURE (s: Symbol) Externalize2* (VAR wr: SymbolWriter), NEW, EMPTY;
+	PROCEDURE (s: Symbol) Internalize (VAR wr: SymbolReader), NEW, EMPTY;
+	PROCEDURE (s: Symbol) Internalize2* (VAR wr: SymbolReader), NEW, EMPTY;
+	
+	PROCEDURE (p: Pointer) Base* (): Structure, NEW, ABSTRACT;
+	PROCEDURE (p: NilPtr) Base (): Structure; BEGIN HALT(20); RETURN NIL END Base;
+	PROCEDURE (p: RecPtr) Base* (): Record, EXTENSIBLE; BEGIN RETURN p.base END Base;
+	PROCEDURE (p: ArrayPtr) Base* (): Array, EXTENSIBLE; BEGIN RETURN p.base END Base;
+	PROCEDURE (p: SysPtr) Base* (): Structure; BEGIN RETURN NIL END Base;
+	
+	PROCEDURE (c: Literal) Type (): Type, NEW, EXTENSIBLE; BEGIN HALT(125); RETURN NIL END Type;
+	(* Since Literal now is an extension of Expression, it has a .type field that should be used instead of Type(); so Type() is deprecated. When a literal is created, however, these procedures can be used to identify the actual type of the literal. It is not always minimal: i.e., default for integer types is fInt32 *)
+	PROCEDURE (c: Nil) Type (): Pointer; BEGIN RETURN niltp END Type;
+	PROCEDURE (c: Int) Type (): Basic;
+		VAR res: Basic;
+	BEGIN
+		IF (MIN(INTEGER) <= c.long) & (c.long <= MAX(INTEGER)) THEN res := inttp ELSE res := longtp END;
+		RETURN res
+	END Type;
+	
+	PROCEDURE (c: Char) Type (): Type;
+		VAR res: Type;
+	BEGIN IF c.ch <= MAX(SHORTCHAR) THEN res := shortchartp ELSE res := chartp END; RETURN res
+	END Type;
+	
+	PROCEDURE (c: Set) Type (): Type; BEGIN RETURN settp END Type;
+	PROCEDURE (c: Bool) Type (): Type; BEGIN RETURN booltp END Type;
+	
+	PROCEDURE (c: Real) Type (): Type;
+		VAR res: Type; short: SHORTREAL;
+	BEGIN 
+		res := realtp;
+		IF ABS(c.real) <= MAX(SHORTREAL) THEN
+			short := SHORT(c.real);
+			IF short = c.real THEN res := shortrealtp END
+		END;
+		RETURN res
+	END Type;
+	
+	PROCEDURE (c: StringLit) Type (): Array;
+		VAR i: INTEGER; res: Array;
+	BEGIN
+		i := 0; WHILE (c.str[i] # 0X) & (c.str[i] <= MAX(SHORTCHAR)) DO INC(i) END;
+		IF c.str[i] = 0X THEN res := shortstrtp ELSE res := strtp END;
+		RETURN res
+	END Type;
+	
+	PROCEDURE (d: Dir) Nil* (): Nil, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Int* (): Int, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Char* (): Char, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Set* (): Set, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Bool* (): Bool, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Real* (): Real, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) StringLit* (): StringLit, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) GlobVar* (): GlobVar, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) LocVar* (): LocVar, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Par* (): Par, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Const* (): Const, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Field* (): Field, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) TypeName* (): TypeName, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) FProc* (): FProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) LProc* (): LProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) XProc* (): XProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) SProc* (): SProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) CProc* (): CProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) IProc* (): IProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) TProc* (): TProc, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Mod* (): Mod, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Segraph* (): Segraph, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) AuxType* (): AuxType, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Basic* (): Basic, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Forward* (): Forward, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) NilPtr (): NilPtr, NEW, EXTENSIBLE; 
+		VAR r: NilPtr; 
+	BEGIN NEW(r); r.what := fNil; RETURN r 
+	END NilPtr;
+	PROCEDURE (d: Dir) SysPtr* (): SysPtr, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) ArrayPtr* (): ArrayPtr, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) RecPtr* (): RecPtr, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Record* (): Record, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Array* (): Array, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Procedure* (): Procedure, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) ConDes* (): ConDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) GuardEx* (): GuardEx, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Op* (): Op, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) IsOp* (): IsOp, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) VarDes* (): VarDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) FieldDes* (): FieldDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Deref* (): Deref, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) StringSel* (): StringSel, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Index* (): Index, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) GuardDes* (): GuardDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) TypeDes* (): TypeDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) ProcDes* (): ProcDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) CallDes* (): CallDes, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Exit* (): Exit, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Trap* (): Trap, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) If* (): If, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) With* (): With, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) WithClause* (): WithClause, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Case* (): Case, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Call* (): Call, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Loop* (): Loop, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) While* (): While, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Repeat* (): Repeat, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Return* (): Return, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Assign* (): Assign, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) New* (): New, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Put* (): Put, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) PutReg* (): PutReg, NEW, ABSTRACT;
+	PROCEDURE (d: Dir) Move* (): Move, NEW, ABSTRACT;
+
+	PROCEDURE (d: StdDir) Nil* (): Nil; VAR r: Nil; BEGIN NEW(r); RETURN r; END Nil;
+	PROCEDURE (d: StdDir) Int* (): Int; VAR r: Int; BEGIN NEW(r); RETURN r END Int;
+	PROCEDURE (d: StdDir) Char* (): Char; VAR r: Char; BEGIN NEW(r); RETURN r END Char;
+	PROCEDURE (d: StdDir) Set* (): Set; VAR r: Set; BEGIN NEW(r); RETURN r END Set;
+	PROCEDURE (d: StdDir) Bool* (): Bool; VAR r: Bool; BEGIN NEW(r); RETURN r END Bool;
+	PROCEDURE (d: StdDir) Real* (): Real; VAR r: Real; BEGIN NEW(r); RETURN r END Real;
+	PROCEDURE (d: StdDir) StringLit* (): StringLit; VAR r: StringLit; BEGIN NEW(r); RETURN r
+	END StringLit;
+	PROCEDURE (d: StdDir) GlobVar* (): GlobVar; VAR r: GlobVar; BEGIN NEW(r); RETURN r
+	END GlobVar;
+	PROCEDURE (d: StdDir) LocVar* (): LocVar; VAR r: LocVar; BEGIN NEW(r); RETURN r END LocVar;
+	PROCEDURE (d: StdDir) Par* (): Par; VAR r: Par; BEGIN NEW(r); RETURN r END Par;
+	PROCEDURE (d: StdDir) Const* (): Const; VAR r: Const; BEGIN NEW(r); r.flags := { const }; RETURN r
+	END Const;
+	PROCEDURE (d: StdDir) Field* (): Field; VAR r: Field; BEGIN NEW(r); RETURN r END Field;
+	PROCEDURE (d: StdDir) TypeName* (): TypeName; VAR r: TypeName; 
+	BEGIN NEW(r); r.class := cTypeName; RETURN r
+	END TypeName;
+	PROCEDURE (d: StdDir) FProc* (): FProc; VAR r: FProc; BEGIN NEW(r); RETURN r END FProc;
+	PROCEDURE (d: StdDir) LProc* (): LProc; VAR r: LProc; BEGIN NEW(r); RETURN r END LProc;
+	PROCEDURE (d: StdDir) XProc* (): XProc; VAR r: XProc; BEGIN NEW(r); RETURN r END XProc;
+	PROCEDURE (d: StdDir) SProc* (): SProc; VAR r: SProc; BEGIN NEW(r); RETURN r END SProc;
+	PROCEDURE (d: StdDir) CProc* (): CProc; VAR r: CProc; BEGIN NEW(r); RETURN r END CProc;
+	PROCEDURE (d: StdDir) IProc* (): IProc; VAR r: IProc; BEGIN NEW(r); RETURN r END IProc;
+	PROCEDURE (d: StdDir) TProc* (): TProc; VAR r: TProc; BEGIN NEW(r); RETURN r END TProc;
+	PROCEDURE (d: StdDir) Mod* (): Mod; VAR r: Mod; BEGIN NEW(r); RETURN r END Mod;
+	PROCEDURE (d: StdDir) Segraph* (): Segraph; VAR r: Segraph; BEGIN NEW(r); RETURN r END Segraph;
+	PROCEDURE (d: StdDir) NilPtr (): NilPtr; VAR r: NilPtr; BEGIN NEW(r); r.what := fNil; RETURN r 
+	END NilPtr;
+	
+	PROCEDURE (d: StdDir) AuxType* (): AuxType; 
+		VAR r: AuxType; 
+	BEGIN NEW(r); r.what := -1 (* this field to be filled out by clients, -1 signals it hasn't been filled out *);
+		RETURN r
+	END AuxType;
+	
+	PROCEDURE (d: StdDir) Basic* (): Basic; VAR r: Basic; BEGIN NEW(r); RETURN r END Basic;
+	
+	PROCEDURE (d: StdDir) Forward* (): Forward; 
+		VAR r: Forward; 
+	BEGIN NEW(r); r.what := fForward; RETURN r
+	END Forward;
+	
+	PROCEDURE (d: StdDir) SysPtr* (): SysPtr; 
+		VAR r: SysPtr; 
+	BEGIN NEW(r); r.what := fSysPtr; RETURN r
+	END SysPtr;
+	
+	PROCEDURE (d: StdDir) ArrayPtr* (): ArrayPtr; 
+		VAR r: ArrayPtr; 
+	BEGIN NEW(r); r.what := fArrayPtr; RETURN r
+	END ArrayPtr;
+	
+	PROCEDURE (d: StdDir) RecPtr* (): RecPtr; 
+		VAR r: RecPtr; 
+	BEGIN NEW(r); r.what := fRecPtr; RETURN r
+	END RecPtr;
+	
+	PROCEDURE (d: StdDir) Record* (): Record; 
+		VAR r: Record; 
+	BEGIN NEW(r); r.what := fRecord; RETURN r
+	END Record;
+	
+	PROCEDURE (d: StdDir) Array* (): Array; 
+		VAR r: Array; 
+	BEGIN NEW(r); r.what := fArray; RETURN r
+	END Array;
+	
+	PROCEDURE (d: StdDir) Procedure* (): Procedure; 
+		VAR r: Procedure; 
+	BEGIN NEW(r); r.what := fProcedure; RETURN r
+	END Procedure;
+	
+	PROCEDURE (d: StdDir) ConDes* (): ConDes; VAR r: ConDes; BEGIN NEW(r); RETURN r
+	END ConDes;
+	PROCEDURE (d: StdDir) GuardEx* (): GuardEx; VAR r: GuardEx; BEGIN NEW(r); RETURN r
+	END GuardEx;
+	PROCEDURE (d: StdDir) Op* (): Op; VAR r: Op; BEGIN NEW(r); RETURN r
+	END Op;
+	PROCEDURE (d: StdDir) IsOp* (): IsOp; VAR r: IsOp; BEGIN NEW(r); RETURN r
+	END IsOp;
+	PROCEDURE (d: StdDir) VarDes* (): VarDes; VAR r: VarDes; BEGIN NEW(r); RETURN r
+	END VarDes;
+	PROCEDURE (d: StdDir) FieldDes* (): FieldDes; VAR r: FieldDes; BEGIN NEW(r); RETURN r
+	END FieldDes;
+	PROCEDURE (d: StdDir) Deref* (): Deref; VAR r: Deref; BEGIN NEW(r); RETURN r
+	END Deref;
+	PROCEDURE (d: StdDir) StringSel* (): StringSel; VAR s: StringSel; BEGIN NEW(s); RETURN s
+	END StringSel;
+	PROCEDURE (d: StdDir) Index* (): Index; VAR r: Index; BEGIN NEW(r); RETURN r
+	END Index;
+	PROCEDURE (d: StdDir) GuardDes* (): GuardDes; VAR r: GuardDes; BEGIN NEW(r); RETURN r
+	END GuardDes;
+	PROCEDURE (d: StdDir) TypeDes* (): TypeDes; VAR r: TypeDes; BEGIN NEW(r); RETURN r
+	END TypeDes;
+	PROCEDURE (d: StdDir) ProcDes* (): ProcDes; VAR r: ProcDes; 
+	BEGIN NEW(r); r.type := procdestp; RETURN r
+	END ProcDes;
+	PROCEDURE (d: StdDir) CallDes* (): CallDes; VAR r: CallDes; BEGIN NEW(r); RETURN r END CallDes;
+	PROCEDURE (d: StdDir) Exit* (): Exit; VAR r: Exit; BEGIN NEW(r); RETURN r END Exit;
+	PROCEDURE (d: StdDir) Trap* (): Trap; VAR r: Trap; BEGIN NEW(r); RETURN r END Trap;
+	PROCEDURE (d: StdDir) If* (): If; VAR r: If; BEGIN NEW(r); RETURN r END If;
+	PROCEDURE (d: StdDir) With* (): With; VAR r: With; BEGIN NEW(r); RETURN r END With;
+	PROCEDURE (d: StdDir) WithClause* (): WithClause; VAR r: WithClause; BEGIN NEW(r); RETURN r
+	END WithClause;
+	PROCEDURE (d: StdDir) Case* (): Case; VAR r: Case; BEGIN NEW(r); RETURN r END Case;
+	PROCEDURE (d: StdDir) Call* (): Call; VAR r: Call; BEGIN NEW(r); RETURN r END Call;
+	PROCEDURE (d: StdDir) Loop* (): Loop; VAR r: Loop; BEGIN NEW(r); RETURN r END Loop;
+	PROCEDURE (d: StdDir) While* (): While; VAR r: While; BEGIN NEW(r); RETURN r END While;
+	PROCEDURE (d: StdDir) Repeat* (): Repeat; VAR r: Repeat; BEGIN NEW(r); RETURN r END Repeat;
+	PROCEDURE (d: StdDir) Return* (): Return; VAR r: Return; BEGIN NEW(r); RETURN r END Return;
+	PROCEDURE (d: StdDir) Assign* (): Assign; VAR r: Assign; BEGIN NEW(r); RETURN r END Assign;
+	PROCEDURE (d: StdDir) New* (): New; VAR r: New; BEGIN NEW(r); RETURN r END New;
+	PROCEDURE (d: StdDir) Put* (): Put; VAR r: Put; BEGIN NEW(r); RETURN r END Put;
+	PROCEDURE (d: StdDir) PutReg* (): PutReg; VAR r: PutReg; BEGIN NEW(r); RETURN r END PutReg;
+	PROCEDURE (d: StdDir) Move* (): Move; VAR r: Move; BEGIN NEW(r); RETURN r END Move;
+	
+	PROCEDURE ThisInt* (x: LONGINT): Int;
+		VAR int: Int;
+	BEGIN int := dir.Int(); int.long := x; int.flags := { const }; int.type := int.Type(); RETURN int
+	END ThisInt;
+	
+	PROCEDURE ThisReal* (r: REAL): Real;
+		VAR real: Real;
+	BEGIN real := dir.Real(); real.real := r; real.flags := { const }; real.type := real.Type(); RETURN real
+	END ThisReal;
+	
+	PROCEDURE ThisChar* (ch: CHAR): Char;
+		VAR char: Char;
+	BEGIN char := dir.Char(); char.ch := ch; char.flags := { const }; char.type := char.Type(); RETURN char
+	END ThisChar;
+	
+	PROCEDURE ThisRange* (from, to: INTEGER): Set;
+		VAR set: Set;
+	BEGIN set := dir.Set(); set.type := settp; set.flags := { const } ; set.set := {from..to}; RETURN set
+	END ThisRange;
+	
+	PROCEDURE ThisSet* (s: SET): Set;
+		VAR set: Set;
+	BEGIN set := dir.Set(); set.type := settp; set.flags := { const } ; set.set := s; RETURN set
+	END ThisSet;
+
+	PROCEDURE ThisString* (IN sstr: ARRAY OF SHORTCHAR; str: POINTER TO ARRAY OF CHAR; 
+		len: INTEGER
+	): StringLit;
+	(** Make a StringLit out of str or, if str = NIL, out of a copy of sstr. len of the array must be supplied; it is not checked, and string length is set to be len-1 (not checked!) (in some cases len is already known when calling ThisString, so this is an optimization) *)
+		VAR lit: StringLit;
+	BEGIN lit := dir.StringLit(); lit.len := len - 1;
+		IF str # NIL THEN lit.str := str ELSE NEW(lit.str, len); lit.str^ := LONG(sstr) END;
+		lit.flags := { const }; lit.type := lit.Type();
+		ASSERT(lit.len + 1 = LEN(lit.str));
+		RETURN lit
+	END ThisString;
+	
+	PROCEDURE ThisNil* (): Nil;
+		VAR n: Nil;
+	BEGIN n := dir.Nil(); n.type := nil.type; n.flags := { const }; RETURN n
+	END ThisNil;
+	
+	PROCEDURE TerminalType* (a: Array): Type;
+		VAR t: Type;
+	BEGIN
+		REPEAT t := a.elTyp; WITH t: Array DO a := t ELSE a := NIL END UNTIL a = NIL;
+		RETURN t
+	END TerminalType;
+
+
+	PROCEDURE (s: Other) Rebuild* (OUT as: Stat), NEW, ABSTRACT;
+	(** Returns a Stat (sequence) that represents s in non-Other way. I.e. a FOR stmt is represented as a sequence of assignments and a WHILE *)
+	
+	PROCEDURE Formals* (of: Symbol): POINTER TO ARRAY OF Par;
+		VAR res: POINTER TO ARRAY OF Par;
+	BEGIN 
+		ASSERT(of # NIL, 20); 
+		WITH of: CallDes DO ASSERT((of.proc = NIL) # (of.what = NIL), 21);
+			IF of.proc # NIL THEN res := of.proc.par ELSE res := of.what.type(Procedure).par END
+		| of: Call DO ASSERT((of.proc = NIL) # (of.what = NIL), 22);
+			IF of.proc # NIL THEN res := of.proc.par ELSE res := of.what.type(Procedure).par END
+		ELSE HALT(23)
+		END;
+		RETURN res
+	END Formals;
+	
+	PROCEDURE IsProper* (t: Type): BOOLEAN;
+	BEGIN ASSERT(t # NIL, 30); 
+		RETURN t.mod.imno = 0
+	END IsProper;
+
+
+	PROCEDURE err(n: SHORTINT);
+	BEGIN HrM.err(n)
+	END err;
+	
+	PROCEDURE SameType* (a, b: Type): BOOLEAN;
+	BEGIN RETURN (a # NIL) & (a = b)
+	END SameType;
+	
+	PROCEDURE Base* (t: Type): Type;
+		VAR res: Type;
+	BEGIN ASSERT(t # NIL, 20);
+		WITH t: Record DO res := t.base | t: RecPtr DO res := t.base | t: Array DO res := t.elTyp
+		| t: ArrayPtr DO res := t.base
+		ELSE HALT(21)
+		END;
+		RETURN res
+	END Base;
+	
+	PROCEDURE ^ EqualTypes* (a, b: Type): BOOLEAN;
+	PROCEDURE MatchingPars* (ap, bp: POINTER TO ARRAY OF Par; ares, bres: Type; checkNames: BOOLEAN ): BOOLEAN;
+		VAR i, al, bl: INTEGER; f, a: Par; res: BOOLEAN;
+	BEGIN 
+		IF ap = NIL THEN al := 0 ELSE al := LEN(ap) END; IF bp = NIL THEN bl := 0 ELSE bl := LEN(bp) END;
+		res := al = bl;
+		i := 0; WHILE res & (i < al) DO
+			f := ap[i]; a := bp[i];
+			IF ~EqualTypes(f.type, a.type) THEN err(-115); res := FALSE
+			ELSIF f.flags * kindMask # a.flags * kindMask THEN err(-290); res := FALSE
+			ELSIF checkNames & (f.name^ # a.name^) THEN err(-291); res := FALSE
+			END;
+			INC(i)
+		END;
+		RETURN res
+	END MatchingPars;
+	
+	PROCEDURE EqualTypes* (a, b: Type): BOOLEAN;
+		VAR eq: BOOLEAN;
+	BEGIN
+		eq := SameType(a, b);
+		IF ~eq THEN
+			WITH a: Array DO WITH b: Array DO 
+				eq := (open IN a.flags) & (open IN b.flags) & EqualTypes(a.elTyp, b.elTyp) 
+			ELSE END ELSE END;
+			IF ~eq THEN
+				WITH a: Procedure DO WITH b: Procedure DO
+					eq := MatchingPars(a.par, b.par, a.res, b.res, FALSE)
+				ELSE END ELSE END;
+				IF ~eq THEN 
+					WITH a: ArrayPtr DO WITH b: ArrayPtr DO
+						eq := EqualTypes(a.base, b.base)
+					ELSE END ELSE END;
+					IF ~eq THEN 
+						WITH a: RecPtr DO WITH b: RecPtr DO
+							eq := EqualTypes(a.base, b.base)
+						ELSE END ELSE END
+					END
+				END
+			END
+		END;
+		RETURN eq
+	END EqualTypes;
+	
+	PROCEDURE Is* (ext, base: Type): BOOLEAN;
+		VAR is: BOOLEAN; a, b: Record;
+	BEGIN is := FALSE;
+		IF (ext IS RecPtr) & (base IS RecPtr) OR (ext IS Record) & (base IS Record) THEN
+			WITH ext: RecPtr DO a := ext.base | ext: Record DO a := ext ELSE END;
+			WITH base: RecPtr DO b := base.base | base: Record DO b := base ELSE END;
+			IF b # NIL THEN WHILE (a # NIL) & (a # b) DO a := a.base END; is := a # NIL END
+		END;
+		RETURN is
+	END Is;
+	
+	PROCEDURE Includes* (a, b: INTEGER): BOOLEAN;
+		(** Implements Langage Report p. 6.1 term "includes", plus for other types Includes = (a = b). WITH the significant distinction: Reals do not include Integers. Includes is used to determine whether a type conversion is necessary *)
+		(* this may have to be extensible to allow different backends to inform the *)
+		VAR res: BOOLEAN;
+	BEGIN	(* it's strange that chars are always included in numbers... this is against LR. What is it for? *)
+		CASE a OF
+		| fChar8: res := b IN {fChar8}
+		| fChar16: res := b IN {fChar8, fChar16}
+		| (*Byte, *)fInt8: res := b IN {(*Byte, *)fInt8}
+		| fInt16: res := b IN {fChar8, (*Byte, *)fInt8, fInt16}
+		| fInt32: res := b IN {fChar8, fChar16, (*Byte, *)fInt8, fInt16, fInt32}
+		| fInt64: res := b IN {fChar8, fChar16, (*Byte, *)fInt8, fInt16, fInt32, fInt64}
+		| fReal32: res := b IN {(*fChar8, fChar16, (*Byte, *)fInt8, fInt16, fInt32, fInt64, *)fReal32}
+		| fReal64: res := b IN {(*fChar8, fChar16, (*Byte, *)fInt8, fInt16, fInt32, fInt64,*) fReal32, fReal64}
+		(*| fString16: res := b IN {fString8, fString16}	(* is this needed? String cannot be a target *)
+		if i decide to uncomment this, check out V.VActualPar - the branch for strings relies on string16 not including string8 *)
+		ELSE res := a = b
+		END;
+		RETURN res
+	END Includes;
+	
+	PROCEDURE SameGroup* (a, b: INTEGER): BOOLEAN;
+		VAR res: BOOLEAN;
+	BEGIN
+		IF a IN chars THEN res := b IN chars
+		ELSIF a IN numbers THEN res := b IN numbers
+		ELSIF a = fSet THEN res := b = fSet
+		ELSIF a IN strings THEN res := b IN strings
+		ELSE HALT(20)
+		END;
+		RETURN res
+	END SameGroup;
+	
+	PROCEDURE NewName (utf: POINTER TO ARRAY OF SHORTCHAR): POINTER TO Name; 
+		VAR _: INTEGER; n: POINTER TO Name; 
+	BEGIN (* possible error: utf too long *)
+		IF (utf # NIL) & (utf^ # '') THEN NEW(n); Utf.Utf8ToString(utf^, n^, _) ELSE n := noname END;
+		RETURN n
+	END NewName;
+	
+	PROCEDURE NewString (utf: POINTER TO ARRAY OF SHORTCHAR): POINTER TO String;
+		VAR _, len: INTEGER; s, t: POINTER TO String; buf: ARRAY 1024 OF CHAR; fits: BOOLEAN;
+	BEGIN 
+		IF (utf # NIL) & (utf^ # '') THEN 
+			len := LEN(utf^); fits := len <= LEN(buf);
+			IF fits THEN Utf.Utf8ToString(utf, buf, _); len := LEN(buf$) + 1
+			ELSE NEW(t, len); Utf.Utf8ToString(utf, t, _); len := LEN(t$) + 1
+			END;
+			NEW(s, len);
+			IF fits THEN s^ := buf$ ELSE s^ := t$ END
+		END;
+		RETURN s
+	END NewString;
+	
+	PROCEDURE ThisForm (old: INTEGER): INTEGER;
+		VAR f: INTEGER;
+	BEGIN
+		CASE old OF 
+		| Undef: f := fUndef | Byte: f := fByte | 2(*Bool*): f := fBool | Char8: f := fChar8 | Int8: f := fInt8
+		| Int16: f := fInt16 | Int32: f := fInt32 | Real32: f := fReal32 | Real64: f := fReal64 | 9(*Set*): f := fSet
+		| String8: f := fString8 | NilTyp: f := fNil | NoTyp: f := fNoTyp
+		| ProcTyp: f := fProcedure 
+		| Char16: f := fChar16 | String16: f := fString16 | Int64: f := fInt64 
+		(*| cPointer: f := -cPointer*)
+		| Res, IUnk, PUnk, Guid: f := -2
+		| Comp: f := -1
+		ELSE HALT(20)
+		END;
+		RETURN f
+	END ThisForm;
+
+	PROCEDURE ThisConstVal (val: T.Const; type: T.Struct): Literal;
+		VAR int: Int; bool: Bool; char: Char; str: StringLit; real: Real; set: Set; 
+			res: Literal;
+	BEGIN
+		CASE type.form OF
+		| Byte, Int8, Int16, Int32, Int64: int := dir.Int(); res := int;
+			IF type.form = Int64 THEN int.long := ENTIER(val.realval) + LONG(val.intval)
+			ELSE int.long := val.intval
+			END
+		| cBool: bool := dir.Bool(); res := bool; 
+			IF val.intval = 1 THEN bool.bool := TRUE ELSIF val.intval = 0 THEN bool.bool := FALSE
+			ELSE HALT(20)
+			END
+		| Char8, Char16: char := dir.Char(); res := char; 
+			IF (0 <= val.intval) & (val.intval <= ORD(MAX(CHAR))) THEN char.ch := CHR(val.intval)
+			ELSE HALT(20)
+			END
+		| Real32, Real64: real := dir.Real(); res := real; real.real := val.realval
+		| cSet: set := dir.Set(); res := set; set.set := val.setval
+		| String8, String16: str := dir.StringLit(); res := str; 
+			IF val.ext # NIL THEN str.str := NewString(val.ext) END
+		| NilTyp: res := nil
+		ELSE HALT(20)
+		END;
+		RETURN res
+	END ThisConstVal;
+
+	PROCEDURE Lookup (key: T.Object): TypeName;	(* old => new structures dictionary lookup *)
+		VAR i: INTEGER; res: TypeName;
+	BEGIN 
+		IF dict # NIL THEN i := 0; WHILE (i < dicTop) & (dict[i].key # key) DO INC(i) END; 
+			res := dict[i].val 
+		END;
+		RETURN res
+	END Lookup;
+	
+	PROCEDURE AddThis (key: T.Object; val: TypeName); 	(* Add val for further lookup by key *)
+		VAR copy: Dict; i, len: INTEGER;
+	BEGIN ASSERT(key # NIL, 20); ASSERT(key.mode = cTyp, 21); ASSERT(val # NIL, 22);
+		IF dict = NIL THEN len := 0 ELSE len := LEN(dict) END;
+		IF dicTop >= len - 1 THEN NEW(copy, len + capDict);
+			i := 0; WHILE i < dicTop DO copy[i] := dict[i]; INC(i) END; dict := copy
+		END;
+		dict[dicTop].key := key; dict[dicTop].val := val; INC(dicTop)
+	END AddThis;
+	
+	PROCEDURE LookupType (struct: T.Struct): Type;	(* old => new structures dictionary lookup *)
+		VAR i: INTEGER; res: Type;
+	BEGIN 
+		IF types # NIL THEN i := 0; WHILE (i < typTop) & (types[i].struct # struct) DO INC(i) END; 
+			res := types[i].type
+		END;
+		RETURN res
+	END LookupType;
+	
+	PROCEDURE AddType (type: Type; struct: T.Struct); 	(* Add val for further lookup by key *)
+		VAR copy: Types; i, len: INTEGER;
+	BEGIN ASSERT(struct # NIL, 20); ASSERT(type # NIL, 22);
+		IF types = NIL THEN len := 0 ELSE len := LEN(types) END;
+		IF typTop >= len - 1 THEN NEW(copy, len + capDict);
+			i := 0; WHILE i < typTop DO copy[i] := types[i]; INC(i) END; types := copy
+		END;
+		types[typTop].struct := struct; types[typTop].type := type; INC(typTop)
+	END AddType;
+
+	
+	(* AddConst, ThisConst *)
+	
+	PROCEDURE AddFixup (type: Type; t: T.Object); 	(* later, type.t := LookupType(t) *)
+		VAR copy: Fixups; i, len: INTEGER;
+	BEGIN ASSERT(type # NIL, 20); ASSERT(t # NIL, 21);
+		IF fix = NIL THEN len := 0 ELSE len := LEN(fix) END;
+		IF fixTop >= len - 1 THEN NEW(copy, len + capFixups);
+			i := 0; WHILE i < fixTop DO copy[i] := fix[i]; INC(i) END; fix := copy
+		END;
+		fix[fixTop].def := type; fix[fixTop].type := t; INC(fixTop)
+	END AddFixup;
+	
+	PROCEDURE ^ ThisObject (o: T.Object): Object;
+	PROCEDURE DoFixups;
+		VAR i: INTEGER; t: ANYPTR;
+	BEGIN 
+		i := 0; WHILE i < fixTop DO 
+			t := Lookup(fix[i].type); ASSERT(t # NIL, 60); 
+			WITH t: TypeName DO fix[i].def.typeName := t ELSE HALT(61) END;
+			INC(i)
+		END
+	END DoFixups;
+		
+	PROCEDURE GetType (type: Type; t: T.Object);
+		VAR p: ANYPTR;
+	BEGIN ASSERT(type # NIL, 20); ASSERT(t # NIL, 21); ASSERT(t.mode = cTyp, 22);
+		p := Lookup(t); IF p # NIL THEN type.typeName := p(TypeName) ELSE AddFixup(type, t) END
+	END GetType;
+	
+	PROCEDURE ThisProcSysflag (sysflag: INTEGER): SET;
+		CONST none = 0; code = 1; callback = 2; nostkchk = 4; ccall = -10; ccall16 = -12; guarded = 8;
+			noframe = 16; native = -33; bytecode = -35; 
+		VAR res: SET;
+	BEGIN
+		CASE sysflag OF
+		| none: res := {}
+		| code: res := codeF | callback: res := callbackF | nostkchk: res := nostkchkF 
+		| ccall: res := ccallF | ccall16: res := ccall16F | guarded: res := guardedF
+		| noframe: res := noframeF | native: res := nativeF | bytecode: res := bytecodeF
+		ELSE HALT(20)
+		END;
+		RETURN res
+	END ThisProcSysflag;
+	
+	PROCEDURE GetObjFlags (o: Object; p: T.Object);
+		CONST none = 0; nil = 1; in = 2; out = 4; new = 5; iid = 6;
+		VAR set: SET;
+	BEGIN ASSERT(o # NIL, 20); ASSERT(p # NIL, 21);
+		WITH o: Par DO ASSERT(o.flags - kindMask = {}) ELSE o.flags := {} END;
+		IF p.used THEN INCL(o.flags, used) END;
+		IF p.fpdone THEN INCL(o.flags, fpdone) END;
+		IF p.leaf THEN
+			IF (o IS LProc) OR (o IS XProc) OR (o IS IProc) OR (o IS TProc) OR (o IS SProc) 
+				OR (o IS TypeName) OR (o IS Const) OR (o IS Field) OR (o IS Mod)
+			THEN INCL(o.flags, leaf)
+			ELSIF o IS Var THEN	(* ok *)
+			ELSE HALT(22)
+			END
+		ELSIF o IS Var THEN INCL(o.flags, ref)
+		END;
+		IF o IS TProc THEN o.flags := o.flags + p.conval.setval
+		ELSIF (o IS Par) & (o.flags * kindMask # valK) THEN 
+			CASE p.sysflag OF none: set := {}
+			| nil: set := nilPF | in: set := inPF | out: set := outPF | new: set := newPF | iid: set := iidPF
+			ELSE HALT(25)
+			END;
+			o.flags := o.flags + set
+		END;
+		IF o IS Proc THEN o.flags := o.flags + ThisProcSysflag(p.sysflag) END;
+		CASE p.vis OF 
+		| internal: set := domestic
+		| external:
+			IF (o IS GlobVar) OR (o IS Field) OR (o IS Const) OR (o IS TypeName) OR (o IS XProc) 
+				OR (o IS TProc)
+			THEN set := { exported }
+			ELSE HALT(23)
+			END
+		| externalR: 
+			IF (o IS GlobVar) OR (o IS Field) OR (o IS TypeName) OR (o IS TProc) THEN set := { readOnly }
+			ELSE HALT(23)
+			END
+		|  inPar, outPar: ASSERT((o IS Par) & (o.flags * kindMask # valK), 23)
+		ELSE HALT(23)
+		END;
+		o.flags := o.flags + set;
+		IF (p.modifiers # NIL) & (p.modifiers[0] = HrM.JS) THEN 
+			IF (o IS GlobVar) OR (o IS Field) OR (o IS Proc) THEN
+				WITH o: Proc DO IF o.level = 0 THEN INCL(o.flags, js) ELSE HrM.Mark(512, o.textpos) END
+				ELSE INCL(o.flags, js)
+				END
+			ELSE HALT(24)
+			END
+		END;
+		ASSERT(o.flags - { 0..29 } = {}, 60)
+	END GetObjFlags;
+
+	PROCEDURE GetStrucFlags (t: Type; s: T.Struct);
+		CONST 	(* values from CpjsM.Get?SysFlag procedures *)
+			none = 0; untagged = 1; handle = 2; noalign = 3; align2 = 4; align4 = 5; align8 = 6; union = 7;
+			interface = 10; jint = -11; jarr = -12; jstr = -13; som = 20; ccall = -10; ccall16 = -12;
+		VAR f: SET;
+	BEGIN
+		WITH t: Array DO ASSERT(t.flags - { open } = {}) ELSE t.flags := {} END;
+		IF s.untagged THEN
+			IF (t IS Array) OR (t IS Record) OR (t IS Pointer) THEN INCL(t.flags, untagged) ELSE HALT(23) 
+			END
+		END;
+		IF s.pbused THEN INCL(t.flags, pbused) END;
+		IF s.pvused THEN INCL(t.flags, pvused) END;
+		IF s.exp THEN INCL(t.flags, exp) END;
+		IF t IS Record THEN t.flags := t.flags + BITS(s.attribute) END;
+		IF t IS Structure THEN
+			CASE s.sysflag OF
+			| none: f := {}
+			| untagged: f := untaggedF | handle: f := handleF | noalign: f := noAlignF
+			| align2: f := align2F | align4: f := align4F | align8: f := align8F | union: f := unionF
+			| interface: f := interfaceF | jint: f := jintF | jstr: f := jstrF | som: f := somF
+			| ccall: f := ccallF
+			| jarr (* = ccall16 *): 
+				IF t IS Array THEN f := jarrF ELSIF t IS Procedure THEN f := ccall16F ELSE HALT(21) END
+			ELSE HALT(20)
+			END;
+			t.flags := t.flags + f
+		END;
+		ASSERT(t.flags - { 0..25 } = {}, 60)
+	END GetStrucFlags;
+	
+	PROCEDURE Insert* (VAR tree: Object; o: Object);	(* eliminate recursion *)
+	BEGIN
+		IF tree = NIL THEN tree := o
+		ELSIF o.name$ < tree.name$ THEN Insert(tree.left, o)
+		ELSIF o.name$ > tree.name$ THEN Insert(tree.right, o)
+		ELSE HrM.Mark(1, o.textpos)
+		END
+	END Insert;
+	
+	PROCEDURE InsertTypeName (VAR tree: Object; o: TypeName; OUT old: TypeName);
+		(* eliminate recursion *)
+	BEGIN 
+		IF tree = NIL THEN tree := o
+		ELSIF o.name$ < tree.name$ THEN InsertTypeName(tree.left, o, old)
+		ELSIF o.name$ > tree.name$ THEN InsertTypeName(tree.right, o, old)
+		ELSIF (tree IS TypeName) & (tree.type IS Forward) (*& ~(o.type IS Forward)*) THEN
+			tree.type(Forward).actual := o.type; tree.type := o.type;
+			tree.textpos := o.textpos; ASSERT(tree.imno = o.imno);
+			old := tree(TypeName)
+		ELSE HrM.Mark(1, o.textpos)
+		END
+	END InsertTypeName;
+	
+	PROCEDURE AppendTo* (o: Object; VAR scope: SCope);
+	(** Appends o to scope. Could be eliminated for efficiency, would require Append to be identical text *)
+		VAR old: TypeName; p: Object;
+	BEGIN (* do bound procedures need to be in the scope's tree? Or just the list? 'cause *)
+		IF scope.head = NIL THEN scope.head := o ELSE scope.tail.next := o END;
+		scope.tail := o;
+		o.imno := scope.imno; o.owner := scope;
+		WITH o: Proc DO o.nesting := scope.nesting + 1 ELSE END;
+		WITH o: TypeName DO
+			InsertTypeName(scope.tree, o, old);
+			IF old # NIL THEN
+				IF scope.head = old THEN scope.head := old.next 
+				ELSE p := scope.head; WHILE p.next # old DO p := p.next END; p.next := old.next
+				END
+			END
+		ELSE IF ~(o IS TProc) THEN Insert(scope.tree, o) END
+		END
+	END AppendTo;
+	
+	PROCEDURE Append* (o: Object); 
+		(** Appends object to current scope (nowScope). Special treatment of type  *)
+	BEGIN AppendTo(o, nowScope)
+	END Append;
+	
+	PROCEDURE AppendThis* (o: Object; n: POINTER TO Name; pos: INTEGER);
+	BEGIN ASSERT(o # NIL, 20); ASSERT(n # NIL, 21); o.name := n; o.textpos := pos; Append(o)
+	END AppendThis;
+	
+	PROCEDURE MakeAppendTempVar* (type: Type; pos: INTEGER; OUT var: Var);
+		VAR buf: ARRAY 11 OF CHAR;
+	BEGIN
+		IF nowScope IS Mod THEN var := dir.GlobVar() ELSE var := dir.LocVar() END;
+		var.type := type; var.textpos := pos;
+		Strings.IntToString(pos, buf); NEW(var.name); var.name^ := "@_" + buf;
+		Append(var)
+	END MakeAppendTempVar;
+	
+	PROCEDURE AppendProc* (r: Record; p: TProc);
+		VAR proc, copy: POINTER TO ARRAY OF TProc; i, len: INTEGER;
+	BEGIN proc := r.proc;
+		IF proc = NIL THEN NEW(proc, capProc); len := capProc; r.proc := proc ELSE len := LEN(proc) END;
+		IF r.nproc = len THEN NEW(copy, len + capProc); 
+			i := 0; WHILE i < len DO copy[i] := proc[i]; INC(i) END; proc := copy; r.proc := proc
+		END;
+		proc[r.nproc] := p; Insert(r.tree, p); INC(r.nproc);
+		Append(p)
+	END AppendProc;
+	
+	PROCEDURE OpenProc* (p: Proc);
+	BEGIN ASSERT(p # NIL, 20); p.owner := nowScope; nowScope := p
+	END OpenProc;
+	
+	PROCEDURE CloseProc*;
+	BEGIN ASSERT(nowScope # NIL, 20); nowScope := nowScope.owner
+	END CloseProc;
+	
+	PROCEDURE CountFieldsVerbs (o: T.Object; OUT fields, verbs: INTEGER);
+		PROCEDURE Do (o: T.Object);
+		BEGIN IF o.left # NIL THEN Do(o.left) END; IF o.right # NIL THEN Do(o.right) END;
+			IF o.mode = cFld THEN INC(fields) ELSIF o.mode = cTProc THEN INC(verbs) ELSE HALT(20) END
+		END Do;
+	BEGIN fields := 0; verbs := 0; IF o # NIL THEN Do(o) END
+	END CountFieldsVerbs;
+	
+	
+	
+	PROCEDURE BuildObjectTree (OUT tree: Object; o: T.Object);
+		VAR obj: Object;
+		PROCEDURE Traverse (o: T.Object);
+		BEGIN 
+			IF o # NIL THEN obj := ThisObject(o); IF obj # NIL THEN Insert(tree, obj) END;
+				IF o.left # NIL THEN Traverse(o.left) END; IF o.right # NIL THEN Traverse(o.right) END
+			END
+		END Traverse;
+	BEGIN Traverse(o)
+	END BuildObjectTree;
+	
+	PROCEDURE GetMembers (r: Record; fields: T.Object);
+		VAR i, j: INTEGER; f: POINTER TO ARRAY OF Field; p: POINTER TO ARRAY OF TProc; obj: ANYPTR;
+			
+		PROCEDURE Traverse (o: T.Object);
+		BEGIN obj := ThisObject(o); ASSERT(obj # NIL, 60);
+			WITH obj: Field DO f[i] := obj; INC(i) | obj: TProc DO p[j] := obj; INC(j) ELSE HALT(21) END;
+			Insert(r.tree, obj(Object));
+			IF o.left # NIL THEN Traverse(o.left) END; IF o.right # NIL THEN Traverse(o.right) END
+		END Traverse;
+	
+	BEGIN ASSERT(r # NIL, 20);
+		CountFieldsVerbs(fields, i, r.nproc);
+		IF i > 0 THEN NEW(f, i) END; IF r.nproc > 0 THEN NEW(p, r.nproc) END; 
+		IF i + r.nproc > 0 THEN i := 0; j := 0; Traverse(fields) END;
+		r.fields := f; r.proc := p
+	END GetMembers;
+
+
+	
+	
+
+
+
+	PROCEDURE ^ ThisType (OUT type: Type; s: T.Struct; VAR rec: Record; VAR arr: Array);
+	PROCEDURE GetNewTypeDef (OUT type: Type; s: T.Struct; VAR rec: Record; VAR arr: Array);
+		VAR basic: Basic; proc: Procedure; i, len: INTEGER;
+			par: T.Object; o: Object; mode: BYTE;
+			sptr: SysPtr; arrPtr: ArrayPtr; recPtr: RecPtr;
+			_: Type; __: Record; ___: Array;
+	BEGIN
+		CASE s.form OF
+		| Byte, cBool, Char8, Char16, Int8, Int16, Int32, Real32, Real64, cSet, Int64, 
+			String8, String16:
+			basic := dir.Basic(); type := basic; basic.what := ThisForm(s.form);
+		| fJString, fErr: basic := dir.Basic(); type := basic; basic.what := s.form
+		| Undef, NilTyp: HALT(20)
+		| ProcTyp: proc := dir.Procedure(); type := proc; proc.what := fProcedure; 
+			IF s.BaseTyp.form # fNoTyp THEN ThisType(proc.res, s.BaseTyp, rec, arr) END;
+			len := 0; par := s.link; 
+			WHILE par # NIL DO INC(len); par := par.link END;
+			IF len > 0 THEN NEW(proc.par, len);
+				i := 0; par := s.link; WHILE par # NIL DO 
+					INC(par.mode, parMagic); o := ThisObject(par); 
+					WITH o: Par DO proc.par[i] := o; proc.par[i].num := i ELSE HALT(61) END;
+					INC(i); par := par.link 
+				END
+			END
+		| cPointer: ASSERT(s.BaseTyp # NIL);
+			CASE s.BaseTyp.comp OF 
+			| fcBasic: ASSERT(s.BaseTyp.form = fUndef, 20); 
+				sptr := dir.SysPtr(); type := sptr; type.what := fSysPtr
+			| fcArray, fcDynArr:
+				arrPtr := dir.ArrayPtr(); type := arrPtr; arrPtr.what := fcArrPtr; 
+				ThisType(_, s.BaseTyp, __, arrPtr.base)
+			| fRecord: recPtr := dir.RecPtr(); type := recPtr; recPtr.what := fRecPtr;
+				ThisType(_, s.BaseTyp, recPtr.base, ___)
+			ELSE HALT(22)
+			END;
+		| Comp:
+			CASE s.comp OF
+			| cArray, DynArr: arr := dir.Array(); type := arr; arr.what := fArray; 
+				INC(openDepth);
+				ThisType(arr.elTyp, s.BaseTyp, __, ___);
+				DEC(openDepth);
+				IF s.comp = DynArr THEN INCL(arr.flags, open); arr.lenoffs := s.align; arr.len := s.n
+				ELSE (*EXCL(arr.flags, open);*) arr.len := s.n
+				END;
+			| cRecord: rec := dir.Record(); type := rec; rec.what := fRecord; rec.nproc := s.n; 
+				rec.level := s.extlev;
+				rec.align := s.align; 
+				IF s.BaseTyp # NIL THEN ThisType(_, s.BaseTyp, rec.base, ___) END;
+				GetMembers(rec, s.link)
+			ELSE HALT(21)
+			END
+		ELSE HALT(126) (* includes fNoTyp, which is eliminated from my structures *)
+		END;
+		ASSERT(type # NIL, 60);
+		WITH type: Structure DO type.mmno := s.mno; type.pos := s.txtpos
+		ELSE
+		END;
+		GetStrucFlags(type, s);
+		type.pbfp := s.pbfp; type.pvfp := s.pvfp; type.size := s.size;
+		IF (s.strobj # NIL) & (s.strobj.name^ # "") THEN GetType(type, s.strobj) END;
+		AddType(type, s);
+		ASSERT(type # NIL, 60)
+	END GetNewTypeDef;
+	(* Let's say scope S1 defines type T and proc P. P defines var V: T. It may be that as S1 is processed, V's definition will be encountered before T's. In this case, when V's typedef is processed, T is still not translated. Can it be translated at the spot? No, because there is no (cheap) way to figure out T's scope. So, either a multipass or a fixup approach is needed. I adopt the fixup approach. *)
+	
+	PROCEDURE ThisType (OUT type: Type; s: T.Struct; VAR rec: Record; VAR arr: Array);
+		VAR res: Type; t: TypeName;
+	BEGIN ASSERT(s # NIL, 20); 
+		IF (s.strobj = NIL) OR (s.strobj.name^ = "") THEN GetNewTypeDef(type, s, rec, arr)
+		ELSE t := Lookup(s.strobj);
+			IF t = NIL THEN type := ThisObject(s.strobj)(TypeName).type
+			ELSE 
+				IF t.type # NIL THEN type := t.type 
+				ELSE GetNewTypeDef(type, s, rec, arr); t.type := type 
+				END
+			END
+		END;
+		ASSERT(type # NIL, 60);
+		WITH type: Record DO rec := type | type: Array DO arr := type ELSE END
+	END ThisType;
+	
+	PROCEDURE ThisGenericType (s: T.Struct): Type;
+		VAR res: Type; rec: Record; arr: Array;
+	BEGIN ThisType(res, s, rec, arr); RETURN res
+	END ThisGenericType;
+	
+	
+
+
+
+	PROCEDURE FindInTree* (t: Object; IN n: Name): Object;	(* reimplement using Cmp *)
+	BEGIN
+		WHILE (t # NIL) & (t.name^ # n) DO
+			IF n < t.name^ THEN t := t.left ELSE t := t.right END
+		END;
+		RETURN t
+	END FindInTree;
+	
+	PROCEDURE FindLocal (IN n: Name): Object;		(* never used! *)
+	BEGIN RETURN FindInTree(nowScope.tree, n)
+	END FindLocal;
+	
+	PROCEDURE FindImport* (mod: Mod; IN n: Name): Object;
+	BEGIN ASSERT(mod # NIL, 20);
+		RETURN FindInTree(mod.tree, n)
+	END FindImport;
+	
+	PROCEDURE FindInScope (s: SCope; IN n: Name): Object;
+		VAR t: Object;
+	BEGIN RETURN FindInTree(s.tree, n)
+	END FindInScope;
+
+	PROCEDURE FindShortInScope (s: SCope; IN n: ARRAY OF SHORTCHAR): Object;
+		VAR m: Name; _: INTEGER;
+	BEGIN Utf.Utf8ToString(n, m, _); RETURN FindInScope(s, m)
+	END FindShortInScope;
+	
+	PROCEDURE FindDeepShort (s: SCope; IN n: ARRAY OF SHORTCHAR): Object;
+		VAR o: Object; m: Name; _: INTEGER;
+	BEGIN Utf.Utf8ToString(n, m, _);
+		WHILE (s # NIL) & (o = NIL) DO
+			o := FindInTree(s.tree, m);
+			IF o = NIL THEN s := s.owner END 
+		END;
+		RETURN o
+	END FindDeepShort;
+	
+	PROCEDURE FindDeep (s: SCope; IN n: ARRAY OF CHAR): Object;
+		VAR o: Object; 
+	BEGIN 
+		WHILE (s # NIL) & (o = NIL) DO
+			o := FindInTree(s.tree, n$);
+			IF o = NIL THEN s := s.owner END 
+		END;
+		RETURN o
+	END FindDeep;
+	
+	PROCEDURE Find* (IN nn: ARRAY OF SHORTCHAR): Object;
+		VAR n: Name; res: INTEGER;
+	BEGIN ASSERT(nowScope # NIL, 20); 
+		Utf.Utf8ToString(nn, n, res); ASSERT(res = 0, 20);
+		RETURN FindDeep(nowScope, n)
+	END Find;
+	
+	PROCEDURE FindInRec* (rec: Record; IN n: ARRAY OF CHAR): Object;
+		VAR o: Object;
+	BEGIN ASSERT(rec # NIL, 20); ASSERT(n # '', 21);
+		REPEAT o := FindInTree(rec.tree, n$); IF o = NIL THEN rec := rec.base END 
+		UNTIL (rec = NIL) OR (o # NIL);
+		RETURN o
+	END FindInRec;
+		
+	PROCEDURE FindShortInRec (rec: Record; IN n: ARRAY OF SHORTCHAR): Object;
+		VAR m: Name; _: INTEGER; o: Object;
+	BEGIN Utf.Utf8ToString(n, m, _); RETURN FindInRec(rec, m)
+	END FindShortInRec;
+
+	PROCEDURE FindProc (o: T.Object): Proc;
+		VAR res: Proc; type: Type; obj: Object; sc: SCope;
+	BEGIN ASSERT(o # NIL, 20); 
+		IF o.mode = cTProc THEN
+			type := LookupType(o.link.typ); ASSERT(type # NIL);
+			IF type IS RecPtr THEN type := type(RecPtr).base END;
+			WITH type: Record DO obj := FindShortInRec(type, o.name) ELSE HALT(20) END
+		ELSE 
+			IF o.mnolev < 0 THEN sc := nowTop.mod[-o.mnolev + 1] ELSE sc := nowScope END; 
+			obj := FindDeepShort(sc, o.name)
+		END;
+		ASSERT(obj # NIL); ASSERT(obj IS Proc);
+		RETURN obj(Proc)
+	END FindProc;
+	
+
+	
+	
+	
+	PROCEDURE LibEnt (o: T.Object; VAR lib, ent: POINTER TO Name);
+	BEGIN ASSERT(o # NIL, 20); lib := NewName(o.library); ent := NewName(o.entry)
+	END LibEnt;
+	
+	PROCEDURE ThisScope (s: SCope; scope: T.Object);
+		VAR _: INTEGER; o: T.Object; obj, p: Object; t: Type; n: Name;
+	BEGIN s.owner := nowScope; (* or make it a param? *)
+		WITH s: Mod DO nowTop.mod[s.imno] := s ELSE END; 
+		nowScope := s; 
+		o := scope.next;
+		WHILE o # NIL DO 
+			IF o.mode = cTProc THEN t := LookupType(o.link.typ);
+				IF t IS RecPtr THEN t := t(RecPtr).base END; Utf.Utf8ToString(o.name^, n, _);
+				WITH t: Record DO obj := FindInTree(t.tree, n) ELSE HALT(20) END; 
+				ASSERT(obj # NIL, 20)
+			ELSE obj := ThisObject(o)
+			END;
+			IF obj # NIL THEN IF ~(obj IS TProc) & (obj.name[0] # "@") THEN Insert(s.tree, obj) END; 
+				IF p # NIL THEN p.next := obj ELSE s.head := obj END; 
+				p := obj 
+			END;
+			o := o.next
+		END;
+		nowScope := s.owner
+	END ThisScope;
+	
+	PROCEDURE IsPar (o: T.Object): BOOLEAN;
+		VAR p: T.Object;
+	BEGIN p := nowPar; WHILE (p # NIL) & (p # o) DO p := p.link END; RETURN p # NIL
+	END IsPar;
+
+	PROCEDURE ThisObject (o: T.Object): Object;
+		CONST typed = { cVar, cCon };
+			procedures = { cSProc, cTProc, cXProc, cCProc, cLProc, cIProc };
+		VAR obj, oo: Object; con: Const; gvar: GlobVar; lvar: LocVar; par: Par;
+			proc: Proc; lproc: LProc; xproc: XProc; sproc: SProc; cproc: CProc; tproc: TProc; opar: T.Object;
+			i: INTEGER; kind: SET; isPar: BOOLEAN;
+			typeName: TypeName; fld: Field; mod: Mod; _: Array; __: Record;
+	BEGIN ASSERT(o # NIL, 20); typeName := Lookup(o);
+		IF o.mode = cAttr THEN
+		ELSIF typeName # NIL THEN obj := typeName	(* some typenames are created before  *)
+		ELSE
+			CASE o.mode OF
+			| cCon: con := dir.Const(); obj := con; con.class := cCon; 
+				con.val := ThisConstVal(o.conval, o.typ); (*not tested:*)con.ex := con.val
+			| cTyp: typeName := dir.TypeName(); obj := typeName; typeName.class := cTypeName; 
+				AddThis(o, typeName)
+			| cFld: fld := dir.Field(); obj := fld; fld.class := cFld; fld.offs := o.adr;
+			| cMod: mod := dir.Mod(); obj := mod; mod.class := cMod; mod.imno := -o.mnolev + 1;
+				mod.name := NewName(o.name); 	(* enables ThisObj to identify by name the obj's mod *)
+				ThisScope(mod, o.scope); mod.lib := NewName(o.library)
+			| cVar, cVarPar, cVar + parMagic, cVarPar + parMagic: 
+				isPar := o.mode > parMagic;
+				IF isPar THEN DEC(o.mode, parMagic);
+					par := dir.Par(); obj := par; par.class := cPar; lvar := par; par.adr := o.adr;
+					par.num := none; (* par.num to be filled out later !!! *)
+					IF o.mode = cVarPar THEN
+						CASE o.vis OF inPar:  kind := inK | outPar: kind := outK | 0: kind := varK 
+						ELSE HALT(23) 
+						END
+					ELSE kind := valK
+					END;
+					par.flags := kind
+				ELSIF nowScope IS Mod THEN
+					gvar := dir.GlobVar(); obj := gvar; gvar.class := cGVar; gvar.adr := o.adr; 
+					gvar.ent := NewName(o.entry); gvar.lib := NewName(o.library); 
+				ELSE lvar := dir.LocVar(); lvar.class := cLVar; obj := lvar; lvar.adr := o.adr
+				END
+			| cIProc: HALT(126)
+			| cLProc, cXProc, cSProc, cCProc, cTProc:
+				CASE o.mode OF cLProc: lproc := dir.LProc(); obj := lproc; lproc.class := cLProc; 
+					LibEnt(o, lproc.lib, lproc.ent)
+				| cXProc: xproc := dir.XProc(); obj := xproc; xproc.class := cXProc;
+					LibEnt(o, xproc.lib, xproc.ent)
+				| cSProc: sproc := dir.SProc(); obj := sproc; sproc.class := cSProc; 
+					sproc.num := SHORT(SHORT(o.adr))
+				| cCProc: cproc := dir.CProc(); obj := cproc; cproc.class := cCProc; 
+					cproc.code := o.conval.ext
+				| cTProc: tproc := dir.TProc(); obj := tproc; tproc.class := cTProc; 
+					tproc.num := SHORT(o.num); LibEnt(o, tproc.lib, tproc.ent)
+				ELSE HALT(61)
+				END;
+				proc := obj(Proc); proc.level := o.mnolev;
+				i := 0; opar := o.link; 
+				WHILE opar # NIL DO INC(i); INC(opar.mode, parMagic); opar := opar.link END; 
+				proc.parlen := i;		GetObjFlags(obj, o);
+				IF (o.scope # NIL) & (o.mode # cSProc) THEN ThisScope(proc, o.scope) 	
+				END; 	(* SProc does not have a scope *)
+				IF proc.parlen > 0 THEN NEW(proc.par, proc.parlen);
+					i := 0; opar := o.link; WHILE i < proc.parlen DO ASSERT(opar # NIL, 21);
+						IF proc # NIL THEN oo := FindShortInScope(proc, opar.name^) END;
+						IF oo = NIL THEN oo := ThisObject(opar) END;	(* FINALIZE(this) is not  *)
+						WITH oo: Par DO proc.par[i] := oo; proc.par[i].num := i ELSE HALT(22) END;
+						INC(i); opar := opar.link 
+					END
+				END
+			| cAttr: 	(* Attr objects are not propagated into the new symbol table *)
+			ELSE HALT(23)
+			END;
+			ASSERT(obj # NIL, 60);
+			IF obj.name = NIL THEN obj.name := NewName(o.name) END;
+			obj.fprint := o.fprint; 
+			WITH obj: Proc DO
+				IF o.mnolev <= 0 THEN obj.imno := -o.mnolev + 1; obj.nesting := 1
+				ELSE obj.imno := none; obj.nesting := o.mnolev - 1
+				END
+			| obj: Mod DO obj.nesting := 0
+			ELSE
+			END;
+			obj.textpos := o.textpos;
+			IF ~(obj IS Proc) THEN GetObjFlags(obj, o) END;
+			obj.history := o.history;
+			IF (o.typ.form = fJString) & (nowTop.mod[nowScope.imno].name^ # "JS") THEN 
+				IF obj IS Par THEN ASSERT(nowScope IS Proc, 60); 
+					IF ~(js IN nowScope.flags) THEN HALT(0); HrM.Mark(515, obj.textpos); o.typ.form := fErr END
+				ELSIF ~(js IN obj.flags) THEN HrM.Mark(513, obj.textpos); o.typ.form := fErr 
+				END;
+				IF ~(obj IS GlobVar) & ~(obj IS Field) & ~(obj IS Par) THEN HrM.Mark(514, obj.textpos); 
+					o.typ.form := fErr 
+				END
+			END;
+			IF o.typ.form # fNoTyp THEN ThisType(obj.type, o.typ, __, _) END
+		END;
+		ASSERT((o.mode = cAttr) OR (obj # NIL), 63);
+		RETURN obj
+	END ThisObject;
+	
+	
+	
+	
+	(* -------------------------- Dump ---------------------------- *)
+	
+	PROCEDURE Comma (cond: BOOLEAN);
+	BEGIN IF cond THEN log.WriteString(", ") END END Comma;
+	
+	PROCEDURE Pos (p: INTEGER); 
+	BEGIN
+		IF details THEN log.WriteChar("@"); log.WriteInt(p); log.WriteChar(">") END
+	END Pos;
+
+	PROCEDURE SpellQualident (o: Object);
+	BEGIN
+		IF ~(o IS Field) THEN 
+			IF o.imno > 1 THEN 
+				IF o.imno <= 20 THEN log.WriteChar(CHR(2460H + o.imno -2)) ELSE log.WriteInt(o.imno) END; 
+				log.WriteChar('.')
+			END;
+			log.WriteString(o.name)
+		ELSE HALT(20)
+		END
+	END SpellQualident;
+	
+	PROCEDURE ^ SpellConstVal (c: Literal);
+	PROCEDURE ^ SpellDes* (d: Designator);
+	PROCEDURE ^ SpellType (t: Type; doShowAlias: BOOLEAN);
+	PROCEDURE ^ SpellOp (op: Op);
+	PROCEDURE ^ SpellCall (proc: Proc; what: Designator; actuals: POINTER TO ARRAY OF Expression;
+		type: Type; isSuper: BOOLEAN
+	);
+	PROCEDURE ^ SpellInd (IN ind: ARRAY OF Expression; IN ipos: ARRAY OF INTEGER);
+	
+	PROCEDURE SpellEx* (ex: Expression);
+		VAR i: INTEGER;
+	BEGIN
+		WITH
+		| ex: ConDes DO SpellQualident(ex.const)
+		| ex: VarDes DO SpellQualident(ex.var)
+		| ex: FieldDes DO SpellEx(ex.rec); log.WriteChar('.'); log.WriteString(ex.field.name)
+		| ex: Deref DO SpellEx(ex.what); log.WriteChar('^')
+		| ex: Index DO SpellEx(ex.arr); log.WriteChar('['); SpellInd(ex.dim, ex.ipos); log.WriteChar(']')
+		| ex: GuardDes DO SpellEx(ex.what); log.WriteChar('('); SpellQualident(ex.type.typeName); log.WriteChar(')')
+		| ex: TypeDes DO SpellQualident(ex.name)
+		| ex: ProcDes DO SpellQualident(ex.proc)
+		| ex: CallDes DO SpellCall(ex.proc, ex.what, ex.apar, ex.type, ex.super)
+		| ex: GuardEx DO SpellEx(ex.what); log.WriteChar('('); SpellQualident(ex.type.typeName); log.WriteChar(')')
+		| ex: Op DO SpellOp(ex)
+		| ex: IsOp DO SpellEx(ex.des); log.WriteString(" IS "); SpellQualident(ex.typeName)
+		| ex: Literal DO SpellConstVal(ex)
+		| ex: StringSel DO SpellDes(ex.what); log.WriteChar("$")
+		| ex: ErrDes DO log.WriteString("bad!designator")
+		| ex: ErrEx DO log.WriteString("bad!expression")
+		ELSE log.WriteString("SpellEx NIY") ;HALT(1)
+		END
+	END SpellEx; 
+	
+	PROCEDURE SpellDim (IN dim: ARRAY OF Expression);
+		VAR i: INTEGER;
+	BEGIN i := 0; WHILE dim[i] # NIL DO Comma(i # 0); SpellEx(dim[i]); INC(i) END
+	END SpellDim;
+	
+	PROCEDURE SpellInd (IN ind: ARRAY OF Expression; IN ipos: ARRAY OF INTEGER);
+		VAR i: INTEGER;
+	BEGIN i := 0; WHILE ind[i] # NIL DO Comma(i # 0); Pos(ipos[i]); SpellEx(ind[i]); INC(i) END
+	END SpellInd;
+
+	PROCEDURE SpellCall (proc: Proc; what: Designator; actuals: POINTER TO ARRAY OF Expression;
+		type: Type; isSuper: BOOLEAN
+	);
+		VAR i, len: INTEGER;
+	BEGIN
+		IF proc # NIL THEN 
+			IF proc IS TProc THEN i := 1; SpellEx(actuals[0]); log.WriteChar('.') ELSE i := 0 END;
+			SpellQualident(proc); IF isSuper THEN log.WriteChar("^") END
+		ELSE i := 0; SpellEx(what) END; 
+		IF actuals # NIL THEN len := LEN(actuals) ELSE len := 0 END;
+		IF i < len THEN log.WriteChar("("); 
+			WHILE i < len DO IF actuals[i] # NIL THEN SpellEx(actuals[i]) ELSE log.WriteString("<NULL>") END;
+				IF i < len - 1 THEN log.WriteString(", ") END; INC(i) 
+			END;
+			log.WriteChar(")")
+		ELSIF type # NIL THEN log.WriteString("()")
+		END
+	END SpellCall;
+
+	PROCEDURE SpellOp (op: Op);
+		VAR what: INTEGER;
+	BEGIN ASSERT(op # NIL, 20); 
+		(*IF (op.what = bit) & (op.b # NIL) THEN what := sysbit
+		ELS*)
+		IF ((op.what = maxfn) OR (op.what = minfn)) & (op.a = NIL) & (op.b = NIL) THEN what := -op.what
+		ELSE what := op.what 
+		END;
+		CASE what OF
+		| -maxfn, -minfn:
+			log.WriteString(opNames[-what]); log.WriteChar("("); SpellType(op.type, showAlias); log.WriteChar(")")
+		| maxsetfn: log.WriteString("MAX(SET)")
+		| minsetfn: log.WriteString("MIN(SET)")
+		| absfn, capfn, oddfn, adrfn, ccfn, valfn, ashfn, lenfn, minfn, maxfn, lshfn, rotfn, typfn, sizefn:
+			log.WriteString(opNames[what]); log.WriteChar("("); SpellEx(op.a); 
+			IF op.b # NIL THEN log.WriteString(', '); SpellEx(op.b) END;
+			log.WriteChar(")")
+		| notfn, minusfn, isfn, timesfn, slashfn, divfn, modfn, andfn, plusfn, orfn, eqlfn, neqfn, lssfn, leqfn, gtrfn, geqfn, infn:
+			IF (what = notfn) OR (what = minusfn) & (op.b = NIL) THEN
+				log.WriteString(opNames[what]); SpellEx(op.a)
+			ELSE SpellEx(op.a); log.WriteChar(' '); log.WriteString(opNames[what]); log.WriteChar(' '); SpellEx(op.b)
+			END
+		| bitfn, ssetel, range: log.WriteString("{ "); SpellEx(op.a); 
+			IF op.b # NIL THEN log.WriteString(".."); SpellEx(op.b) END;
+			log.WriteString(" }")
+		| convfn: SpellEx(op.a); log.WriteChar("("); SpellType(op.type, showAlias); log.WriteChar(")") 
+		| mskfn: log.WriteString("NIY")
+		ELSE HALT(20)
+		END
+	END SpellOp;
+	
+	PROCEDURE SpellDes* (d: Designator);
+	BEGIN SpellEx(d)
+	END SpellDes;
+	
+	PROCEDURE SpellAssign (a: Assign);
+	BEGIN
+		CASE a.kind OF errorfn: log.WriteString("ERROR:=")
+		| incfn, decfn, inclfn, exclfn: log.WriteString(opNames[a.kind]); log.WriteChar("("); SpellEx(a.des);
+			IF a.expr # one THEN log.WriteString(", "); SpellEx(a.expr) END;
+			log.WriteChar(")")
+		ELSE SpellDes(a.des); log.WriteString(" := "); SpellEx(a.expr)
+		END
+	END SpellAssign;
+	
+	PROCEDURE (s: Stat) Spell* (VAR log: TextMappers.Formatter), NEW, EXTENSIBLE;
+	BEGIN log.WriteString("NIY")
+	END Spell;
+
+	PROCEDURE SpellSeq* (s: Stat);
+		VAR if: If; i, len: INTEGER; st: Stat; clause: WithClause; _: Type;
+	BEGIN
+		WHILE s # NIL DO 
+			log.WriteLn;
+			IF details THEN log.WriteChar("<"); log.WriteInt(s.textpos); log.WriteChar(">") END;
+			WITH s: Assign DO SpellAssign(s)
+			| s: New DO log.WriteString("NEW("); SpellDes(s.des); 
+				IF s.dim[0] # NIL THEN log.WriteString(", "); SpellDim(s.dim) END; log.WriteChar(")")
+			| s: Return DO log.WriteString("RETURN "); IF s.ex # NIL THEN SpellEx(s.ex) END
+			| s: Exit DO log.WriteString("EXIT")
+			| s: Trap DO 
+				IF s.cond = NIL THEN log.WriteString("TRAP(") 
+				ELSE log.WriteString("ASSERT("); SpellEx(s.cond); log.WriteString(", ")
+				END; 
+				SpellEx(s.num); log.WriteChar(")")
+			| s: While DO log.WriteString("WHILE "); SpellEx(s.cond); log.WriteString(" DO"); 
+				INC(logIndent); SpellSeq(s.do); DEC(logIndent); log.WriteLn; log.WriteString("END")
+			| s: Repeat DO log.WriteString("REPEAT ");
+				INC(logIndent); SpellSeq(s.do); DEC(logIndent); log.WriteLn; log.WriteString("UNTIL "); SpellEx(s.until)
+			| s: Loop DO log.WriteString("LOOP");
+				INC(logIndent); SpellSeq(s.do); DEC(logIndent); log.WriteLn; log.WriteString("END")
+			| s: Call DO SpellCall(s.proc, s.what, s.actuals, _, s.super)
+			| s: If DO if := s;
+				WHILE if # NIL DO 
+					IF if.cond # NIL THEN IF s = if THEN log.WriteString("IF ") ELSE log.WriteLn; log.WriteString("ELSIF ") END; 
+						SpellEx(if.cond); log.WriteString(" THEN")
+					ELSIF if.do # NIL THEN log.WriteLn; log.WriteString("ELSE ")
+					END;
+					IF if.do # NIL THEN INC(logIndent); SpellSeq(if.do); DEC(logIndent) END;
+					if := if.next
+				END;
+				log.WriteLn; log.WriteString("END")
+			| s: Case DO st := NIL; log.WriteString("CASE "); SpellEx(s.what); log.WriteString(" OF"); log.WriteLn;
+				len := s.labels;
+				i := 0; WHILE i < len DO
+					IF (st # NIL) & (s.stmts[i] # st) THEN
+						log.WriteChar(":"); INC(logIndent); SpellSeq(st); DEC(logIndent); 
+						log.WriteLn; log.WriteString("| "); 
+					ELSIF (st # NIL) THEN log.WriteString(", ")
+					END;
+					log.WriteInt(s.ranges[i].from); 
+					IF s.ranges[i].to # s.ranges[i].from THEN log.WriteString(".."); log.WriteInt(s.ranges[i].to) END;
+					st := s.stmts[i];
+					INC(i)
+				END;
+				log.WriteChar(":"); INC(logIndent); SpellSeq(st); DEC(logIndent); 
+				log.WriteLn;
+				IF s.else # NIL THEN 
+					log.WriteString("ELSE"); INC(logIndent); SpellSeq(s.else); DEC(logIndent); log.WriteLn
+				END;
+				log.WriteString("END")
+			| s: With DO log.WriteString("WITH "); clause := s.clauses;
+				REPEAT log.WriteLn; log.WriteString("| "); 
+					SpellEx(clause.is);
+					log.WriteString(" DO "); INC(logIndent); SpellSeq(clause.do); DEC(logIndent);
+					clause := clause.next
+				UNTIL clause = NIL;
+				log.WriteLn;
+				IF s.else # NIL THEN log.WriteString("ELSE "); 
+					INC(logIndent); SpellSeq(s.else); DEC(logIndent); log.WriteLn
+				END;
+				log.WriteString("END")
+			| s: PutReg DO 
+				IF s.put THEN log.WriteString("SYSTEM.PUTREG(") ELSE log.WriteString("SYSTEM.GETREG(") END; SpellEx(s.reg); log.WriteString(", "); SpellEx(s.expr);
+				log.WriteChar(")")
+			ELSE s.Spell(log)
+			END;
+			log.WriteChar(';'); s := s.link
+		END
+	END SpellSeq;
+
+	PROCEDURE SpellExpMark (flags: SET);
+	BEGIN
+		IF exported IN flags THEN log.WriteChar("*") 
+		ELSIF readOnly IN flags THEN log.WriteChar("-")
+		END
+	END SpellExpMark;
+
+	PROCEDURE SpellProcSysflags (f: SET);
+	BEGIN log.WriteSet(f); log.WriteChar(' ')
+	END SpellProcSysflags;
+	
+	PROCEDURE ^ SpellObj* (o: Object);
+	PROCEDURE SpellSignature (par: POINTER TO ARRAY OF Par; first: INTEGER; res: Type);
+		VAR len: INTEGER; hasParen, hasRes: BOOLEAN; 
+	BEGIN
+		hasRes := (res # NIL) & (res.what # fNoTyp);
+		IF par = NIL THEN len := 0 ELSE len := LEN(par) END;
+		hasParen := (first < len) OR hasRes;
+		IF hasParen THEN log.WriteChar("(") END;
+		WHILE first < len DO SpellObj(par[first]); IF first < len - 1 THEN log.WriteString("; ") END; INC(first) END;
+		IF hasParen THEN log.WriteChar(")") END;
+		IF hasRes THEN log.WriteString(": "); SpellType(res, showAlias) END
+	END SpellSignature;
+
+	PROCEDURE SpellType (t: Type; doShowAlias: BOOLEAN);
+		VAR n: ARRAY 32 OF CHAR; elem: Array; base: Record; i, len: INTEGER;
+	BEGIN ASSERT(t # NIL, 20);
+		IF t IS Forward THEN log.WriteString("ERROR: Unresolved Forward Type Reference!")
+		ELSIF doShowAlias & (t.typeName # NIL) THEN SpellQualident(t.typeName) 
+		ELSIF doShowAlias & (t.qualident # NIL) THEN log.WriteString(t.qualident)
+		ELSE
+			WITH t: Basic DO
+				CASE t.what OF 
+				| fByte, fInt8: n := "BYTE" | fBool: n := "BOOLEAN" | fChar8: n := "SHORTCHAR"
+				| fChar16: n := "CHAR" | fInt16: n := "SHORTINT" | fInt32: n := "INTEGER" 
+				| fInt64: n := "LONGINT" | fReal32: n := "REAL" | fReal64:  n := "LONGREAL"
+				| fSet: n := "SET"
+				| fErr: n := "!#@^ERROR"
+				ELSE HALT(21)
+				END; log.WriteString(n)
+			| t: Array DO log.WriteString("ARRAY");
+				IF untagged IN t.flags THEN log.WriteString(" [untagged]") END;
+				IF open IN t.flags THEN log.WriteString(" [open]") END;
+				(*HALT(2);*)
+				IF details THEN log.WriteString(" ["); log.WriteInt(t.len); log.WriteInt(t.lenoffs); log.WriteChar("]") END;
+				elem := t;
+				IF ~(open IN t.flags) THEN log.WriteChar(" "); log.WriteInt(t.len); 
+					WHILE elem.elTyp IS Array DO elem := elem.elTyp(Array); log.WriteString(", "); log.WriteInt(elem.len)
+					END
+				ELSIF details THEN log.WriteChar("!"); log.WriteInt(t.len)
+				END;
+				log.WriteString(" OF "); SpellType(elem.elTyp, showAlias)
+			| t: Pointer DO
+				WITH 
+				| t: SysPtr DO log.WriteString("SYSTEM.PTR")
+				| t: ArrayPtr DO log.WriteString("POINTER"); 
+					IF untagged IN t.flags THEN log.WriteString(" [untagged]") END;
+					log.WriteString(" TO "); SpellType(t.base, showAlias)
+				| t: RecPtr DO
+					IF (t.base.typeName # NIL) & (t.base.typeName.name^ = "ANYREC") THEN
+						log.WriteString("ANYPTR")
+					ELSE log.WriteString("POINTER TO "); SpellType(t.base, showAlias)
+					END
+				ELSE HALT(126)
+				END
+			| t: Procedure DO log.WriteString("PROCEDURE "); 
+				IF details THEN SpellProcSysflags(t.flags) END; SpellSignature(t.par, 0, t.res)
+			| t: Record DO 
+				IF absAttr IN t.flags THEN log.WriteString("ABSTRACT ")
+				ELSIF limAttr IN t.flags THEN log.WriteString("LIMITED ")
+				ELSIF extAttr IN t.flags THEN log.WriteString("EXTENSIBLE ")
+				END;
+				log.WriteString("RECORD ");
+				IF untagged IN t.flags THEN log.WriteString("[untagged] ") END;
+				i := t.level; base := t.base;
+				WHILE i > 0 DO log.WriteChar("("); SpellType(base, showAlias); base := base.base; DEC(i) END;
+				i := t.level; WHILE i > 0 DO log.WriteChar(")"); DEC(i) END;
+				INC(logIndent); 
+				IF t.fields = NIL THEN len := 0 ELSE len := LEN(t.fields) END;
+				i := 0; WHILE i < len DO 
+					log.WriteLn; SpellObj(t.fields[i]); IF i + 1 < len THEN log.WriteChar(";") END; INC(i)
+				END;
+				DEC(logIndent); log.WriteLn; log.WriteString("END");
+				(*i := 0; WHILE i < t.nproc DO log.WriteLn; log.WriteLn; SpellObj(t.proc[i]); INC(i) END*)
+			| t: AuxType DO IF t.what = fErr THEN log.WriteString("!#@^ERROR") ELSE HALT(20) END
+			ELSE log.WriteString("Typedef NIY"); log.WriteInt(t.what)
+			END
+		END
+	END SpellType;
+	
+	PROCEDURE SpellConstVal (c: Literal);
+		VAR buf: ARRAY 32 OF CHAR;
+	BEGIN
+		WITH c: Int DO Strings.IntToString(c.long, buf); log.WriteChar(' '); log.WriteString(buf) 
+		| c: Char DO log.WriteChar(c.ch) | c: Set DO log.WriteSet(c.set)
+		| c: Bool DO log.WriteBool(c.bool) | c: Real DO log.WriteReal(c.real) 
+		| c: StringLit DO log.WriteString(c.str)
+		| c: Nil DO log.WriteString("NIL")
+		| c: BadLiteral DO log.WriteString("bad!constant")
+		ELSE HALT(20)
+		END
+	END SpellConstVal;
+	
+	PROCEDURE SpellLibEnt (o: Object);
+		PROCEDURE Do (lib, ent: POINTER TO Name);
+		BEGIN 
+			IF (lib # NIL) & (lib^ # '') OR (ent # NIL) & (ent^ # '') THEN log.WriteChar("[");
+				IF (lib = NIL) OR (lib^ = '') THEN log.WriteString('"", "') 
+				ELSE log.WriteChar('"'); log.WriteString(lib); log.WriteString('", "')
+				END;
+				IF (ent # NIL) & (ent^ # '') THEN log.WriteString(ent) END;
+				log.WriteString('"] ')
+			END
+		END Do;
+	BEGIN
+		WITH o: XProc DO Do(o.lib, o.ent) | o: LProc DO Do(o.lib, o.ent) | o: TProc DO Do(o.lib, o.ent)
+		| o: Mod DO Do(o.lib, NIL) | o: Const DO Do(o.lib, o.ent) | o: GlobVar DO Do(o.lib, o.ent)
+		| o: FProc DO IF o.actual # NIL THEN SpellLibEnt(o.actual) END | o: CProc DO Do(o.lib, o.ent)
+		ELSE HALT(20)
+		END
+	END SpellLibEnt;
+	
+	PROCEDURE SpellBlock (o: SCope);
+		VAR obj: Object;
+	BEGIN
+		obj := o.head; WHILE obj # NIL DO 
+			IF ~(obj IS Par) THEN
+				log.WriteLn; IF obj IS Proc THEN log.WriteLn END; SpellObj(obj); 
+				IF ~(obj IS Proc) & ~(obj IS Mod) THEN log.WriteChar(";") END; 
+			END;
+			obj := obj.next
+		END
+	END SpellBlock;
+	
+	PROCEDURE ^ SpellTree (o: Object);
+	PROCEDURE SpellObj* (o: Object);
+		VAR len, i: INTEGER; hasParen, hasRes: BOOLEAN; kind: SET; obj: Object;
+	BEGIN
+		IF details & (o.textpos # 0) THEN
+			log.WriteChar("@"); log.WriteInt(o.textpos); log.WriteChar(">"); log.WriteSet(o.flags)
+		END;
+		WITH 
+		| o: Var DO
+			WITH o: Par DO kind := kindMask * o.flags;
+				IF kind = varK THEN log.WriteString("VAR ")
+				ELSIF kind = inK THEN log.WriteString("IN ")
+				ELSIF kind = outK THEN log.WriteString("OUT ")
+				END
+			ELSE
+			END;
+			log.WriteString(o.name); IF o IS GlobVar THEN SpellExpMark(o.flags) END;
+			log.WriteString(": "); SpellType(o.type, showAlias)
+		| o: Proc DO log.WriteString("PROCEDURE "); 
+			IF (o IS FProc) OR (31 IN o.flags (*cheat*) ) THEN log.WriteString("^ ") END;
+			IF o.flags * codeF = codeF THEN log.WriteString("[code] ") END;
+			IF details THEN 
+				log.WriteString("<@"); log.WriteInt(o.startPos); log.WriteString(".."); log.WriteInt(o.endPos); log.WriteString("> ");
+				SpellProcSysflags(o.flags)
+			END;
+			WITH o: SProc DO log.WriteString(" ["); log.WriteInt(o.num); log.WriteString("]") ELSE END;
+			IF o IS TProc THEN log.WriteChar("("); SpellObj(o.par[0]); log.WriteString(") "); i := 1 ELSE i := 0 END;
+			log.WriteString(o.name); SpellExpMark(o.flags);
+			SpellLibEnt(o);
+			SpellSignature(o.par, i, o.type);
+			WITH o: TProc DO
+				IF newAttr IN o.flags THEN log.WriteString(", NEW") END;
+				IF absAttr IN o.flags THEN log.WriteString(", ABSTRACT")
+				ELSIF limAttr IN o.flags THEN log.WriteString(", LIMITED")
+				ELSIF empAttr IN o.flags THEN log.WriteString(", EMPTY")
+				ELSIF extAttr IN o.flags THEN log.WriteString(", EXTENSIBLE")
+				END
+			| o: CProc DO log.WriteChar('['); log.WriteInt(LEN(o.code)); log.WriteString(' bytes]')
+			| o: IProc DO Log.String("Interrupt procedure NIY")
+			ELSE
+			END; log.WriteChar(";"); INC(logIndent); 
+			SpellBlock(o); DEC(logIndent); log.WriteLn;
+			IF ~(o IS FProc) THEN
+				log.WriteString("BEGIN"); INC(logIndent); SpellSeq(o.body); DEC(logIndent); log.WriteLn;
+				log.WriteString("END "); log.WriteString(o.name); log.WriteChar(";"); log.WriteLn
+			END
+		| o: TypeName DO log.WriteString(o.name); SpellExpMark(o.flags); 
+			IF details THEN log.WriteString(" ["); log.WriteInt(o.type.size); log.WriteChar("]") END;
+			log.WriteString(" = "); 
+			IF o.type.typeName # o THEN SpellQualident(o.type.typeName)
+			ELSE SpellType(o.type, ~showAlias); 
+			END
+		| o: Const DO log.WriteString("CONST "); log.WriteString(o.name); SpellExpMark(o.flags); 
+			log.WriteString(" = "); SpellEx(o.ex)
+		| o: Field DO log.WriteString(o.name); SpellExpMark(o.flags); 
+			log.WriteString(": "); SpellType(o.type, showAlias)
+		| o: Mod DO 
+		ELSE log.WriteString("NIY Object: "); log.WriteString(o.name)
+		END
+	END SpellObj;
+	
+	PROCEDURE SpellSubj* (subj: Segraph);
+		VAR m: Mod; len, i: INTEGER;
+	BEGIN ASSERT(subj # NIL, 20); m := subj.mod[0];
+		log.WriteString("MODULE "); log.WriteString(m.name); SpellLibEnt(m);
+		IF m.lib # NIL THEN log.WriteString('["'); log.WriteString(m.lib); log.WriteString('"]') END; 
+		log.WriteChar(';'); INC(logIndent); log.WriteLn;
+		len := LEN(subj.mod);
+		IF (len > 2) & (subj.mod[2] # NIL) THEN log.WriteString("IMPORT ");
+			i := 2; WHILE (i < len) & (subj.mod[i] # NIL) DO
+				Comma(i > 2); log.WriteString(subj.mod[i].name); log.WriteChar(' ');
+				IF i < 22 THEN log.WriteChar(CHR(ORD('①') + i - 2)) ELSE log.WriteInt(i - 2) END;
+				INC(i)
+			END; log.WriteChar(';')
+		END; 
+		SpellBlock(m); DEC(logIndent); log.WriteLn;
+		IF m.begin # NIL THEN
+			log.WriteString("BEGIN"); INC(logIndent); SpellSeq(m.begin); DEC(logIndent); log.WriteLn
+		END;
+		IF m.close # NIL THEN
+			log.WriteString("CLOSE"); INC(logIndent); SpellSeq(m.close); DEC(logIndent); log.WriteLn
+		END;
+		log.WriteString("END "); log.WriteString(m.name); log.WriteChar(".")
+	END SpellSubj;
+	
+	PROCEDURE SpellTree (o: Object);
+	BEGIN ASSERT(o # NIL, 20);
+		IF o.left # NIL THEN SpellTree(o.left) END; SpellObj(o); log.WriteLn;
+		IF o.right # NIL THEN SpellTree(o.right) END
+	END SpellTree;
+	
+	
+	
+	
+	
+	(* --------------------------------- Nodes: expression tree -----------------------------*)
+
+	PROCEDURE ^ ThisDesignator (nd: T.Node): Designator;
+	PROCEDURE ^ ThisExpr (nd: T.Node): Expression;
+	PROCEDURE GetThisCall (nd: T.Node; OUT proc: Proc; OUT what: Designator; 
+		OUT actuals: POINTER TO ARRAY OF Expression; OUT type: Type; OUT superCall: BOOLEAN
+	);
+		VAR i, len: INTEGER; par: T.Node; 
+	BEGIN ASSERT(nd # NIL, 20); 
+		IF nd.left.class = Nproc THEN proc := FindProc(nd.left.obj); ASSERT(proc # NIL);
+			superCall := nd.left.subcl = super;
+			IF superCall THEN ASSERT(proc IS TProc); 
+				type := proc.par[0].type; 
+				IF type IS RecPtr THEN type := type(RecPtr).base END;
+				proc := FindInRec(type(Record).base, proc.name)(TProc); ASSERT(proc # NIL)
+			END;
+			type := proc.type
+		(*ELSIF nd.left.class = Nfield THEN what := ThisDesignator(nd.left.left); 
+			rec := LookupType(nd.left.typ)(Record); 
+			o := FindShortInRec(rec, nd.left.obj.name); ASSERT(o # NIL); ASSERT(o IS TProc);
+			proc := o(Proc)*)
+		ELSE(*IF nd.left.class = Nvar, Nvarpar, Nfield THEN*) 
+			what := ThisDesignator(nd.left); type := what.type
+		(*ELSE HALT(126)*)
+		END;
+		ASSERT((proc # NIL) OR (what # NIL), 60); (*call.proc := proc; *)
+		par := nd.right; len := 0; WHILE par # NIL DO INC(len); par := par.link END;
+		IF len > 0 THEN NEW(actuals, len); par := nd.right;
+			i := 0; WHILE i < len DO actuals[i] := ThisExpr(par); INC(i); par := par.link END
+		END
+	END GetThisCall;
+
+	PROCEDURE ThisExpr (nd: T.Node): Expression;
+		VAR ex: Expression; o: Object; fpar: POINTER TO ARRAY OF Expression; 
+			proc: Proc; rec: Record; guard: GuardEx; type: Type;
+			op: Op; isOp: IsOp;
+	BEGIN ASSERT(nd # NIL, 20);
+		CASE nd.class OF
+		| Nvar, Nvarpar, Nfield, Nderef, Nindex, Nguard, Ntype, Nproc: ex := ThisDesignator(nd)
+		| Nconst: ex := ThisConstVal(nd.conval, nd.typ)
+		| Ncall: ex := ThisDesignator(nd)
+		(*| Nguard: guard := dir.Guard(); ex := guard; guard.what := ThisDesignator(nd.left); 
+			guard.type := LookupType(nd.typ)*)
+		| Nmop, Ndop, Nupto: 
+			IF (nd.class = Nmop) & (nd.subcl = isfn) THEN isOp := dir.IsOp(); ex := isOp; 
+				o := FindDeepShort(nowScope, nd.obj.name); ASSERT(o # NIL); 
+				isOp.typeName := o(TypeName);
+				isOp.des := ThisExpr(nd.left); isOp.type := ThisGenericType(nd.typ)
+			ELSE op := dir.Op(); ex := op; 
+				IF nd.class = Nupto THEN op.what := range ELSE op.what := nd.subcl END;
+				op.a := ThisExpr(nd.left);
+				IF nd.right # NIL THEN op.b := ThisExpr(nd.right) END;
+				op.type := ThisGenericType(nd.typ)
+			END
+		| Ncomp: HALT(126)
+		ELSE HALT(126)
+		END;
+		ASSERT(ex # NIL, 60); 
+		WITH ex: CallDes DO 
+			IF ex.proc # NIL THEN ASSERT(ex.type = ex.proc.type, 61) 
+			ELSE ASSERT(ex.type = ex.what.type, 62)
+			END
+		ELSE ASSERT((ex IS ProcDes) OR (ex.type # NIL), 62) (*can't assert this: erroneous designators *)
+		END;
+		RETURN ex
+	END ThisExpr;
+	
+	PROCEDURE ThisDesignator (nd: T.Node): Designator;
+		VAR o: Object; var: VarDes; des: Designator; field: FieldDes; type: Type; deref: Deref; 
+			index: Index; guard: GuardDes; typeDes: TypeDes; proc: ProcDes; call: CallDes; strsel: StringSel;
+			i, j: INTEGER; idx: ARRAY 16 OF Expression;
+	BEGIN ASSERT(nd # NIL, 20);
+		CASE nd.class OF
+		| Nproc : proc := dir.ProcDes(); des := proc; 
+			proc.proc := FindDeepShort(nowScope, nd.obj.name)(Proc)
+		| Nvar, Nvarpar: o := FindDeepShort(nowScope, nd.obj.name); ASSERT(o # NIL);
+			IF nd.class = Nproc THEN 
+			ELSIF (nd.class = Nvar) OR (nd.class = Nvarpar) THEN 
+				var := dir.VarDes(); des := var; var.var := o(Var)
+			END;
+			des.type := o.type
+				(* should GlobVar, LocVar and Par be distinguished? *)
+		| Nfield: field := dir.FieldDes(); des := field; field.rec := ThisDesignator(nd.left); 
+			type := LookupType(nd.left.typ);
+			IF type IS RecPtr THEN type := type(RecPtr).base END;
+			WITH type: Record DO field.field := FindShortInRec(type, nd.obj.name)(Field) 
+			ELSE HALT(21) 
+			END;
+			field.type := field.field.type
+		| Nderef: 
+			IF nd.subcl = 0 THEN deref := dir.Deref(); des := deref; deref.what := ThisDesignator(nd.left);
+				deref.type := deref.what.type(Pointer).Base()
+			ELSIF nd.subcl = 1 THEN strsel := dir.StringSel(); des := strsel; 
+				strsel.what := ThisDesignator(nd.left); strsel.type := strsel.what.type
+			ELSE HALT(126)
+			END
+		| Nindex: index := dir.Index(); des := index; index.type := ThisGenericType(nd.typ);
+			i := 0; REPEAT idx[i] := ThisExpr(nd.right); INC(i); nd := nd.left UNTIL nd.class # Nindex;
+			j := 0; DEC(i); WHILE i >= 0 DO index.dim[j] := idx[i]; INC(j); DEC(i) END;
+			index.arr := ThisDesignator(nd); 
+		| Nguard: guard := dir.GuardDes(); des := guard; guard.what := ThisDesignator(nd.left); 
+			guard.type := LookupType(nd.typ)
+		| Ntype: typeDes := dir.TypeDes(); des := typeDes; typeDes.type := LookupType(nd.typ)
+			(* represents the type reference in MAX(INTEGER), SYSTEM.TYP(Mod.Typ) *)
+		| Ncall: call := dir.CallDes(); des := call; 
+			GetThisCall(nd, call.proc, call.what, call.apar, call.type, call.super)
+		ELSE HALT(126)
+		END;
+		ASSERT(des # NIL, 60);
+		WITH des: Deref DO ASSERT((des.what.type IS SysPtr) OR (des.type # NIL))
+		ELSE ASSERT((des IS ProcDes) OR (des.type # NIL), 61) (*can't assert this: erroneous *)
+		END;
+		RETURN des
+	END ThisDesignator;
+
+	PROCEDURE ThisAssign (nd: T.Node): Stat;
+		VAR assign: Assign; put: Put; putreg: PutReg; move: Move; res: Stat; trap: Trap;
+			e: T.Node; i: INTEGER; new: New;
+	BEGIN ASSERT(nd.class = Nassign, 20);
+		CASE nd.subcl OF
+		| putfn: put := dir.Put(); res := put; put.adr := ThisExpr(nd.left); put.expr := ThisExpr(nd.right)
+		| putrfn: putreg := dir.PutReg(); res := putreg; putreg.reg := ThisExpr(nd.left); 
+			putreg.expr := ThisExpr(nd.right)
+		| movefn: move := dir.Move(); res := move; move.from := ThisExpr(nd.left); 
+			move.to := ThisExpr(nd.right);
+			move.count := ThisExpr(nd.right.link)
+		| assignfn, incfn, decfn, inclfn, exclfn: assign := dir.Assign(); res := assign; 
+			assign.des := ThisDesignator(nd.left); assign.kind := nd.subcl;
+			IF nd.right # NIL THEN assign.expr := ThisExpr(nd.right) END
+		| newfn: new := dir.New(); res := new; new.des := ThisDesignator(nd.left);
+			e := nd.right; i := 0; WHILE e # NIL DO new.dim[i] := ThisExpr(e); e := e.link; INC(i) END
+		| assertfn: trap := dir.Trap(); res := trap; trap.cond := ThisExpr(nd.left); 
+			IF nd.right # NIL THEN trap.num := ThisInt(nd.right.conval.intval)
+			ELSE trap.num := zero
+			END
+		| copyfn, typfn: HALT(126)
+		ELSE HALT(126)
+		END;
+		ASSERT(res # NIL, 60);
+		RETURN res
+	END ThisAssign;
+	
+	PROCEDURE ^ ThisStatSeq (nd: T.Node): Stat;
+	PROCEDURE ThisStat (nd: T.Node): Stat;
+		VAR res: Stat; return: Return; while: While; rpt: Repeat; loop: Loop; call: Call; _: BOOLEAN;
+			__: Type; exit: Exit; trap: Trap; if, else: If; 
+			case: Case; m, n: T.Node; i, ranges, cases: INTEGER; do: Stat;
+			r: POINTER TO ARRAY OF Range; s: POINTER TO ARRAY OF Stat;
+			with: With; clause: WithClause;
+	BEGIN ASSERT(nd # NIL, 20);
+		CASE nd.class OF
+		| Nassign: res := ThisAssign(nd)
+		| Nreturn: return := dir.Return(); res := return; 
+			IF nd.left # NIL THEN return.ex := ThisExpr(nd.left) END; 
+			return.proc := FindProc(nd.obj)
+		| Nwhile: while := dir.While(); 
+			res := while; while.cond := ThisExpr(nd.left); while.do := ThisStatSeq(nd.right)
+		| Nrepeat: rpt := dir.Repeat(); res := rpt; rpt.until := ThisExpr(nd.right); rpt.do := ThisStatSeq(nd.left)
+		| Nloop: loop := dir.Loop(); res := loop; loop.do := ThisStatSeq(nd.left)
+		| Ncall: call := dir.Call(); res := call; GetThisCall(nd, call.proc, call.what, call.actuals, __, call.super)
+		| Nexit: exit := dir.Exit(); res := exit
+		| Ntrap: trap := dir.Trap(); res := trap; trap.num := ThisInt(nd.right.conval.intval)
+		| Nifelse: if := dir.If(); res := if; if.cond := ThisExpr(nd.left.left); if.do := ThisStatSeq(nd.left.right);
+			IF nd.right # NIL THEN else := dir.If(); else.do := ThisStatSeq(nd.right) END;
+			m := nd.left.link;
+			WHILE m # NIL DO if.next := dir.If(); if := if.next; 
+				if.cond := ThisExpr(m.left); if.do := ThisStatSeq(m.right);
+				m := m.link
+			END;
+			if.next := else
+		| Ncase: case := dir.Case(); res := case; case.what := ThisExpr(nd.left); 
+			IF nd.right.right # NIL THEN case.else := ThisStatSeq(nd.right.right) END;
+			ranges := 0; cases := 0; n := nd.right.left;
+			WHILE n # NIL DO INC(cases); 
+				m := n.left; WHILE m # NIL DO INC(ranges); m := m.right END;
+				n := n.link
+			END;
+			case.cases := cases;
+			IF ranges > 0 THEN NEW(r, ranges); NEW(s, ranges); n := nd.right.left; i := 0;
+				WHILE n # NIL DO ASSERT(n.class = Ncasedo, 100);
+					do := ThisStatSeq(n.right); s[i] := do; m := n.left; 
+					REPEAT ASSERT(m.class = Nconst, 100); 
+						r[i].from := m.conval.intval; r[i].to := m.conval.intval2; INC(i); m := m.right
+					UNTIL m = NIL;
+					n := n.link
+				END;
+				case.ranges := r; case.stmts := s
+			END
+		| Nwith: with := dir.With(); res := with;
+			IF nd.right # NIL THEN with.else := ThisStatSeq(nd.right) END;
+			ASSERT(nd.left.class = Nif); ASSERT((nd.left.left.class = Nmop) & (nd.left.left.subcl = isfn));
+			(*with.what := ThisDesignator(nd.left.left.left); *)
+			with.clauses := dir.WithClause(); clause := with.clauses; m := nd.left;
+			WHILE m # NIL DO clause.do := ThisStatSeq(m.right); 
+				clause.var := ThisDesignator(m.left.left);
+				clause.typeName := FindDeepShort(nowScope, m.left.obj.name)(TypeName); 
+				ASSERT(clause.typeName # NIL, 20);
+				IF m.link # NIL THEN clause.next := dir.WithClause(); clause := clause.next END;
+				m := m.link
+			END
+		ELSE HALT(126)
+		END;
+		ASSERT(res # NIL, 60); res.textpos := nd.conval.intval;
+		RETURN res
+	END ThisStat;
+	
+	PROCEDURE ThisStatSeq (nd: T.Node): Stat;
+		VAR res, s, last: Stat;
+	BEGIN
+		WHILE nd # NIL DO s := ThisStat(nd);
+			IF res = NIL THEN res := s; last := res ELSE last.link := s; last := last.link END;
+			nd := nd.link
+		END;
+		RETURN res
+	END ThisStatSeq;
+	
+	PROCEDURE ^ DoProcedures (scope: SCope; subprocedures: T.Node);
+
+	PROCEDURE DoProcedure (proc: Proc; subprocedures, body: T.Node);
+		VAR nested: T.Node; 
+	BEGIN ASSERT((nowScope = NIL) OR (proc.owner = nowScope), 20);
+		nowScope := proc;
+		proc.body := ThisStatSeq(body); 
+		DoProcedures(proc, subprocedures);
+		nowScope := nowScope.owner
+	END DoProcedure;
+	
+	PROCEDURE DoModule (mod: Mod; nd: T.Node);
+		VAR nested: T.Node;
+	BEGIN ASSERT(nd.class = Nenter, 20); ASSERT(nd.obj = NIL, 21);
+		DoProcedures(mod, nd.left);
+		mod.begin := ThisStatSeq(nd.right);
+	END DoModule;
+	
+	PROCEDURE DoProcedures (scope: SCope; subprocedures: T.Node);
+							(* traverse all module's procedures and amend their objects with bodies *)
+		VAR nested: T.Node;	(* ?make an array of subprocedures? to preserve decl order *)
+			type: Type; proc: Proc;
+	BEGIN
+		nested := subprocedures;
+		WHILE nested # NIL DO ASSERT(nested.class = Nenter); 
+			proc := FindProc(nested.obj); ASSERT(proc # NIL); 
+			proc.startPos := nested.conval.intval; proc.endPos := nested.conval.intval2;
+			DoProcedure(proc, nested.left, nested.right);
+			nested := nested.link
+		END
+	END DoProcedures;
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	(*--------------------------------- Symbol file externalize/internalize -------------------------------------*)
+	
+	
+	PROCEDURE ResetSymDict;
+		VAR i: INTEGER;
+	BEGIN IF symDict # NIL THEN i := LEN(symDict); REPEAT DEC(i); symDict[i] := NIL UNTIL i = 0 END
+	END ResetSymDict;
+
+	PROCEDURE WhatIs (s: Symbol): BYTE;	(* maybe this should be bound to Directory? *)
+		VAR res: BYTE;		(* make it more effisicent by analysing .what instead of actual type *)
+	BEGIN
+		WITH s: GlobVar DO res := gvartg
+		| s: Par DO res := partg | s: LocVar DO res := lvartg | s: Const DO res := consttg 
+		| s: Field DO res := fldtg
+		| s: TypeName DO res := typenametg | s: LProc DO res := lproctg | s: XProc DO res := xproctg
+		| s: CProc DO res := cproctg | s: SProc DO res := sproctg | s: IProc DO res := iproctg 
+		| s: TProc DO res := tproctg | s: Segraph DO res := segtg | s: Mod DO res := modtg 
+		| s: SysPtr DO res := sysptrtg | s: ArrayPtr DO res := arrayptrtg | s: RecPtr DO res := recptrtg
+		| s: Record DO res := recordtg | s: Array DO res := arraytg | s: Procedure DO res := proceduretg
+		| s: Basic DO res := basictg;
+			CASE s.what OF fReal32: res := real32tg | fReal64: res := real64tg
+			| fInt8: res := int8tg | fInt16: res := int16tg | fInt32: res := int32tg | fInt64: res := int64tg
+			| fChar8: res := char8tg | fChar16: res := char16tg | fBool: res := booltptg | fSet: res := settptg
+			| fJString: res := jstrtp
+			ELSE HALT(126)
+			END
+		| s: Int DO res := inttg | s: Char DO res := chartg | s: Set DO res := settg | s: Bool DO res := booltg 
+		| s: Real DO res := realtg | s: StringLit DO res := stringtg
+		| s: ConDes DO res := condestg
+		ELSE HALT(126)
+		END;
+		RETURN res
+	END WhatIs;
+	
+	PROCEDURE ExtConstVal (c: Literal);
+	END ExtConstVal;
+	
+	PROCEDURE Register (s: Symbol; OUT ind: INTEGER; OUT old: BOOLEAN);
+		VAR i, len: INTEGER; copy: POINTER TO ARRAY OF Symbol;
+	BEGIN len := LEN(symDict);
+		i := 0; WHILE (symDict[i] # NIL) & (symDict[i] # s) DO INC(i) END; old := symDict[i] # NIL;
+		IF ~old THEN 
+			IF i = len - 1 THEN NEW(copy, len + capSymDict); 
+				REPEAT copy[i] := symDict[i]; DEC(i) UNTIL i = -1; symDict := copy; i := len - 1
+			END;
+			symDict[i] := s
+		END;
+		ind := i
+	END Register;
+	
+	PROCEDURE ^ DumpSymbols* (frd: Files.Reader; VAR log: TextMappers.Formatter);
+	
+	PROCEDURE (VAR rd: SymbolReader) Err (err: INTEGER), NEW;
+		VAR dump: TextMappers.Formatter;
+	BEGIN rd.errs[rd.errTop].pos := rd.rider.Pos(); 
+		IF rd.errTop = LEN(rd.errs) THEN
+		ELSIF rd.errTop = LEN(rd.errs) - 1 THEN rd.errs[rd.errTop].code := eTooManyErrors; INC(rd.errTop)
+		ELSE rd.errs[rd.errTop].code := err; INC(rd.errTop)
+		END;
+		
+		globalErrNo := err;
+		globalErrPos := rd.rider.Pos(); globalDump := TextModels.dir.New(); 
+		dump.ConnectTo(globalDump);
+		DumpSymbols(rd.rider.Base().NewReader(NIL), dump); 
+		globalErrPos := MAX(INTEGER);
+	END Err;
+
+	PROCEDURE (VAR wr: SymbolWriter) Tag (tag: INTEGER), NEW;
+	BEGIN ASSERT((MIN(BYTE) <= tag) & (tag <= MAX(BYTE)), 20); wr.rider.WriteByte(SHORT(SHORT(tag)))
+	END Tag;	(* If this is to become an interface procedure, it could check that the *)
+	
+	PROCEDURE (VAR rd: SymbolReader) Tag (OUT tag: INTEGER), NEW;
+		VAR b: BYTE;
+	BEGIN rd.rider.ReadByte(b); tag := b
+	END Tag;
+	
+	PROCEDURE WriteThis (VAR wr: SymbolWriter; tag: BYTE; adr, size: INTEGER);
+	BEGIN
+		IF wr.typed THEN wr.rider.WriteByte(tag) END;
+		wr.rider.WriteBytes(SYSTEM.THISARRAY(adr, size), 0, size)
+	END WriteThis;
+
+	PROCEDURE ReadInto (VAR rd: SymbolReader; tag: BYTE; adr, len: INTEGER);
+		VAR actual: BYTE;
+	BEGIN 
+		IF rd.typed THEN rd.rider.ReadByte(actual) END;
+		IF rd.typed & (actual # tag) THEN rd.rider.SetPos(rd.rider.Base().Length()); rd.Err(eBadTag)
+		ELSE rd.rider.ReadBytes(SYSTEM.THISARRAY(adr, len), 0, len)
+		END
+	END ReadInto;
+	
+	PROCEDURE (VAR wr: SymbolWriter) ConnectTo* (f: Files.File), NEW, EXTENSIBLE;
+	BEGIN wr.rider := f.NewWriter(wr.rider); wr.rider.SetPos(0)
+	END ConnectTo;
+	
+	PROCEDURE InitWriter* (VAR wr: SymbolWriter; typed, exported, bodies: BOOLEAN);
+	BEGIN wr.typed := typed; wr.exported := exported; wr.bodies := bodies
+	END InitWriter;
+
+	PROCEDURE InitReader* (VAR rd: SymbolReader; typed: BOOLEAN);
+	BEGIN rd.typed := typed; rd.dirTypeName := ''; rd.dirVer := 0; rd.errTop := 0
+	END InitReader;
+	
+	PROCEDURE (VAR rd: SymbolReader) ConnectTo* (f: Files.File), NEW, EXTENSIBLE;
+	BEGIN rd.rider := f.NewReader(rd.rider); rd.rider.SetPos(0)
+	END ConnectTo;
+	
+	PROCEDURE ReadTag (VAR rd: SymbolReader; OUT tag: BYTE);	(** Writes a tag; this is *)
+	BEGIN rd.rider.ReadByte(tag)
+	END ReadTag;
+	
+	PROCEDURE (VAR wr: SymbolWriter) AsByte (byte: INTEGER), NEW;
+	BEGIN ASSERT((MIN(BYTE) <= byte) & (byte <= MAX(BYTE)), 20);
+		IF wr.typed THEN wr.rider.WriteByte(bytetg) END; wr.rider.WriteByte(SHORT(SHORT(byte)))
+	END AsByte;
+	
+	PROCEDURE (VAR rd: SymbolReader) FromByte (OUT x: INTEGER), NEW;
+		VAR byte: BYTE;
+	BEGIN ReadInto(rd, bytetg, SYSTEM.ADR(byte), 1); x := byte
+	END FromByte;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Int* (x: INTEGER), NEW;
+	BEGIN WriteThis(wr, inttg, SYSTEM.ADR(x), SIZE(INTEGER))
+	END Int;
+
+	PROCEDURE (VAR rd: SymbolReader) Int* (OUT x: INTEGER), NEW;
+		VAR b: ARRAY 4 OF BYTE;
+	BEGIN ReadInto(rd, inttg, SYSTEM.ADR(x), SIZE(INTEGER))
+	END Int;
+	
+	PROCEDURE (VAR wr: SymbolWriter) String (IN s: ARRAY OF CHAR), NEW;
+		VAR len: INTEGER;
+	BEGIN 
+		IF wr.typed THEN wr.rider.WriteByte(stringtg) END; 
+		len := LEN(s$); wr.Int(len);
+		IF len > 0 THEN len := (len) * SIZE(CHAR);
+			wr.rider.WriteBytes(SYSTEM.THISARRAY(SYSTEM.ADR(s), len), 0, len)
+		END
+	END String;
+	
+	PROCEDURE (VAR wr: SymbolWriter) SString (IN s: ARRAY OF SHORTCHAR), NEW;
+		VAR len: INTEGER;
+	BEGIN 
+		IF wr.typed THEN wr.rider.WriteByte(sstringtg) END; 
+		len := LEN(s$); wr.Int(len);
+		IF len > 0 THEN len := (len) * SIZE(SHORTCHAR);
+			wr.rider.WriteBytes(SYSTEM.THISARRAY(SYSTEM.ADR(s), len), 0, len)
+		END
+	END SString;
+	
+	PROCEDURE RdRawStr (VAR rd: SymbolReader; len: INTEGER; OUT s: ARRAY OF CHAR);
+	BEGIN s[len] := 0X; len := len * SIZE(CHAR);
+		rd.rider.ReadBytes(SYSTEM.THISARRAY(SYSTEM.ADR(s), len), 0, len)
+	END RdRawStr;
+	
+	PROCEDURE RdRawSStr (VAR rd: SymbolReader; len: INTEGER; OUT s: ARRAY OF SHORTCHAR);
+	BEGIN s[len] := 0X; len := len * SIZE(SHORTCHAR);
+		rd.rider.ReadBytes(SYSTEM.THISARRAY(SYSTEM.ADR(s), len), 0, len)
+	END RdRawSStr;
+	
+	PROCEDURE (VAR rd: SymbolReader) String (OUT s: ARRAY OF CHAR), NEW;
+		VAR tag: BYTE; len: INTEGER;
+	BEGIN
+		IF rd.typed THEN rd.rider.ReadByte(tag); ASSERT(tag = stringtg, 20) END;
+		rd.Int(len); ASSERT(len < LEN(s), 21); RdRawStr(rd, len, s)
+	END String;
+	
+	PROCEDURE (VAR rd: SymbolReader) SString (OUT s: ARRAY OF SHORTCHAR), NEW;
+		VAR tag: BYTE; len: INTEGER;
+	BEGIN
+		IF rd.typed THEN rd.rider.ReadByte(tag); ASSERT(tag = sstringtg, 20) END;
+		rd.Int(len); ASSERT(len < LEN(s), 21); RdRawSStr(rd, len, s)
+	END SString;
+	
+	PROCEDURE ReadAsNamePtr* (VAR rd: SymbolReader; OUT n: POINTER TO Name);
+		VAR tag: BYTE; len: INTEGER; 
+	BEGIN 
+		IF rd.typed THEN rd.rider.ReadByte(tag); ASSERT(tag = stringtg, 20) END;
+		rd.Int(len); 
+		IF len = 0 THEN n := noname 
+		ELSE ASSERT(len < LEN(Name) - 1, 21); NEW(n); RdRawStr(rd, len, n) 
+		END
+	END ReadAsNamePtr;
+
+	PROCEDURE ReadAsStringPtr* (VAR rd: SymbolReader; OUT s: POINTER TO String);
+		VAR tag: BYTE; len: INTEGER; _: ARRAY 1 OF CHAR;
+	BEGIN 
+		IF rd.typed THEN rd.rider.ReadByte(tag); ASSERT(tag = stringtg, 20) END;
+		rd.Int(len); 
+		IF len = 0 THEN s := NIL ELSE NEW(s, len + 1); RdRawStr(rd, len, s) END
+	END ReadAsStringPtr;
+
+	PROCEDURE ReadAsSStringPtr* (VAR rd: SymbolReader; 
+		OUT s: POINTER TO ARRAY OF SHORTCHAR
+	);
+		VAR tag: BYTE; len: INTEGER; _: ARRAY 1 OF CHAR;
+	BEGIN 
+		IF rd.typed THEN rd.rider.ReadByte(tag); ASSERT(tag = sstringtg, 20) END;
+		rd.Int(len); 
+		IF len = 0 THEN s := NIL ELSE NEW(s, len + 1); RdRawSStr(rd, len, s) END
+	END ReadAsSStringPtr;
+
+	PROCEDURE (VAR wr: SymbolWriter) AsShort (short: INTEGER), NEW;
+	BEGIN ASSERT((MIN(SHORTINT) <= short) & (short <= MAX(SHORTINT)), 20);
+		WriteThis(wr, shorttg, SYSTEM.ADR(short), SIZE(SHORTINT))
+	END AsShort;
+	
+	PROCEDURE (VAR rd: SymbolReader) FromShort (OUT x: INTEGER), NEW;
+		VAR short: SHORTINT;
+	BEGIN ReadInto(rd, shorttg, SYSTEM.ADR(short), SIZE(SHORTINT)); x := short
+	END FromShort;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Char (ch: CHAR), NEW;
+	BEGIN WriteThis(wr, chartg, SYSTEM.ADR(ch), SIZE(CHAR))
+	END Char;
+
+	PROCEDURE (VAR rd: SymbolReader) Char (OUT ch: CHAR), NEW;
+	BEGIN ReadInto(rd, chartg, SYSTEM.ADR(ch), SIZE(CHAR))
+	END Char;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Bool (b: BOOLEAN), NEW;
+		VAR val: BYTE;
+	BEGIN IF b THEN val := 1 ELSE val := 0 END; WriteThis(wr, booltg, SYSTEM.ADR(val), SIZE(BYTE)) 
+	END Bool;
+
+	PROCEDURE (VAR rd: SymbolReader) Bool (OUT bool: BOOLEAN), NEW;
+		VAR b: BYTE;
+	BEGIN ReadInto(rd, booltg, SYSTEM.ADR(b), 1); 
+		IF b = 0 THEN bool := FALSE ELSIF b = 1 THEN bool := TRUE ELSE HALT(20) END
+	END Bool;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Real (x: REAL), NEW;
+	BEGIN WriteThis(wr, realtg, SYSTEM.ADR(x), SIZE(REAL))
+	END Real;
+
+	PROCEDURE (VAR rd: SymbolReader) Real (OUT x: REAL), NEW;
+	BEGIN ReadInto(rd, realtg, SYSTEM.ADR(x), SIZE(REAL))
+	END Real;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Long (x: LONGINT), NEW;
+	BEGIN WriteThis(wr, longtg, SYSTEM.ADR(x), SIZE(LONGINT))
+	END Long;
+
+	PROCEDURE (VAR rd: SymbolReader) Long (OUT x: LONGINT), NEW;
+	BEGIN ReadInto(rd, longtg, SYSTEM.ADR(x), SIZE(LONGINT))
+	END Long;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Set (x: SET), NEW; 
+	BEGIN WriteThis(wr, settg, SYSTEM.ADR(x), SIZE(SET))
+	END Set;
+
+	PROCEDURE (VAR rd: SymbolReader) Set (OUT x: SET), NEW;
+	BEGIN ReadInto(rd, settg, SYSTEM.ADR(x), SIZE(SET))
+	END Set;
+	
+	PROCEDURE Cmp (IN a, b: ARRAY OF CHAR): INTEGER;
+		CONST  eql = 0; less = 1; grtr = 2;
+		VAR i, res: INTEGER;
+	BEGIN i := 0; WHILE a[i] = b[i] DO INC(i) END;	
+		IF a[i] < b[i] THEN res := less ELSIF a[i] = b[i] THEN res := eql ELSE res := grtr END;
+		RETURN res
+	END Cmp;
+
+	PROCEDURE FindReference (IN qual: ARRAY OF CHAR): Type;
+		CONST  eql = 0; less = 1; grtr = 2;
+		VAR r: Typeref; res: Type; cmp: INTEGER;
+	BEGIN r := refDict;
+		WHILE r # NIL DO cmp := Cmp(qual, r.type.qualident);
+			IF cmp = less THEN r := r.left ELSIF cmp = grtr THEN r := r.right ELSE res := r.type; r := NIL END
+		END;
+		RETURN res
+	END FindReference;
+	
+	PROCEDURE InsertReference (s: Symbol; qual: POINTER TO String);
+		CONST  eql = 0; less = 1; grtr = 2;
+		VAR t, r, n: Typeref; cmp: INTEGER;
+	BEGIN ASSERT(s IS Type); ASSERT(qual # NIL);
+		r := refDict;
+		WHILE r # NIL DO cmp := Cmp(qual, r.type.qualident);
+			IF cmp = less THEN t := r; r := r.left 
+			ELSIF cmp = grtr THEN t := r; r := r.right 
+			ELSE HALT(20 (* duplicate qualident *) ) 
+			END
+		END;
+		NEW(n); WITH s: Type DO n.type := s; s.qualident := qual END;
+		IF t = NIL THEN refDict := n ELSIF cmp = less THEN t.left := n ELSE t.right := n END
+	END InsertReference;
+
+	PROCEDURE DoWrSym (VAR wr: SymbolWriter; s: Symbol; IN qual: ARRAY OF CHAR);
+		CONST niltg = -1;
+		VAR ind: INTEGER; ref, old: BOOLEAN; bkmrk, skip, what: INTEGER;
+	BEGIN
+		IF wr.typed THEN wr.rider.WriteByte(symboltg) END;
+		IF s = NIL THEN wr.Int(niltg) 
+		ELSE
+			Register(s, ind, old); wr.Int(ind);
+			IF ~old THEN ref := qual # '';
+				IF ref THEN wr.Tag(reftg); wr.String(qual); bkmrk := wr.rider.Pos();
+					wr.Int(none)
+				END;
+				what := WhatIs(s); wr.AsByte(what);
+				IF ~((s IS Basic) & (s(Basic).what IN integers + reals + chars + booleans + sets)) THEN
+					s.Externalize(wr); s.Externalize2(wr)	(* don't externalize basics, just their tag *)
+				END;
+				IF ref THEN skip := wr.rider.Pos(); wr.rider.SetPos(bkmrk); wr.Int(skip); wr.rider.SetPos(skip) 
+				END
+			END
+		END;
+		IF wr.typed THEN wr.rider.WriteByte(symbolendtg) END
+	END DoWrSym;
+	
+	PROCEDURE WriteSymbol (VAR wr: SymbolWriter; s: Symbol);
+	BEGIN DoWrSym(wr, s, '')
+	END WriteSymbol;
+	
+	PROCEDURE (VAR wr: SymbolWriter) Symbol (s: Symbol), NEW;
+	BEGIN DoWrSym(wr, s, '')
+	END Symbol;
+	
+	PROCEDURE DoRdSym (VAR rd: SymbolReader; OUT s: Symbol; OUT qual: POINTER TO String);
+		CONST niltg = -1;
+		VAR what, ind, skip: INTEGER; tag: BYTE; isRef: BOOLEAN; xproc: XProc; gvar: GlobVar;
+			oldmod: Mod;
+	BEGIN
+		IF rd.typed THEN rd.rider.ReadByte(tag)
+			;IF tag # symboltg THEN rd.Err(eBadTag) END; (*ASSERT(tag = symboltg) *)
+		END;
+		IF rd.errTop = 0 THEN rd.Int(ind) END;
+		IF (rd.errTop = 0) & (ind # niltg) THEN
+			IF (0 <= ind) & (ind < LEN(symDict)) THEN s := symDict[ind];
+				IF s = NIL (* 1st encounter of s in rd.Base() *) THEN
+					rd.FromByte(what); 
+					IF what = reftg THEN ReadAsStringPtr(rd, qual); rd.Int(skip); s := FindReference(qual) END;
+					IF s # NIL THEN rd.rider.SetPos(skip)
+					ELSE 
+						CASE what OF 
+						| gvartg: gvar := dir.GlobVar(); gvar.adr := -1;  (* for imported procedures and variables, -1 is required for HrE.BookmarkThis and HrE.AllocProxy to identify that XProc hasn't been assigned a proxy table entry *)
+							s := gvar
+						| lvartg: s := dir.LocVar() | partg: s := dir.Par() 
+						| consttg: s := dir.Const() | fldtg: s := dir.Field() | typenametg: s := dir.TypeName()
+						| lproctg: s := dir.LProc() 
+						| xproctg: xproc := dir.XProc(); xproc.adr := -1; (* for imported procedures and variables, -1 is required for HrE.BookmarkThis and HrE.AllocProxy to identify that XProc hasn't been assigned a proxy table entry *)
+							
+							s := xproc
+						| cproctg: s := dir.CProc()
+						| sproctg: s := dir.SProc() | iproctg: s := dir.IProc() | tproctg: s := dir.TProc()
+						| modtg: s := dir.Mod() | segtg: s := dir.Segraph()
+						| sysptrtg: s := dir.SysPtr() | arrayptrtg: s := dir.ArrayPtr() | recptrtg: s := dir.RecPtr()
+						| recordtg: s := dir.Record() | arraytg: s := dir.Array() | proceduretg: s := dir.Procedure()
+						| basictg: HALT(26); s := dir.Basic()
+						| int8tg: s := bytetp | int16tg: s := shorttp | int32tg: s := inttp | int64tg: s := longtp
+						| real32tg: s := shortrealtp | real64tg: s := realtp | char8tg: s := shortchartp 
+						| char16tg: s := chartp | booltptg: s := booltp | settptg: s := settp
+						| inttg: s := dir.Int() | chartg: s := dir.Char() | settg: s := dir.Set() | booltg: s := dir.Bool()
+						| realtg: s := dir.Real() | stringtg: s := dir.StringLit()
+						| condestg: s := dir.ConDes()
+						ELSE HALT(126)
+						END;
+						ASSERT(s # NIL, 60);
+						symDict[ind] := s; IF what = reftg THEN InsertReference(s, qual) END;
+						(*oldmod := rd.mod; WITH s: Mod DO rd.mod := s ELSE END;*)
+						IF (s # NIL) & ~((s IS Basic) & (s(Basic).typeName # NIL)) THEN 
+							s.Internalize(rd); s.Internalize2(rd) 
+							(* don't internalize basic types - they are represented as tags only, no content *)
+						END;
+						(*rd.mod := oldmod*)
+					END
+				END
+			ELSE HALT(20)
+			END;
+			ASSERT(s # NIL, 61)
+		END;
+		IF rd.typed THEN rd.rider.ReadByte(tag); IF tag # symbolendtg THEN rd.Err(eBadTag) END END
+	END DoRdSym;
+	
+	PROCEDURE ReadSymbol (VAR rd: SymbolReader; OUT s: Symbol);
+	(** Read a symbol; trap if a reference is encountered *)
+		VAR qual: POINTER TO String;
+	BEGIN DoRdSym(rd, s, qual); ASSERT(qual = NIL, 60 (* expected a symbol, but found a reference *))
+	END ReadSymbol;
+	
+	PROCEDURE (VAR rd: SymbolReader) Symbol (OUT s: Symbol), NEW;
+	BEGIN ReadSymbol(rd, s)
+	END Symbol;
+	
+	PROCEDURE WriteType (VAR wr: SymbolWriter; t: Type);
+	BEGIN
+		IF t.typeName = NIL THEN wr.Symbol(t) 
+		ELSIF t.typeName.imno = 0 THEN 
+			wr.Symbol(t) (* and Internalize should put down the .typeName *)
+		ELSIF t.typeName.imno > 0 THEN 
+			DoWrSym(wr, t, wr.mod[t.typeName.imno].realName + "." + t.typeName.name)
+		ELSIF t.qualident # NIL THEN DoWrSym(wr, t, t.qualident)
+		ELSE HALT(60)
+		END;
+		
+	END WriteType;
+	
+	PROCEDURE ReadType (VAR rd: SymbolReader; OUT t: Type);
+		VAR s: Symbol; qual: POINTER TO String;
+	BEGIN 
+		
+		DoRdSym(rd, s, qual);
+		IF s # NIL THEN WITH s: Type DO t := s; t.qualident := qual ELSE rd.Err(eTypeExpected) END END
+	END ReadType;
+	
+	
+	(* Types are different from other symbols. Only 'domestic' symbols are put in a module's segraph - with the exception of types: all types reachable from a module are put in a module's segraph, even if they are not domestic. That includes types declared in directly and indirectly imported modules, regardless of whether their typenames are exported or not.
+	Thus, there are three kinds of types: domestic, directly and indirectly imported.
+	Domestic types are (.typeName = NIL) OR (.typeName.imno = 0). They are put down into the segraph entirely, and their typeName is put in, as well.
+	Directly imported types are (.typeName.imno > 0) (maybe >1, 'cuase 1 is Universe; but there may also be other special modules, which require additional deliberation).
+	Indirectly imported types are distinguished in some other (yet undefined) way. They do NOT have a .typeName: .typeName = NIL. This is because the .typeName variable is costly and holds information mostly useless for indirectly imported types. But, if an indirectly imported type has a name in it's defining module, this name has to be preserved so that all (other) references to this type, direct or indirect, would resolve to the same type variable.
+	Anonymous types can be imported as well, however. It's hard to classify them as directly imported or indirectly imported, exactly because they are anonymous. It seems that they need to be externalized as symbols, not as references, because they can never be referenced other than at the spot they are declared. However, .typeName = NIL is not sufficient criteria that a type is anonymous: it might be indirectly imported. So this is TBD: representing module and name for indirectly imported types.
+	All four kinds of types can be properly externalized and internalized by procedures WriteType and ReadType; they will be the incapsulators of all the complexity of externalizing types. Other linearization procedures may just use WriteType and ReadType, without considering the complexities of types.
+	MODULE N;
+	TYPE T* = RECORD f*: RECORD END END;
+	END N;
+	MODULE K; IMPORT N; VAR v*: N.T; END K. (* Here, the type of field .f is externalized as a reference;
+		but this type is anonymous - hence the necessity to somehow process this case ) *)
+	MODULE L; IMPORT N; VAR v*: N.T; END L.
+	MODULE Subject; IMPORT K, L;
+	BEGIN K.v.f := L.v.f
+	END Subject.
+	
+	After a type is saved as a reference, it has to be restored with that same reference: the reference (the .qualident) has to be set for the type after it is internalized. This has to be done in SymbolReader.Symbol, because after it's finished, the fact that a type was read by reference cannot be established, and the reference qualident is lost as well. But SymbolReader.Symbol is not a good place to manipulate Type's specific fields, 'cause .Symbol is agnostic of type Symbol's extensions, and as long as it is, it can be actually moved to a different module, like HrM.
+	Wait, no, it can't! Because Symbol is declared in HrT, and HrT imports HrM, not the other way around. 
+	Maybe, to move SymbolReader to HrM, the procedure Symbol has to be unbound? And left in HrT. And then the SymbolReader is no longer a symbol reader, 'cause it's not aware of type Symbol. Well, maybe then it will just become a Reader: HrM.Reader. Because the main point of this reader/writer is type-safe linearization of foundational types (basic + strings) by means of type tagging.
+	Another option: make Reader/Writer extensible, extend them in HrT and bind procedure Symbol to the extended type. The donwside would be implementation inheritance: the point of taking Reader/Writer out of HrT is to downsize HrT, so implementations would have to go into HrM, not just the interface, hence implementation inheritance. That is not a welcome practise, and what's the point anyway of binding procedure Symbol to the type? I mean, there is no extension planned... The only benefit would arguably be that you can write the reader/writer's variable name in front of the procedure name.. Well, it's probably not worth the effort.
+	So: (be prepared to) take Reader/Writer out of HrT into HrM; unbind procedure Symbol from the types; fiddle with Type.qualident right in ReadSymbol.
+	
+	
+	How deep an indirection should the compiler concern itself with? Maybe it's just depth 2? No, the following example demonstrates that indirection depth is actually not limited by any rules (other than implementation limitations).
+	MODULE M; IMPORT N;
+	TYPE T = RECORD f*: CHAR; g*: N.T END;
+	VAR v: T;
+	END M.
+	MODULE Client; IMPORT M;
+	BEGIN v.f := 'A'; v.g.x.y.z := 3 (* each of these fields may be declared in a different module, 
+		and all this type information has to be available at Client's compile time - that is, it has to be
+		included in M's segraph *)
+	END Client.  *)
+
+	PROCEDURE ExtLibEnt (VAR wr: SymbolWriter; o: Object);
+		VAR lib, ent: POINTER TO Name;
+	BEGIN
+		WITH o: GlobVar DO lib := o.lib; ent := o.ent | o: Const DO lib := o.lib; ent := o.ent 
+		| o: LProc DO lib := o.lib; ent := o.ent | o: XProc DO lib := o.lib; ent := o.ent 
+		| o: TProc DO lib := o.lib; ent := o.ent | o: Mod DO lib := o.lib
+		ELSE
+		END;
+		IF lib = NIL THEN wr.String('') ELSE wr.String(lib) END;
+		IF ent = NIL THEN wr.String('') ELSE wr.String(ent) END
+	END ExtLibEnt;
+	
+	PROCEDURE IntLibEnt (VAR rd: SymbolReader; o: Object);
+		VAR lib, ent: POINTER TO Name; empty: ARRAY 1 OF CHAR;
+	BEGIN
+		ReadAsNamePtr(rd, lib); IF lib = noname THEN lib := NIL END;
+		ReadAsNamePtr(rd, ent); IF lib = noname THEN lib := NIL END;
+		IF (lib # NIL) OR (ent # NIL) THEN
+			WITH o: GlobVar DO o.lib := lib; o.ent := ent | o: Const DO o.lib := lib; o.ent := ent
+			| o: LProc DO o.lib := lib; o.ent := ent | o: XProc DO o.lib := lib; o.ent := ent
+			| o: TProc DO o.lib := lib; o.ent := ent | o: Mod DO o.lib := lib
+			| o: TypeName DO o.lib := lib; o.ent := ent
+			| o: Field DO
+			| o: LocVar DO
+			| o: Segraph DO
+			ELSE HALT(126)
+			END
+		END
+	END IntLibEnt;
+	
+	PROCEDURE (e: Expression) Externalize (VAR wr: SymbolWriter);
+		VAR
+	BEGIN
+		wr.Symbol(e.type); wr.Int(e.pos); wr.Set(e.flags);
+		WITH e: ConDes DO wr.Symbol(e.const)
+		| e: VarDes DO wr.Symbol(e.var)
+		| e: FieldDes DO wr.Symbol(e.rec); wr.Symbol(e.field)
+		| e: Deref DO wr.Symbol(e.what)
+		| e: StringSel DO wr.Symbol(e.what)
+		| e: Nil DO (*!?!*) | e: Int DO wr.Long(e.long) | e: Char DO wr.Char(e.ch) | e: Set DO wr.Set(e.set) 
+		| e: Bool DO wr.Bool(e.bool) | e: Real DO wr.Real(e.real) | e: StringLit DO wr.String(e.str)
+		ELSE HALT(126)
+		END
+	END Externalize;
+	
+	PROCEDURE (e: Expression) Internalize (VAR rd: SymbolReader);
+		VAR s: Symbol;
+	BEGIN
+		ReadType(rd, e.type); IF e.type = NIL THEN rd.Err(eTypeExpectedNilFound) END;
+		rd.Int(e.pos); rd.Set(e.flags); IF e IS Literal THEN ASSERT(const IN e.flags) END;
+		WITH 
+		| e: ConDes DO rd.Symbol(s); 
+			IF s = NIL THEN rd.Err(eConstExpectedNilFound) 
+			ELSE WITH s: Const DO e.const := s ELSE rd.Err(eConstExpected) END
+			END
+		| e: Int DO rd.Long(e.long) | e: Real DO rd.Real(e.real) 
+		| e: Char DO rd.Char(e.ch) | e: Set DO rd.Set(e.set) | e: Bool DO rd.Bool(e.bool)
+		| e: StringLit DO ReadAsStringPtr(rd, e.str); 
+			IF e.str = NIL THEN e.len := 0 ELSE e.len := LEN(e.str$) END
+		ELSE HALT(126)
+		END
+	END Internalize;
+	
+	PROCEDURE (o: Object) Externalize (VAR wr: SymbolWriter);
+		VAR len, i: INTEGER;
+		PROCEDURE ScopeSymbols (o: Object);
+		BEGIN 
+			WHILE o # NIL DO 
+				IF ~wr.exported OR (o.flags * visMask # domestic) OR (o IS Par) THEN wr.Symbol(o) END; 
+				o := o.next 
+			END; wr.Symbol(NIL)
+		END ScopeSymbols;
+	BEGIN
+		IF o.name = NIL THEN wr.String(noname) ELSE wr.String(o.name) END;
+		WITH
+		| o: Par DO wr.AsByte(o.num)
+		| o: Const DO wr.Symbol(o.ex); wr.Symbol(o.val)
+		| o: Proc DO
+			wr.AsByte(o.nesting); 
+			WITH o: SProc DO wr.AsByte(o.num)
+			| o: CProc DO ASSERT(o.code # NIL); swr.SString(o.code)
+			| o: TProc DO wr.AsShort(o.num)
+			ELSE
+			END;
+			IF o.par = NIL THEN len := 0 ELSE len := LEN(o.par) END; wr.AsByte(len); 
+			ScopeSymbols(o.head);
+			(*i := 0; WHILE i < len DO wr.Symbol(o.par[i]); INC(i) END;*)
+			wr.Int(o.startPos); wr.Int(o.endPos); wr.Int(o.level); (* byte? *)
+			(*wr.Symbol(o.owner)*)
+		| o: Segraph DO ASSERT(o.mod # NIL);
+			i := LEN(o.mod); REPEAT DEC(i) UNTIL o.mod[i] # NIL; 
+			wr.Int(i); WHILE i > 1 DO wr.Symbol(o.mod[i]); DEC(i) END;
+			wr.Symbol(o.mod[0]); ScopeSymbols(o.mod[0].head)
+		| o: Mod DO (*wr.Symbol(o.owner)*)
+		ELSE
+		END;
+		wr.Symbol(o.type); wr.Set(o.flags); 
+		wr.Int(o.fprint); wr.AsByte(o.imno); wr.Int(o.textpos);
+		ExtLibEnt(wr, o)
+	END Externalize;
+			
+	PROCEDURE ReadMod (VAR rd: SymbolReader; OUT m: Mod);
+		VAR s: Symbol; 
+	BEGIN rd.Symbol(s);
+		IF s = NIL THEN rd.Err(eModuleExpectedNilFound)
+		ELSIF ~(s IS Mod) THEN rd.Err(eModuleExpected)
+		ELSE m := s(Mod)
+		END;
+	END ReadMod;
+	
+	PROCEDURE (o: Object) Internalize (VAR rd: SymbolReader);
+		VAR what, len, i: INTEGER; s: Symbol; empty: ARRAY 1 OF CHAR; 
+			lit: Literal; oldmod: Mod;
+		PROCEDURE ScopeSymbols (sc: SCope);
+			VAR s: Symbol; o: Object; nsc: SCope;
+		BEGIN nsc := nowScope; nowScope := sc;
+			REPEAT rd.Symbol(s);
+				IF s = NIL THEN o := NIL 
+				ELSE WITH s: Object DO o := s ELSE rd.Err(eObjectExpected); o := NIL END 
+				END;
+				IF o # NIL THEN Insert(sc.tree, o); o.owner := sc; 
+					IF sc.head = NIL THEN sc.head := o END;
+					IF sc.tail # NIL THEN sc.tail.next := o END; sc.tail := o;
+					WITH o: Par DO sc(Proc).par[o.num] := o ELSE END
+				END
+			UNTIL s = NIL;
+			nowScope := nsc
+		END ScopeSymbols;
+	BEGIN
+		ReadAsNamePtr(rd, o.name);
+		WITH
+		| o: Par DO rd.FromByte(o.num)
+		| o: Const DO rd.Symbol(s);
+			IF s = NIL THEN rd.Err(eExprExpectedNilFound)
+			ELSE WITH s: Expression DO o.ex := s ELSE rd.Err(eExprExpected) END
+			END;
+			rd.Symbol(s);
+			IF s = NIL THEN rd.Err(eLitExpectedNilFound)
+			ELSE WITH s: Literal DO o.val := s ELSE rd.Err(eLitExpected) END
+			END
+		| o: Proc DO
+			rd.FromByte(o.nesting);
+			WITH o: SProc DO rd.FromByte(o.num)
+			| o: CProc DO ReadAsSStringPtr(rd, o.code)
+			| o: TProc DO rd.FromShort(o.num)
+			ELSE
+			END;
+			o.owner := nowScope; nowScope := o;
+			rd.FromByte(len); 
+			IF len < 0 THEN rd.Err(eNegativeParamLen) ELSIF len > 0 THEN NEW(o.par, len) END;
+			ScopeSymbols(o);
+			rd.Int(o.startPos); rd.Int(o.endPos); rd.Int(o.level);
+			nowScope := o.owner
+		| o: Segraph DO 
+			rd.Int(i); 
+			IF (1 <= i) & (i < capImports) THEN NEW(o.mod, i + 1) ELSE rd.Err(eBadImportsNr) END;
+			WHILE i > 1 DO ReadMod(rd, o.mod[i]); DEC(i) END;
+			ReadMod(rd, o.mod[0]);
+			IF (o.mod # NIL) & (o.mod[0] # NIL) THEN 
+				o.mod[0].owner := o.mod[1]; 	(*???*)
+				oldmod := rd.mod; rd.mod := o.mod[0]; ASSERT(rd.mod # NIL);
+				ScopeSymbols(o.mod[0]);
+				rd.mod := oldmod
+			END
+		| o: Mod DO (*rd.Symbol(s); 
+			IF s # NIL THEN WITH s: SCope DO o.owner := s ELSE rd.Err(eModScopeExpected) END END*)
+		ELSE
+		END;
+		ReadType(rd, o.type);
+		rd.Set(o.flags); IF rd.resetUsed THEN EXCL(o.flags, used) END;
+		(*WITH o: Mod DO IF o.owner = NIL THEN ASSERT(o.name^ = "@UNIVERSE") END ELSE END;*)
+		rd.Int(o.fprint); rd.FromByte(o.imno); o.imno := rd.imno; rd.Int(o.textpos);
+		IntLibEnt(rd, o)
+	END Internalize;
+	
+	PROCEDURE (t: Type) Externalize (VAR wr: SymbolWriter);
+		VAR i, j, len: INTEGER; f: Field; v: TProc;
+	BEGIN 
+		WITH t: Basic DO
+		| t: ArrayPtr DO wr.Symbol(t.base)
+		| t: RecPtr DO wr.Symbol(t.base)
+		| t: Record DO wr.Symbol(t.base); 
+			IF t.fields = NIL THEN len := 0 ELSE len := LEN(t.fields) END;
+			IF wr.exported THEN i := 0; j := 0;
+				WHILE i < len DO IF t.fields[i].flags * visMask # domestic THEN INC(j) END; INC(i) END
+			ELSE j := len
+			END;
+			wr.AsShort(j);
+			i := len - 1; WHILE i >= 0 DO f := t.fields[i];
+				IF ~wr.exported OR (f.flags * visMask # domestic) THEN wr.Symbol(f) END; DEC(i) 
+			END;
+			len := t.nproc;
+			IF wr.exported THEN i := 0; j := 0; 
+				WHILE i < len DO IF t.proc[i].flags * visMask # domestic THEN INC(j) END; INC(i) END;
+				wr.AsShort(j)
+			ELSE wr.AsShort(len)
+			END; 
+			i := len - 1; WHILE i >= 0 DO v := t.proc[i];
+				IF ~wr.exported OR (v.flags * visMask # domestic) THEN wr.Symbol(v) END; DEC(i)
+			END;
+			wr.AsByte(t.level); wr.AsByte(t.align)
+		| t: Array DO wr.Int(t.len); wr.Int(t.lenoffs); wr.Symbol(t.elTyp)
+		| t: Procedure DO wr.Symbol(t.res); 
+			IF t.par = NIL THEN len := 0 ELSE len := LEN(t.par) END; wr.AsByte(len);
+			i := 0; WHILE i < len DO ASSERT(t.par[i] IS Par); wr.Symbol(t.par[i]); INC(i) END
+		ELSE HALT(126)
+		END;
+		wr.Set(t.flags); 
+		wr.AsByte(t.what); wr.Int(t.pbfp); wr.Int(t.pvfp); wr.Int(t.size);
+		IF (t.typeName # NIL) & (t.typeName.imno = 0) THEN wr.Symbol(t.typeName) ELSE wr.Symbol(NIL)
+		END
+	END Externalize;
+	
+	PROCEDURE (t: Type) Internalize (VAR rd: SymbolReader);
+		VAR skip, len: INTEGER; s: Symbol; formals: POINTER TO ARRAY OF Par; 
+			fields: POINTER TO ARRAY OF Field; proc: POINTER TO ARRAY OF TProc;
+			mod, name: Name; type: Type;
+	BEGIN
+		WITH t: Basic DO
+		|t: ArrayPtr DO rd.Symbol(s); 
+			IF s = NIL THEN rd.Err(eElemTypeExpectedNilFound)
+			ELSIF ~(s IS Array) THEN rd.Err(eElemTypeExpected)
+			ELSE t.base := s(Array)
+			END
+		| t: RecPtr DO rd.Symbol(s);
+			IF s = NIL THEN rd.Err(eRecPtrBaseTypeExpectedNilFound)
+			ELSIF ~(s IS Record) THEN rd.Err(eRecPtrBaseTypeExpected)
+			ELSE t.base := s(Record)
+			END
+		| t: Record DO rd.Symbol(s); 
+			IF s # NIL THEN WITH s: Record DO t.base := s ELSE rd.Err(eRecBaseTypeExpected) END END;
+			rd.FromShort(len);
+			IF len < 0 THEN rd.Err(eNegativeFieldsLen)
+			ELSIF len > 0 THEN NEW(fields, len); t.fields := fields;
+				REPEAT DEC(len); rd.Symbol(s);
+					IF s = NIL THEN rd.Err(eFieldExpectedNilFound)
+					ELSE WITH s: Field DO fields[len] := s; Insert(t.tree, s) ELSE rd.Err(eFieldExpected) END
+					END
+				UNTIL len = 0
+			END;
+			rd.FromShort(len);
+			IF len < 0 THEN rd.Err(eNegativeVerbsLen)
+			ELSIF len > 0 THEN NEW(proc, len); t.proc := proc;
+				REPEAT DEC(len); rd.Symbol(s);
+					IF s = NIL THEN rd.Err(eVerbExpectedNilFound)
+					ELSE WITH s: TProc DO proc[len] := s; AppendProc(t, s) ELSE rd.Err(eVerbExpected) END
+					END
+				UNTIL len = 0
+			END;
+			rd.FromByte(t.level); rd.FromByte(t.align)
+		| t: Array DO rd.Int(t.len); rd.Int(t.lenoffs); rd.Symbol(s);
+			IF s = NIL THEN rd.Err(eArrayElTypExpectedNilFound)
+			ELSIF ~(s IS Type) THEN rd.Err(eArrayElTypExpected)
+			ELSE t.elTyp := s(Type)
+			END
+		| t: Procedure DO rd.Symbol(s);
+			IF s = NIL THEN rd.Err(eResTypExpectedNilFound)
+			ELSIF ~(s IS Type) THEN rd.Err(eResTypExpected)
+			ELSE t.res := s(Type)
+			END;
+			rd.FromByte(len);
+			IF len < 0 THEN rd.Err(eNegativeParamLen)
+			ELSIF len > 0 THEN NEW(formals, len); t.par := formals;
+				REPEAT DEC(len); rd.Symbol(s);
+					IF s = NIL THEN rd.Err(eParExpectedNilFound)
+					ELSIF ~(s IS Par) THEN rd.Err(eParExpected)
+					ELSE formals[len] := s(Par)
+					END
+				UNTIL len = 0
+			END
+		ELSE HALT(126)
+		END;
+		rd.Set(t.flags); rd.FromByte(t.what); rd.Int(t.pbfp); rd.Int(t.pvfp); rd.Int(t.size);
+		rd.Symbol(s);
+		IF s = NIL THEN t.typeName := NIL
+		ELSIF s IS TypeName THEN t.typeName := s(TypeName)
+		ELSE rd.Err(eTypeNameExpected)
+		END;
+		t.mod := rd.mod
+		;ASSERT(rd.mod # NIL);
+	END Internalize;
+	
+	PROCEDURE Externalize* (top: Segraph; what: INTEGER; f: Files.File; pos: INTEGER);	(** *)
+		VAR wr: SymbolWriter; p1, p2, i: INTEGER; name: ARRAY 256 OF CHAR;
+	BEGIN ASSERT(top # NIL, 20); 
+		ASSERT(what # extEverything, 126);
+		CASE what OF extExported, extSymbols, extEverything: ELSE HALT(21) END;
+		ASSERT(f # NIL, 22); ASSERT((0 <= pos) & (pos <= f.Length()), 23);
+		wr.rider := f.NewWriter(wr.rider); wr.rider.SetPos(pos); 
+		wr.exported := what = extExported; wr.bodies := what = extEverything;
+		wr.mod := top.mod;
+		IF symDict = NIL THEN NEW(symDict, capSymDict) 
+		ELSE i := LEN(symDict); REPEAT DEC(i); symDict[i] := NIL UNTIL i = 0
+		END;
+		wr.typed := FALSE; wr.Int(symVer); wr.Bool(typedSymbols); wr.typed := typedSymbols;
+		Services.GetTypeName(dir, name); wr.String(name); wr.Int(dir.SymVer());
+		p1 := wr.rider.Pos(); wr.Int(28051978);	(* placeholder for dict size *)
+		wr.Symbol(top); 
+		i := 0; WHILE symDict[i] # NIL DO INC(i) END;	(* dict length *)
+		p2 := wr.rider.Pos(); wr.rider.SetPos(p1); wr.Int(i); wr.rider.SetPos(p2);
+		ResetSymDict
+	END Externalize;
+	(* Check individual Exteralize procedures to make sure they respect .exported and .bodies flags *)
+	
+	PROCEDURE DoInternalize (OUT top: Segraph; VAR rd: SymbolReader);
+		CONST errWrongDictLen = 1; errModuleExpected = 2;
+		VAR ver, cap: INTEGER; s: Symbol;
+	BEGIN 
+		rd.errTop := 0; 
+		rd.typed := FALSE;
+		rd.Int(ver); 
+		IF ver = symVer THEN rd.Bool(rd.typed);
+			rd.String(rd.dirTypeName); rd.Int(rd.dirVer);
+			rd.Int(cap);
+			IF cap <= 0 THEN (*res := errWrongDictLen*)
+			ELSE NEW(symDict, cap + 1)
+			END;
+			ReadSymbol(rd, s);
+			IF s = NIL THEN rd.Err(eTopExpectedNilFound)
+			ELSIF ~(s IS Segraph) THEN rd.Err(eTopExpected)
+			ELSE top := s(Segraph)
+			END;
+			ResetSymDict
+		ELSE HALT(126)
+		END;
+		refDict := NIL	(* don't do this for Import: Import should build on top of previously built refDict *)
+	END DoInternalize;
+	
+	(*IMPORTANT ARTICLE ON SYMBOL TABLE (SEMANTIC GRAPH) EXPORTING/IMPORTING*)
+	
+	PROCEDURE Internalize* (OUT top: Segraph; f: Files.File; pos: INTEGER);
+		VAR rd: SymbolReader;
+	BEGIN ASSERT(f # NIL, 20); ASSERT((0 <= pos) & (pos < f.Length()), 21);
+		refDict := NIL; rd.rider := f.NewReader(NIL); rd.rider.SetPos(0); 
+		rd.imno := 0;
+		DoInternalize(top, rd)
+	END Internalize;
+
+	PROCEDURE ^ BuildSYSTEM* (IN alias: Name): Mod;
+	PROCEDURE ^ BuildJAVASCRIPT (IN alias: Name): Mod;
+
+	PROCEDURE Import* (top: Segraph; IN name, alias: Name; OUT done: BOOLEAN);	(* Import should build on top of previousely built refDict. refDict should be reset BEFORE and AFTER the whole compilation process.
+	Import requires only the interface symbols (exported ones) to be joined to the ESG *)
+		VAR rd: SymbolReader; s: Segraph; mod: Mod; i: INTEGER; sc: SCope;
+	BEGIN
+		i := 1; WHILE top.mod[i] # NIL DO INC(i) END; 
+		IF name = "SYSTEM" THEN 
+			HrM.options := HrM.options + { HrM.sysImp, HrM.sysAmd64 } ;	(* for sysflag handling *)
+			(* how do you distinguish i386 from a64? SYSTEM is not backend-agnostic, it affects available calling conventions *)
+			mod := BuildSYSTEM(alias); top.mod[i] := mod; Append(mod); done := TRUE
+		ELSIF name = "JAVASCRIPT" THEN
+			mod := BuildJAVASCRIPT(alias); top.mod[i] := mod; Append(mod); done := TRUE
+		ELSE
+			rd.rider := HrM.lib.OldHrSym(name$, NIL); done := rd.rider # NIL;
+			rd.imno := i;
+			IF done THEN 
+				rd.resetUsed := TRUE;	(* IMPORTed objects should not have used in .flags *)
+				DoInternalize(s, rd);	(* imported segraph may already be partially connected to  *)
+				IF s # NIL THEN ASSERT((s.mod # NIL) & (s.mod[0] # NIL));
+					IF s.mod[0].name^ = name THEN mod := s.mod[0];
+						mod.realName := mod.name; 
+						IF name # alias THEN NEW(mod.name); mod.name^ := alias$ END;
+						(*sc := nowScope; nowScope := top.mod[0]; *)Append(mod); (*nowScope := sc;*)
+						mod.imno := i;	(* correction necessary after Append! *)
+						top.mod[i] := mod
+					END
+				ELSE done := FALSE
+				END
+			END
+		END
+	END Import;
+		
+
+
+
+	PROCEDURE TestReadWrite*;	(** If Readers/Writer are ever extended, this can be used for  *)
+		VAR rd: SymbolReader; wr: SymbolWriter; f: Files.File;
+			ch: CHAR; int: INTEGER; b: BYTE; sh: SHORTINT; long: LONGINT; bool: BOOLEAN;
+			set: SET; real: REAL; str: ARRAY 64 OF CHAR;
+	BEGIN
+		f := Files.dir.Temp(); InitWriter(wr, TRUE, FALSE, FALSE); wr.ConnectTo(f);
+		InitReader(rd, TRUE); rd.ConnectTo(f);
+		wr.AsByte(28); rd.FromByte(int); ASSERT(int = 28); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.AsShort(1978); rd.FromShort(int); ASSERT(int = 1978); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.Int(28051978); rd.Int(int); ASSERT(int = 28051978); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.Long(MAX(LONGINT)); rd.Long(long); ASSERT(long = MAX(LONGINT)); 
+		ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.String("adimetrius"); rd.String(str); ASSERT(str = "adimetrius"); 
+		ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.Char("@"); rd.Char(ch); ASSERT(ch = "@"); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.Bool(TRUE); rd.Bool(bool); ASSERT(bool); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.Real(3.141519); rd.Real(real); ASSERT(real = 3.141519); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		wr.Set({5,28}); rd.Set(set); ASSERT(set = { 05, 28 } ); ASSERT(rd.rider.Pos() = wr.rider.Pos());
+		f.Close
+	END TestReadWrite;
+	
+	PROCEDURE DoDumpSymbols (VAR rd: SymbolReader; VAR log: TextMappers.Formatter);
+		VAR tag, byte: BYTE; int: INTEGER; ch: CHAR; bool: BOOLEAN; set: SET; real: REAL; long: LONGINT;
+			pstr: POINTER TO String;
+	BEGIN ASSERT(rd.typed, 20);
+		REPEAT ReadTag(rd, tag); 
+			IF ~rd.rider.eof THEN
+				rd.rider.SetPos(rd.rider.Pos() - SIZE(BYTE));
+				CASE tag OF
+				| inttg: rd.Int(int); log.WriteInt(int); log.WriteChar(" ")
+				| chartg: rd.Char(ch); log.WriteChar(ch); log.WriteChar(" ")
+				| settg: rd.Set(set); log.WriteSet(set); log.WriteChar(" ")
+				| booltg: rd.Bool(bool); log.WriteBool(bool); log.WriteChar(" ")
+				| realtg: rd.Real(real); log.WriteReal(real); log.WriteChar(" ")
+				| stringtg: ReadAsStringPtr(rd, pstr); 
+					IF pstr # NIL THEN log.WriteString(pstr) ELSE log.WriteString("''") END; log.WriteChar(" ")
+				| bytetg: rd.FromByte(int); log.WriteInt(int); log.WriteChar(" ")
+				| shorttg: rd.FromShort(int); log.WriteInt(int); log.WriteChar(" ")
+				| longtg: rd.Long(long); log.WriteInt(long); log.WriteChar(" ")
+				| symboltg: ReadTag(rd, byte); INC(logIndent); log.WriteLn; log.WriteString("SYMBOL"); log.WriteChar(" ")
+				| symbolendtg: ReadTag(rd, byte); log.WriteLn; log.WriteString("SYMBOLEND"); DEC(logIndent); log.WriteLn
+				ELSE ReadTag(rd, byte); log.WriteString("Unknown tag: "); log.WriteInt(int); log.WriteChar(" ")
+				END;
+				IF (rd.rider.Pos() >= globalErrPos) & (markerMaker # NIL) THEN markerMaker(log, globalErrNo);
+					globalErrPos := MAX(INTEGER)
+				END
+			END
+		UNTIL rd.rider.eof
+	END DoDumpSymbols;
+	
+	PROCEDURE DumpSymbols* (frd: Files.Reader; VAR log: TextMappers.Formatter);
+		VAR rd: SymbolReader; ver, cap: INTEGER;
+	BEGIN rd.rider := frd; 	(* .imp not initialized - will trap with references *)
+		rd.typed := FALSE; rd.Int(ver); log.WriteString("Version: "); log.WriteInt(ver);
+		IF ver = symVer THEN rd.Bool(rd.typed); 
+			IF rd.typed THEN
+				rd.String(rd.dirTypeName); log.WriteString("Directory: "); log.WriteString(rd.dirTypeName);
+				rd.Int(rd.dirVer); log.WriteString(" version: "); log.WriteInt(rd.dirVer);
+				rd.Int(cap); log.WriteString(" dictionary capacity: "); log.WriteInt(cap); log.WriteLn;
+				DoDumpSymbols(rd, log)
+			ELSE log.WriteString("type tags stripped from symbol def")
+			END
+		ELSE log.WriteString("Incompatible version: "); log.WriteInt(ver)
+		END
+	END DumpSymbols;
+	
+
+
+	(*PROCEDURE (sc: Scope) Internalize (VAR rd: SymbolReader);
+		VAR s: Symbol;
+	BEGIN rd.Symbol(s); 
+		IF s # NIL THEN WITH s: Scope DO sc.owner := s ELSE rd.Err(eScopeExpected) END END;
+		rd.Symbol(s); 
+		IF s # NIL THEN WITH s: Object DO sc.owner := s(Object) ELSE rd.Err(eScopeExpected) END END;
+		rd.Int(sc.mnolev)
+	END Internalize;*)
+	
+	
+	PROCEDURE NameAnon (OUT name: POINTER TO Name);
+		VAR buf: ARRAY 16 OF CHAR;
+	BEGIN
+		Strings.IntToString(nowTop.anon, buf); NEW(name); name^ := '@annon' + buf; INC(nowTop.anon)
+	END NameAnon;
+	
+	PROCEDURE RegisterType* (t: Type; tn: TypeName);
+	BEGIN
+		ASSERT(t # NIL, 20); ASSERT(t.typeName = NIL, 21);
+		IF tn # NIL THEN t.typeName := tn; tn.type := t; Append(tn) END;
+		t.mod := nowTop.mod[0]
+	END RegisterType;
+	
+	
+	
+	
+	PROCEDURE BuildJSMod* (imno: INTEGER): T.Object; 	(* enter test env: Logger... *)
+		VAR docrec, document: T.Struct; jsm, h, b1, b2, p, par, jslist, STRING: T.Object; charray: T.Struct;
+	BEGIN 
+		b1 := T.topScope.next; T.topScope.next := NIL; b2 := T.topScope.right; T.topScope.right := NIL;
+		T.topScope.mnolev := SHORT(SHORT(imno));
+		
+		charray := T.NewStr(fcComp, fcDynArr); charray.BaseTyp := T.char16typ;
+		
+		T.Insert("String", p); 
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		par := T.NewObj(); par.name := T.NewName("s"); par.mode := cVar(*Par*); par.vis := 0(*inPar*);
+		p.link := par; par.typ := charray;
+		
+		T.Insert("Ln", p); p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		
+		T.Insert("Int", p); 
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		par := T.NewObj(); par.name := T.NewName("x"); par.mode := cVarPar; par.vis := inPar;
+		p.link := par; par.typ := T.int64typ; 
+		
+		T.Insert("Real", p); 
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		par := T.NewObj(); par.name := T.NewName("x"); par.mode := cVarPar; par.vis := inPar;
+		p.link := par; par.typ := T.real64typ; 
+		
+		T.Insert("Set", p); 
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		par := T.NewObj(); par.name := T.NewName("x"); par.mode := cVarPar; par.vis := inPar;
+		p.link := par; par.typ := T.settyp; 
+		
+		T.Insert("Bool", p); 
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		par := T.NewObj(); par.name := T.NewName("x"); par.mode := cVarPar; par.vis := inPar;
+		p.link := par; par.typ := T.booltyp; 
+		
+		T.Insert("Char", p); 
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external;
+		par := T.NewObj(); par.name := T.NewName("x"); par.mode := cVarPar; par.vis := inPar;
+		p.link := par; par.typ := T.char16typ; 
+		
+		T.Insert("STRING", STRING); STRING.mode := cTyp; STRING.vis := external;
+		STRING.typ := T.NewStr(fJString(*form*), fcBasic); STRING.typ.BaseTyp := T.notyp;
+		STRING.typ.strobj := STRING;
+		
+		T.Insert("GETSTR", p);
+		p.mode := cXProc; p.typ := T.notyp; p.vis := external; p.adr := getstrfn;
+		par := T.NewObj(); par.name := T.NewName("jstring"); par.mode := cVar; par.typ := STRING.typ;
+		p.link := par; par.link := T.NewObj(); par := par.link; 
+		par.name := T.NewName("string"); 
+		par.mode := cVarPar; par.vis := inPar; par.typ := charray;
+		
+		T.Insert("TOSTR", p); 
+		p.mode := cXProc; p.typ := STRING.typ; p.vis := external; p.adr := putstrfn;
+		
+		par := T.NewObj(); p.link := par; par.name := T.NewName("string"); 
+		par.mode := cVarPar; par.vis := inPar; par.typ := charray;
+
+		jslink := T.topScope.right; T.topScope.right := NIL; 
+		jslist := T.topScope.next; T.topScope.next := NIL; T.ReverseList(jslist); T.topScope.mnolev := 0;
+		RETURN jslink
+	END BuildJSMod;
+
+	PROCEDURE Module* (source: TextModels.Reader; opt: SET; logText: TextModels.Model; 
+		OUT top: Segraph; VAR error: BOOLEAN
+	);
+		VAR ext, new: BOOLEAN; p: T.Node; str: Dialog.String; (*universe,*) u: Mod; _, i: INTEGER;
+			errs: INTEGER; f: Files.File; 
+	BEGIN 
+		IF parseModule = NIL THEN Dialog.Call("CpjsP.BlaBla", "", _) END;
+		ASSERT(parseModule # NIL, 20);
+		HrM.Init(source, logText);
+		T.Init(opt);
+		T.processor := DevCPV.processor;
+		parseModule(p);
+		anchor := T.topScope;	(* to use in FindOrig *)
+		T.Close;
+		error := ~HrM.noerr;
+		IF ~error THEN 
+			NEW(top); NEW(top.mod, T.nofGmod + 1); top.name := noname;
+			nowTop := top;
+			nowScope := NIL;
+			IF universe = NIL THEN 
+				u := dir.Mod(); NEW(u.name); u.name^ := "UNIVERSE"; u.imno := 0;
+				ThisScope(u, anchor.left); 
+				bytetp := FindInTree(u.tree, "BYTE").type(Basic);
+				shorttp := FindInTree(u.tree, "SHORTINT").type(Basic);
+				inttp := FindInTree(u.tree, "INTEGER").type(Basic);
+				longtp := FindInTree(u.tree, "LONGINT").type(Basic);
+				shortrealtp := FindInTree(u.tree, "SHORTREAL").type(Basic);
+				realtp := FindInTree(u.tree, "LONGREAL").type(Basic);
+				shortchartp := FindInTree(u.tree, "SHORTCHAR").type(Basic);
+				chartp := FindInTree(u.tree, "CHAR").type(Basic);
+				settp := FindInTree(u.tree, "SET").type(Basic);
+				booltp := FindInTree(u.tree, "BOOLEAN").type(Basic);
+				errtp := dir.AuxType(); errtp.what := fErr;
+				shortstrtp := dir.Array(); shortstrtp.elTyp := shortchartp; INCL(shortstrtp.flags, open);
+				shortstrtp.len := 1;
+				strtp := dir.Array(); strtp.elTyp := chartp; INCL(strtp.flags, open); strtp.len := 1;
+				nil := dir.Nil(); nil.type := dir.NilPtr();
+				universe := u
+			END;
+			module := dir.Mod(); module.imno := 1;
+			NEW(module.name); Utf.Utf8ToString(T.SelfName, module.name, _);
+			IF T.libName # "" THEN NEW(module.lib); Utf.Utf8ToString(T.libName, module.lib, _) END;
+			ThisScope(module, anchor); module.owner := universe;
+			DoFixups;
+			nowScope := module;
+			IF p # NIL THEN DoProcedures(module, p.left) END;
+			nowTop := NIL
+			(**)
+		END;
+		HrM.Close;
+		p := NIL;
+		Kernel.FastCollect;
+		error := error OR (HrM.errors > 0);
+		IF error THEN
+			HrM.InsertMarks(source.Base());
+			HrM.LogWLn; HrM.LogWStr(" ");
+			IF HrM.errors = 1 THEN Dialog.MapString("#Dev:OneErrorDetected", str)
+			ELSE HrM.LogWNum(HrM.errors, 0); Dialog.MapString("#Dev:ErrorsDetected", str)
+			END;
+			Log.String(str)
+		END;
+		HrM.LogWLn
+	END Module;
+	
+	PROCEDURE WriteOut*;
+		VAR wr: SymbolWriter; rd: SymbolReader; f: Files.File; ver, _: INTEGER;
+	BEGIN
+		f := Files.dir.New(Files.dir.This('/tmp/'), FALSE);
+		wr.rider := f.NewWriter(NIL); wr.rider.SetPos(0); wr.typed := FALSE;
+		wr.Int(symVer); f.Flush; 
+		rd.rider := f.NewReader(NIL); rd.rider.SetPos(0); rd.typed := FALSE;
+		rd.Int(ver); Log.Int(ver);
+		f.Register("out", "", FALSE, _)
+	END WriteOut;	(* CpjsT.WriteOut *)
+	
+	PROCEDURE FindOrig* (IN name: ARRAY OF CHAR);
+		VAR n: T.Name; _: INTEGER; o: T.Object;
+	BEGIN 
+		Utf.StringToUtf8(name, n, _);
+		T.topScope := anchor; T.Find(n, o); T.topScope := NIL; HALT(0)
+	END FindOrig;
+	
+	PROCEDURE TraverseUniverse*;
+		PROCEDURE Do (o: T.Object); 
+		BEGIN IF o # NIL THEN Do(o.left); Log.String(o.name$); Log.Ln; Do(o.right) END END Do;
+	BEGIN Do(T.universe)
+	END TraverseUniverse;
+
+	PROCEDURE FindUniverse* (IN name: ARRAY OF CHAR);
+		VAR n: T.Name; _: INTEGER; o, s: T.Object;
+	BEGIN 
+		Utf.StringToUtf8(name, n, _);
+		s := T.topScope; T.topScope := T.universe; T.Find(n, o); T.topScope := s; HALT(0)
+	END FindUniverse;
+
+	PROCEDURE Test*;	(* pick up text following commander *)
+		VAR par: DevCommanders.Par; rd: TextModels.Reader; err: BOOLEAN; text: TextModels.Model;
+			top: Segraph;
+	BEGIN par := DevCommanders.par;
+		IF par # NIL THEN rd := par.text.NewReader(NIL); rd.SetPos(par.beg);
+			text :=TextModels.dir.New();
+			log.ConnectTo(text);
+			Module(rd, {}, Log.text, top, err);
+			SpellObj(top.mod[0]); 
+			ASSERT(top # NIL);
+			Log.text.Append(text)
+		END
+	END Test;
+	
+	PROCEDURE FindThis* (IN name: ARRAY OF CHAR);
+		VAR o: Object;
+	BEGIN o := FindDeep(module, name); HALT(0)
+	END FindThis;
+	
+	PROCEDURE FindInTop* (IN name: ARRAY OF CHAR);
+		VAR o: Object;
+	BEGIN o := FindDeep(module, name); HALT(0)
+	END FindInTop;
+	
+	PROCEDURE InsObj (m: Mod; obj: Object);
+		VAR o: Object;
+	BEGIN 
+		IF m.head = NIL THEN m.head := obj
+		ELSE o := m.head; WHILE o.next # NIL DO o := o.next END; o.next := obj 
+		END;
+		Insert(m.tree, obj); obj.owner := m
+	END InsObj;
+	
+	PROCEDURE InsType (m: Mod; IN name: Name; type: Type; OUT tname: TypeName);
+	BEGIN 
+		tname := dir.TypeName(); NEW(tname.name); tname.name^ := name$; tname.type := type; 
+		type.typeName := tname;
+		tname.imno := m.imno; tname.textpos := 0;
+		WITH type: Structure DO type.mmno := SHORT(SHORT(m.imno)) ELSE END;
+		InsObj(m, tname)
+	END InsType;
+	
+	PROCEDURE StProc (IN name: ARRAY OF CHAR; num: INTEGER): SProc;
+		VAR p: SProc;
+	BEGIN p := dir.SProc(); NEW(p.name); p.name^ := name$; p.num := num; RETURN p
+	END StProc;
+
+	PROCEDURE BuildSYSTEM* (IN alias: Name): Mod;
+		VAR u: Mod; _: TypeName;
+	BEGIN
+		u := dir.Mod(); NEW(u.name); u.name^ := alias$; u.imno := -1; u.flags := { pseudo };
+		InsObj(u, StProc("VAL", valfn));
+		InsObj(u, StProc("ADR", adrfn));
+		InsObj(u, StProc("TYP", typfn));
+		InsObj(u, StProc("PUTREG", putrfn));
+		InsObj(u, StProc("GETREG", getrfn));
+		InsType(u, "PTR", sysptrtp, _);	(* sysptrtp initialized in BuildUniverse, 'cause it's  *)
+		RETURN u
+	END BuildSYSTEM;
+	
+	PROCEDURE BuildUniverse* (imno: INTEGER): Mod;
+		VAR u: Mod; t: Object; _: TypeName; bool: Const;
+	BEGIN
+		(* How do you get .mod initialized for types? *)
+		u := dir.Mod(); NEW(u.name); u.name^ := "@UNIVERSE"; u.imno := imno;
+		bytetp := dir.Basic(); bytetp.what := fInt8; InsType(u, "BYTE", bytetp, _);
+		bytetp.size := 1;	(* Actually, ALL size decisions should be made elsewhere in the backend *)
+		shorttp := dir.Basic(); shorttp.what := fInt16; InsType(u, "SHORTINT", shorttp, _);
+		shorttp.size := 2;
+		inttp := dir.Basic(); inttp.what := fInt32; InsType(u, "INTEGER", inttp, _);
+		inttp.size := 4;
+		longtp := dir.Basic(); longtp.what := fInt64; InsType(u, "LONGINT", longtp, _);
+		longtp.size := 8;
+		shortrealtp := dir.Basic(); shortrealtp.what := fReal32; InsType(u, "SHORTREAL", shortrealtp, _);
+		shortrealtp.size := 4;
+		realtp := dir.Basic(); realtp.what := fReal64; InsType(u, "REAL", realtp, _);
+		realtp.size := 8;
+		shortchartp := dir.Basic(); shortchartp.what := fChar8; InsType(u, "SHORTCHAR", shortchartp, _);
+		shortchartp.size := 1;
+		chartp := dir.Basic(); chartp.what := fChar16; InsType(u, "CHAR", chartp, _);
+		chartp.size := 2;
+		settp := dir.Basic(); settp.what := fSet; InsType(u, "SET", settp, _);
+		settp.size := 4;
+		booltp := dir.Basic(); booltp.what := fBool; InsType(u, "BOOLEAN", booltp, _);
+		booltp.size := 1;
+		anyrectp := dir.Record(); anyrectp.what := fRecord; InsType(u, "ANYREC", anyrectp, _);
+		anyptrtp := dir.RecPtr(); anyptrtp.what := fRecPtr; InsType(u, "ANYPTR", anyptrtp, _);
+		anyptrtp.base := anyrectp;
+		(* insert FINALIZE into anyptrtp *)
+		sysptrtp := dir.SysPtr(); sysptrtp.what := fSysPtr;
+		addrtp := dir.Basic(); addrtp.what := fInt64; InsType(u, "@ADDRESS", addrtp, _);
+		niltp := dir.NilPtr(); InsType(u, "@NILTYPE", niltp, _);
+		
+		errtp := dir.AuxType(); errtp.what := fErr;
+		typetp := dir.AuxType(); typetp.what := fType;
+		procdestp := dir.AuxType(); procdestp.what := fProcedure;
+		shortstrtp := dir.Array(); shortstrtp.what := fString8; shortstrtp.elTyp := shortchartp;
+		(*?*)INCL(shortstrtp.flags, open); shortstrtp.len := 1;
+		strtp := dir.Array(); strtp.what := fString16; strtp.elTyp := chartp; 
+		(*?*)INCL(strtp.flags, open); strtp.len := 1;
+		NEW(nil); nil.type := dir.NilPtr(); nil.flags := { const };
+		NEW(errdes); errdes.type := errtp;
+		NEW(errex); errex.type := errtp;
+		errid := dir.GlobVar(); NEW(errid.name); errid.name^ := "@#!UnknownId"; errid.type := errtp;
+		NEW(errcon); errcon.type := errtp; errcon.flags := { const };
+		NEW(errstat);
+		
+		true := dir.Bool(); true.bool := TRUE; true.type := booltp; true.flags := { const };
+		bool := dir.Const(); bool.val := true; bool.ex := true;
+		NEW(bool.name); bool.name^ := "TRUE"; bool.type := booltp;
+		Insert(u.tree, bool);
+		
+		false := dir.Bool(); false.bool := FALSE; false.type := booltp; false.flags := { const };
+		bool := dir.Const(); bool.val := false; bool.ex := false; 
+		NEW(bool.name); bool.name^ := "FALSE"; bool.type := booltp;
+		Insert(u.tree, bool);
+		
+		zero := ThisInt(0);
+		one := ThisInt(1);
+		null := ThisChar(0X);
+		empset := dir.Set(); empset.type := settp; empset.set := {}; INCL(empset.flags, const);
+		
+		InsObj(u, StProc("ORD", ordfn));
+		InsObj(u, StProc("CHR", chrfn));
+		InsObj(u, StProc("MAX", maxfn));
+		InsObj(u, StProc("MIN", minfn));
+		InsObj(u, StProc("SHORT", shortfn));
+		InsObj(u, StProc("LONG", longfn));
+		InsObj(u, StProc("ABS", absfn));
+		InsObj(u, StProc("CAP", capfn));
+		InsObj(u, StProc("BITS", bitsfn));
+		InsObj(u, StProc("ENTIER", entierfn));
+		InsObj(u, StProc("ODD", oddfn));
+		InsObj(u, StProc("INC", incfn));
+		InsObj(u, StProc("DEC", decfn));
+		InsObj(u, StProc("LEN", lenfn));
+		InsObj(u, StProc("HALT", haltfn));
+		InsObj(u, StProc("SIZE", sizefn));
+		InsObj(u, StProc("ASSERT", assertfn));
+		InsObj(u, StProc("ASH", ashfn));
+		InsObj(u, StProc("INCL", inclfn));
+		InsObj(u, StProc("EXCL", exclfn));
+		InsObj(u, StProc("NEW", newfn));
+		
+		RETURN u
+	END BuildUniverse;
+	
+	PROCEDURE NewProc (IN name: ARRAY OF CHAR; flags: SET): XProc;
+		VAR p: XProc;
+	BEGIN p := dir.XProc(); NEW(p.name); p.name^ := name$; p.flags := flags; RETURN p
+	END NewProc;
+	
+	PROCEDURE NewPar (IN name: ARRAY OF CHAR; flags: SET; type: Type): Par;
+		VAR p: Par;
+	BEGIN p := dir.Par(); NEW(p.name); p.name^ := name$; p.flags := flags; p.type := type; RETURN p
+	END NewPar;
+	
+	PROCEDURE BuildJAVASCRIPT (IN alias: Name): Mod;
+	(* This procedure is out of place. Constructing of special modules should be handled differently and elsewhere *)
+		VAR m: Mod; t: Object; _: TypeName; bool: Const; charray: Array; p: XProc; jstrtp: Basic;
+	BEGIN
+		NEW(HrM.JS, 3); HrM.JS^ := "JS";
+		m := dir.Mod(); NEW(m.name); m.name^ := alias$; m.imno := -1;
+		charray := dir.Array(); charray.flags := { open }; charray.elTyp := chartp;
+		p := NewProc("String", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("s", inK, charray);
+		p := NewProc("Ln", {}); InsObj(m, p);
+		p := NewProc("Int", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("x", valK, longtp);
+		p := NewProc("Real", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("x", valK, realtp);
+		p := NewProc("Set", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("x", valK, settp);
+		p := NewProc("Bool", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("x", valK, booltp);
+		p := NewProc("Char", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("x", valK, chartp);
+		jstrtp := dir.Basic(); jstrtp.flags := {}; jstrtp.what := fJString;
+		jstrtp.typeName := dir.TypeName(); jstrtp.typeName.flags := {}; NEW(jstrtp.typeName.name); 
+		jstrtp.typeName.name^ := "STRING"; jstrtp.typeName.type := jstrtp;
+		InsObj(m, jstrtp.typeName);
+		p := NewProc("GETSTR", { }); InsObj(m, p); 
+		NEW(p.par, 2); p.par[0] := NewPar("js", valK, jstrtp); p.par[1] := NewPar("s", outK, charray);
+		p := NewProc("TOSTR", {}); InsObj(m, p); NEW(p.par, 1); p.par[0] := NewPar("s", inK, charray);
+		p.type := jstrtp;
+		RETURN m
+	END BuildJAVASCRIPT;
+
+	PROCEDURE OpenTop* (OUT top: Segraph);
+		VAR m: Mod;
+	BEGIN 
+		top := dir.Segraph(); NEW(top.mod, 16); top.mod[1] := nativeUniverse; 
+		m := dir.Mod(); m.owner := nativeUniverse; m.imno := 0; top.mod[0] := m;
+		top.anon := 0; nowTop := top
+	END OpenTop;
+	
+	PROCEDURE CloseTop*; BEGIN nowTop := NIL END CloseTop;
+		
+	PROCEDURE FPrintObj* (o: Object);
+	BEGIN 
+		IF deferred126 THEN HALT(126) 
+		ELSE o.fprint := 14022001H;
+			WITH o: TypeName DO o.type.pbfp := 14022001H; o.type.pvfp := 14022001H ELSE END
+		END
+	END FPrintObj;
+	
+	PROCEDURE SetDir* (new: Dir);
+	BEGIN
+		ASSERT(new # NIL, 20);
+		IF dir # new THEN dir := new; nativeUniverse := BuildUniverse(1) END
+	END SetDir;
+	
+	
+	
+	
+BEGIN dicTop := 0; fixTop := 0; typTop := 0; showTypes := FALSE; details := FALSE;
+	NEW(noname); noname^ := '';
+	opNames[absfn] := "ABS"; opNames[capfn] := "CAP";
+	opNames[oddfn] := "ODD"; opNames[adrfn] := "SYSTEM.ADR("; opNames[ccfn] := "SYSTEM.CC";
+	opNames[valfn] := "SYSTEM.VAL("; opNames[ashfn] := "ASH"; opNames[lenfn] := "LEN"; 
+	opNames[lshfn] := "LSH";  opNames[sizefn] := "SIZE";
+	opNames[rotfn] := "ROT"; opNames[typfn] := "SYSTEM.TYP("; opNames[notfn] := "~"; 
+	opNames[minusfn] := "-"; opNames[isfn] := "IS"; opNames[timesfn] := "*"; opNames[slashfn] := "/";
+	opNames[divfn] := "DIV"; opNames[modfn] := "MOD"; opNames[andfn] := "&"; 
+	opNames[plusfn] := "+"; opNames[inclfn] := "INCL"; opNames[exclfn] := "EXCL";
+	opNames[orfn] := "OR"; opNames[eqlfn] := "="; opNames[neqfn] := "#"; opNames[lssfn] := "<";
+	opNames[leqfn] := "<="; opNames[gtrfn] := ">"; opNames[geqfn] := ">="; opNames[infn] := "IN";
+	opNames[incfn] := "INC"; opNames[decfn] := "DEC";	
+	opNames[maxfn] := "MAX"; opNames[minfn] := "MIN";
+	
+	NEW(stdDir); dir := stdDir;
+	openDepth := 0;
+	
+	nativeUniverse := BuildUniverse(1);
+	
+	globalErrPos := MAX(INTEGER);
+	
+	logIndent := 0;
+	
+END HrT.
+	
+

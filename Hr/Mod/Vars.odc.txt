@@ -1,0 +1,156 @@
+MODULE HrVars;
+	
+	IMPORT Views, Models, Fonts, Controllers, Stores, Properties, Controls, Containers, Ports,
+		DevCommanders,
+		Log,
+		TextModels;
+	
+	CONST 
+		version = 1;
+		name = Controls.label;
+		valids = { name };
+		none = -1;
+		label = "VAR: ";
+	
+	TYPE 
+		View = POINTER TO RECORD (Views.View)
+			name: ARRAY 64 OF CHAR
+		END;
+		
+	PROCEDURE DrawSmoothRect (f: Views.Frame; l, t, r, b, rad, lw, color: INTEGER);	(* dia *)
+		VAR p: ARRAY 24 OF Ports.Point;
+	BEGIN
+			(* Левый верхний угол *)
+			p[23].x := l; p[23].y := t + 2 * rad; p[0].x := l; p[0].y := t + rad; p[1].x := l; p[1].y := t;
+			p[2].x := l ; p[2].y := t; p[3].x := l + rad; p[3].y := t; p[4].x := l + 2 * rad; p[4].y := t;
+			(* Задние четыре точки *)
+			p[5].x := r - 2 * rad; p[5].y := t; p[6].x := r - rad; p[6].y := t; p[7].x := r; p[7].y := t;
+			p[8].x := r; p[8].y := t; p[9].x := r; p[9].y := t + rad; p[10].x:= r; p[10].y:= t + 2 * rad;
+			p[11].x := r; p[11].y := b - 2 * rad; p[12].x := r; p[12].y := b - rad; p[13].x := r; p[13].y := b;
+			p[14].x := r; p[14].y := b; p[15].x := r - rad; p[15].y := b; p[16].x := r - 2 * rad; p[16].y := b;
+			(* Левый нижний угол *)
+			p[17].x := l + 2 * rad; p[17].y := b; p[18].x := l + rad; p[18].y := b; p[19].x := l; p[19].y := b;
+			p[20].x := l; p[20].y := b; p[21].x := l; p[21].y := b - rad; p[22].x := l; p[22].y := b - 2 * rad;
+			f.DrawPath(p, LEN(p), lw, color, Ports.closedBezier);
+	END DrawSmoothRect;
+	
+	PROCEDURE CalcSize (v: View; OUT w, h: INTEGER; OUT fnt: Fonts.Font; OUT col: INTEGER);
+		VAR c: Models.Context; _: INTEGER; a: TextModels.Attributes;
+	BEGIN c := v.context;
+		WITH c: TextModels.Context DO a := c.Attr(); fnt := a.font; col := a.color
+		ELSE fnt := Fonts.dir.Default(); col := Ports.black
+		END;
+		fnt.GetBounds(h, w, _); INC(h, w);
+		fnt := Fonts.dir.This(fnt.typeface, fnt.size - 4 * Ports.point, fnt.style, fnt.weight);
+		w := fnt.StringWidth(v.name) + 4 * Ports.point
+	END CalcSize;
+	
+	PROCEDURE (v: View) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR color, w, h, wid, hei, asc, dsc, _: INTEGER; fnt: Fonts.Font; 
+	BEGIN v.context.GetSize(w, h); CalcSize(v, wid, hei, fnt, color);
+		fnt.GetBounds(asc, dsc, _);
+		DrawSmoothRect(f, 0, 0, w, h, (asc + dsc) DIV 2, f.dot, color);
+		f.DrawString(2 * Ports.point, 2 * Ports.point + asc, color, v.name, fnt)
+	END Restore;
+	
+	PROCEDURE (v: View) HandlePropMsg (VAR msg: Properties.Message);
+		CONST term = LEN(v.name) - LEN(label) - 1;
+		VAR p: Properties.Property; ch: CHAR; w, h, __, i, j, len: INTEGER; prop: Controls.Prop;
+			_: Fonts.Font; 
+	BEGIN
+		WITH 
+		| msg: Controls.PropPref DO msg.valid := { Controls.label } 
+		| msg: Properties.SetMsg DO
+			p := msg.prop;
+			WHILE p # NIL DO
+				WITH p: Controls.Prop DO 
+					IF name IN p.valid THEN 
+						IF LEN(p.label$) > term THEN ch := p.label[term]; p.label[term] := 0X 
+						ELSE ch := 0X 
+						END;
+						v.name := label + p.label$;
+						IF ch # 0X THEN p.label[term] := ch END;
+						CalcSize(v, w, h, _, __); v.context.SetSize(w, h);
+						Views.Update(v, Views.keepFrames)
+					END
+				ELSE
+				END;
+				p := p.next
+			END
+		| msg: Properties.PollMsg DO NEW(prop); prop.known := valids;
+			prop.valid := valids; prop.readOnly := {}; 
+			i := LEN(label); j := 0;
+			REPEAT ch := v.name[i]; prop.label[j] := ch; INC(i); INC(j)
+			UNTIL (ch = 0X) OR (j = LEN(prop.label) - 1);
+			IF ch # 0X THEN prop.label[j] := 0X END;
+			msg.prop := prop
+		| msg: Properties.SizePref DO CalcSize(v, msg.w, msg.h, _, __); msg.fixedW := FALSE
+		ELSE 
+		END
+	END HandlePropMsg;
+	
+	PROCEDURE (v: View) Internalize (VAR rd: Stores.Reader);
+		VAR ver: INTEGER;
+	BEGIN rd.ReadVersion(version, version, ver); rd.ReadString(v.name)
+	END Internalize;
+	
+	PROCEDURE (v: View) Externalize (VAR wr: Stores.Writer);
+	BEGIN wr.WriteVersion(version); wr.WriteString(v.name)
+	END Externalize;
+	
+	PROCEDURE (v: View) CopyFromSimpleView (src: Views.View);
+	BEGIN
+		WITH src: View DO v.name := src.name$ END
+	END CopyFromSimpleView;
+	
+	PROCEDURE New* (): View; 
+		VAR v: View; 
+	BEGIN NEW(v); v.name := label; RETURN v 
+	END New;
+	
+	PROCEDURE Deposit*;
+	BEGIN Views.Deposit(New())
+	END Deposit;
+	
+	PROCEDURE Read* (rd: TextModels.Reader);
+		VAR v: Views.View; pos: INTEGER;
+	BEGIN ASSERT(rd # NIL, 20); ASSERT(rd.Base() # NIL, 21); 
+		pos := rd.Pos(); ASSERT((0 <= pos) & (pos <= rd.Base().Length()), 22);
+		REPEAT rd.ReadView(v) UNTIL (v = NIL) OR (v IS View)
+	END Read;
+	
+	PROCEDURE ReadThis* (rd: TextModels.Reader; OUT v: View);
+	BEGIN Read(rd); IF rd.view # NIL THEN v := rd.view(View) END
+	END ReadThis;
+	
+	PROCEDURE Get* (rd: TextModels.Reader; IN name: ARRAY OF CHAR; 
+		OUT val: ARRAY OF CHAR; OUT full: BOOLEAN
+	);
+		VAR v: View; i: INTEGER; ch: CHAR;
+	BEGIN
+		REPEAT ReadThis(rd, v) UNTIL (v = NIL) OR (v.name = label + name);
+		IF v # NIL THEN
+			i := 0; REPEAT rd.ReadChar(ch); IF ch >= ' ' THEN val[i] := ch; INC(i) END;
+			full := (ch = TextModels.line) OR (ch = TextModels.para) OR (ch = 0X) 
+			UNTIL full OR (i = LEN(val) - 1);
+			val[i] := 0X; 
+		ELSE val := ''; full := TRUE
+		END
+	END Get;
+	
+	PROCEDURE Test* (IN name: ARRAY OF CHAR);
+		VAR p: DevCommanders.Par; rd: TextModels.Reader; val: ARRAY 32 OF CHAR; 
+			full: BOOLEAN;
+	BEGIN p := DevCommanders.par; 
+		IF p # NIL THEN rd := p.text.NewReader(NIL); Get(rd, name, val, full);
+			Log.String(val); Log.Bool(full); Log.Ln
+		ELSE Log.String("No par")
+		END
+	END Test;
+	
+END HrVars.
+
+"HrVars.Deposit;StdCmds.PasteView"
+"HrVars.Test('This')"
+"HrVars.Test('That')"
+sdfsdf sdfsdf!

@@ -1,0 +1,4289 @@
+MODULE HrB;
+(**
+	project	= "BlackBox"
+	organization	= "www.oberon.ch"
+	contributors	= "Oberon microsystems, Robert Campbell"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "Docu/BB-License"
+	references	= "http://e-collection.library.ethz.ch/eserv/eth:39386/eth-39386-02.pdf"
+	changes	= ""
+	issues	= ""
+
+**)
+
+	IMPORT HrCPT, HrM, T := HrT, 
+		TextMappers;
+
+	CONST
+		(* symbol values or ops *)
+		times = 1; slash = 2; div = 3; mod = 4;
+		and = 5; plus = 6; minus = 7; or = 8; eql = 9;
+		neq = 10; lss = 11; leq = 12; gtr = 13; geq = 14;
+		in = 15; is = 16; ash = 17; msk = 18; len = 19;
+		conv = 20; abs = 21; cap = 22; odd = 23; not = 33;
+		(*SYSTEM*)
+		adr = 24; cc = 25; bit = 26; lsh = 27; rot = 28; val = 29;
+		min = 34; max = 35; typfn = 36; size = 37;
+		
+		(* object modes *)
+		Var = 1; VarPar = 2; Con = 3; Fld = 4; Typ = 5; LProc = 6; XProc = 7;
+		SProc = 8; CProc = 9; IProc = 10; Mod = 11; Head = 12; TProc = 13;
+
+		(* Structure forms *)
+		Undef = 0; Byte = 1; Bool = 2; Char8 = 3; Int8 = 4; Int16 = 5; Int32 = 6;
+		Real32 = 7; Real64 = 8; Set = 9; String8 = 10; NilTyp = 11; NoTyp = 12;
+		Pointer = 13; ProcTyp = 14; Comp = 15;
+		Char16 = 16; String16 = 17; Int64 = 18;
+		intSet = {Int8..Int32, Int64}; realSet = {Real32, Real64}; charSet = {Char8, Char16};
+
+		(* composite structure forms *)
+		Basic = 1; Array = 2; DynArr = 3; Record = 4;
+
+		(* nodes classes *)
+		Nvar = 0; Nvarpar = 1; Nfield = 2; Nderef = 3; Nindex = 4; Nguard = 5; Neguard = 6;
+		Nconst = 7; Ntype = 8; Nproc = 9; Nupto = 10; Nmop = 11; Ndop = 12; Ncall = 13;
+		Ninittd = 14; Nif = 15; Ncaselse = 16; Ncasedo = 17; Nenter = 18; Nassign = 19;
+		Nifelse = 20; Ncase = 21; Nwhile = 22; Nrepeat = 23; Nloop = 24; Nexit = 25;
+		Nreturn = 26; Nwith = 27; Ntrap = 28;
+
+		(*function number*)
+		assign = 0;
+		haltfn = 0; newfn = 1; absfn = 2; capfn = 3; ordfn = 4;
+		entierfn = 5; oddfn = 6; minfn = 7; maxfn = 8; chrfn = 9;
+		shortfn = 10; longfn = 11; sizefn = 12; incfn = 13; decfn = 14;
+		inclfn = 15; exclfn = 16; lenfn = 17; copyfn = 18; ashfn = 19; assertfn = 32;
+		lchrfn = 33; lentierfcn = 34; bitsfn = 37; bytesfn = 38;
+		
+		(*SYSTEM function number*)
+		adrfn = 20; ccfn = 21; lshfn = 22; rotfn = 23;
+		getfn = 24; putfn = 25; getrfn = 26; putrfn = 27;
+		bitfn = 28; valfn = 29; sysnewfn = 30; movefn = 31;
+		thisrecfn = 45; thisarrfn = 46;
+
+		(* COM function number *)
+		validfn = 40; iidfn = 41; queryfn = 42;
+		
+		(* module visibility of objects *)
+		internal = 0; external = 1; externalR = 2; inPar = 3; outPar = 4;
+
+		(* procedure flags (conval.setval) *)
+		hasBody = 1; isRedef = 2; slNeeded = 3; imVar = 4;
+		
+		(* attribute flags (attr.adr, struct.attribute, proc.conval.setval)*)
+		newAttr = 16; absAttr = 17; limAttr = 18; empAttr = 19; extAttr = 20;
+		
+		(* case statement flags (conval.setval) *)
+		useTable = 1; useTree = 2;
+		
+		(* sysflags *)
+		nilBit = 1; inBit = 2; outBit = 4; newBit = 8; iidBit = 16; interface = 10; jint = -11; jstr = -13;
+
+		AssertTrap = 0;	(* default trap number *)
+
+		covarOut = FALSE;
+		
+		capLabels = 32;
+		integers = T.integers; reals = T.reals; chars = T.chars; strings = T.strings;
+		maxmintype = 2;	(* flag for T.Expression.flags; this MAX or MIN function is applied to a type, not a  *)
+	
+	TYPE 
+		IncompDes = POINTER TO RECORD (T.Designator) END;	(* incomplete designator: a procedure  *)
+		Builder* = POINTER TO EXTENSIBLE RECORD 
+			incompdes*: IncompDes;
+			incomppos*: INTEGER;	(* pos where most recent incompdes was encountered *)
+		END;
+		ProcedureType = POINTER TO RECORD (T.Procedure) END;	(* temporary type for ProcDes of procedures; should never remain in exported AST, should exist between when a ProcDes is created and then used in an assignment or as an operand or in a call; at which point it should either be clarified for an assignment or operand value (replaced with actual T.Procedure) or dropped for a (actually, the whole ProcDes should be replaced with a CallDes in case of a call. *)
+		For* = POINTER TO RECORD (T.Other)
+			control*: T.Designator;	(* .control = NIL => bad control variable *)
+			from*, to*, by*: T.Expression;	(* .from # NIL, .to # NIL, .by # NIL *)
+			bound*: T.Var;	(* temporary anonymous variable that holds the bound *)
+			do*: T.Stat
+			(* FOR control := from TO bound := to BY by DO do END *)
+		END;
+		
+		OpEntry = RECORD right: SET; corr: T.Type END;
+		Operators = ARRAY T.isfn - T.timesfn + 1, 10 OF OpEntry;
+		
+	VAR
+		typSize*: PROCEDURE(typ: HrCPT.Struct);
+		zero, one, two, dummy, quot: HrCPT.Const;
+		proceduretp: ProcedureType;
+		applicants: ARRAY T.isfn - T.timesfn + 1 OF SET;	(* function returning valid types for each operator *)
+		operators: Operators;
+		B*: Builder;
+
+	PROCEDURE err(n: INTEGER);
+	BEGIN HrM.err(n) 
+	END err;
+	
+	PROCEDURE Err (n, sub: INTEGER);
+	BEGIN ASSERT((ABS(n) < 65536) & (0 <= sub) & (sub < 256), 20); HrM.err(-(ASH(sub, 16) + ABS(n)))
+	END Err;
+	
+	PROCEDURE Mark (n, sub, pos: INTEGER);
+	BEGIN ASSERT((ABS(n) < 65536) & (0 <= sub) & (sub < 256), 20); HrM.Mark(-(ASH(sub, 16) + ABS(n)), pos)
+	END Mark;
+	
+	PROCEDURE Flag (VAR flags: SET; flag: INTEGER; on: BOOLEAN);
+	BEGIN IF on THEN flags := flags + { flag } ELSE flags := flags - { flag } END
+	END Flag;
+	
+	PROCEDURE (b: Builder) Qualident* (qi: T.Object; OUT p: T.Proc): T.Designator, NEW, EXTENSIBLE;
+		VAR var: T.VarDes; type: T.TypeDes; res: T.Designator; c: T.ConDes;			(* .pos not filled out *)
+	BEGIN
+		WITH qi: T.Var DO 
+			IF qi = T.errid THEN res := T.errdes 
+			ELSE var := T.dir.VarDes(); res := var; var.var := qi; var.type := qi.type; 
+				Flag(var.flags, T.immutable, (qi IS T.Par) & (qi.flags * T.kindMask = T.inK))
+			END
+		| qi: T.TypeName DO type := T.dir.TypeDes(); res := type; type.type := T.typetp; type.name := qi
+		| qi: T.Proc DO p := qi; res := b.incompdes; b.incomppos := HrM.errpos
+		| qi: T.Const DO c := T.dir.ConDes(); c.const := qi; c.type := qi.type; c.flags := { T.const }; res := c
+		ELSE err(-127); res := T.errdes
+		END;
+		INCL(qi.flags, T.used);
+		RETURN res
+	END Qualident;
+	
+	PROCEDURE NewLeaf*(obj: HrCPT.Object): HrCPT.Node;
+		VAR node: HrCPT.Node; typ: HrCPT.Struct;
+	BEGIN
+		typ := obj.typ;
+		CASE obj.mode OF
+		  Var:
+				node := HrCPT.NewNode(Nvar); node.readonly := (obj.vis = externalR) & (obj.mnolev < 0)
+		| VarPar:
+				node := HrCPT.NewNode(Nvarpar); node.readonly := obj.vis = inPar;
+		| Con:
+				node := HrCPT.NewNode(Nconst); node.conval := HrCPT.NewConst();
+				node.conval^ := obj.conval^	(* string is not copied, only its ref *)
+		| Typ:
+				node := HrCPT.NewNode(Ntype)
+		| LProc..IProc, TProc:
+				node := HrCPT.NewNode(Nproc)
+		ELSE err(127); node := HrCPT.NewNode(Nvar); typ := HrCPT.notyp
+		END ;
+		node.obj := obj; node.typ := typ;
+		RETURN node
+	END NewLeaf;
+	
+	PROCEDURE Construct*(class: BYTE; VAR x: HrCPT.Node;  y: HrCPT.Node);
+		VAR node: HrCPT.Node;
+	BEGIN
+		node := HrCPT.NewNode(class); node.typ := HrCPT.notyp;
+		node.left := x; node.right := y; x := node
+	END Construct;
+	
+	PROCEDURE Link*(VAR x, last: HrCPT.Node; y: HrCPT.Node);
+	BEGIN
+		IF x = NIL THEN x := y ELSE last.link := y END ;
+		WHILE y.link # NIL DO y := y.link END ;
+		last := y
+	END Link;
+
+	PROCEDURE BLink* (VAR x, last: T.Stat; y: T.Stat);
+	BEGIN
+		IF x = NIL THEN x := y ELSE last.link := y END ;
+		WHILE y.link # NIL DO y := y.link END ;
+		last := y
+	END BLink;
+	
+	PROCEDURE BoolToInt(b: BOOLEAN): INTEGER;
+	BEGIN
+		IF b THEN RETURN 1 ELSE RETURN 0 END
+	END BoolToInt;
+	
+	PROCEDURE IntToBool(i: INTEGER): BOOLEAN;
+	BEGIN
+		RETURN i # 0
+	END IntToBool;
+	
+	PROCEDURE NewBoolConst*(boolval: BOOLEAN): HrCPT.Node;
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.typ := HrCPT.booltyp;
+		x.conval := HrCPT.NewConst(); x.conval.intval := BoolToInt(boolval); RETURN x
+	END NewBoolConst;
+	
+	PROCEDURE OptIf*(VAR x: HrCPT.Node);	(* x.link = NIL *)
+		VAR if, pred: HrCPT.Node;
+	BEGIN
+		if := x.left;
+		WHILE if.left.class = Nconst DO
+			IF IntToBool(if.left.conval.intval) THEN x := if.right; RETURN
+			ELSIF if.link = NIL THEN x := x.right; RETURN
+			ELSE if := if.link; x.left := if
+			END
+		END ;
+		pred := if; if := if.link;
+		WHILE if # NIL DO
+			IF if.left.class = Nconst THEN
+				IF IntToBool(if.left.conval.intval) THEN
+					pred.link := NIL; x.right := if.right; RETURN
+				ELSE if := if.link; pred.link := if
+				END
+			ELSE pred := if; if := if.link
+			END
+		END
+	END OptIf;
+
+	PROCEDURE Nil*(): HrCPT.Node;
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.typ := HrCPT.niltyp;
+		x.conval := HrCPT.NewConst(); x.conval.intval := 0; RETURN x
+	END Nil;
+
+	PROCEDURE EmptySet*(): HrCPT.Node;
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.typ := HrCPT.settyp;
+		x.conval := HrCPT.NewConst(); x.conval.setval := {}; RETURN x
+	END EmptySet;
+	
+	PROCEDURE MarkUsed (e: T.Expression);
+		VAR g: T.Expression;
+	BEGIN g := e;
+		WHILE g # NIL DO e := g;
+			WITH e: T.FieldDes DO g := e.rec | e: T.Index DO g := e.arr | e: T.GuardDes DO g := e.what 
+			(* | e: T.NEGuard DO e := ? *)
+			ELSE g := NIL 
+			END
+		END;
+		WITH e: T.VarDes DO ASSERT(e.var.name^ # "mai"); IF e.var.imno = 0 THEN INCL(e.var.flags, T.used) END 
+		| e: T.TypeDes DO INCL(e.name.flags, T.used)
+		ELSE 
+		END
+	END MarkUsed;
+		
+	PROCEDURE MarkAsUsed (node: HrCPT.Node);
+		VAR c: BYTE;
+	BEGIN
+		c := node.class;
+		WHILE (c = Nfield) OR (c = Nindex) OR (c = Nguard) OR (c = Neguard) DO node := node.left; c := node.class END;
+		IF (c = Nvar) & (node.obj.mnolev > 0) THEN node.obj.used := TRUE END
+	END MarkAsUsed;
+	
+	
+	PROCEDURE GetTempVar* (IN name: ARRAY OF SHORTCHAR; typ: HrCPT.Struct; VAR obj: HrCPT.Object);
+		VAR n: HrCPT.Name; o: HrCPT.Object;
+	BEGIN
+		n := "@@  "; HrCPT.Insert(n, obj); obj.name^ := name$;	(* avoid err 1 *)
+		obj.mode := Var; obj.typ := typ;
+		o := HrCPT.topScope.scope;
+		IF o = NIL THEN HrCPT.topScope.scope := obj
+		ELSE
+			WHILE o.link # NIL DO o := o.link END;
+			o.link := obj
+		END
+	END GetTempVar;
+
+
+	(* ---------- constant operations ---------- *)
+	
+	PROCEDURE Log (x: HrCPT.Node): INTEGER;
+		VAR val, exp: INTEGER;
+	BEGIN
+		exp := 0;
+		IF x.typ.form = Int64 THEN
+			RETURN -1
+		ELSE
+			val := x.conval.intval;
+			IF val > 0 THEN
+				WHILE ~ODD(val) DO val := val DIV 2; INC(exp) END
+			END;
+			IF val # 1 THEN exp := -1 END
+		END;
+		RETURN exp
+	END Log;
+
+	PROCEDURE Floor (x: REAL): REAL;
+		VAR y: REAL;
+	BEGIN
+		IF ABS(x) > 9007199254740992.0 (* 2^53 *) THEN RETURN x
+		ELSIF (x >= MAX(INTEGER) + 1.0) OR (x < MIN(INTEGER)) THEN
+			y := Floor(x / (MAX(INTEGER) + 1.0)) * (MAX(INTEGER) + 1.0);
+			RETURN SHORT(ENTIER(x - y)) + y
+		ELSE RETURN SHORT(ENTIER(x))
+		END
+	END Floor;
+
+	PROCEDURE SetToInt (s: SET): INTEGER;
+		VAR x, i: INTEGER;
+	BEGIN
+		i := 31; x := 0;
+		IF 31 IN s THEN x := -1 END;
+		WHILE i > 0 DO
+			x := x * 2; DEC(i);
+			IF i IN s THEN INC(x) END
+		END;
+		RETURN x
+	END SetToInt;
+
+	PROCEDURE IntToSet (x: INTEGER): SET;
+		VAR i: INTEGER; s: SET;
+	BEGIN
+		i := 0; s := {};
+		WHILE i < 32 DO
+			IF ODD(x) THEN INCL(s, i) END;
+			x := x DIV 2; INC(i)
+		END;
+		RETURN s
+	END IntToSet;
+
+	PROCEDURE GetConstType (x: HrCPT.Const; form: INTEGER; errno: SHORTINT; VAR typ: HrCPT.Struct);
+		CONST MAXL = 9223372036854775808.0; (* 2^63 *)
+	BEGIN
+		IF (form IN intSet + charSet) & (x.realval + x.intval >= MIN(INTEGER))
+				& (x.realval + x.intval <= MAX(INTEGER)) THEN
+			x.intval := SHORT(ENTIER(x.realval + x.intval)); x.realval := 0
+		END;
+		IF form IN intSet THEN
+			IF x.realval = 0 THEN typ := HrCPT.int32typ
+			ELSIF (x.intval >= -MAXL - x.realval) & (x.intval < MAXL - x.realval) THEN typ := HrCPT.int64typ
+			ELSE err(errno); x.intval := 1; x.realval := 0; typ := HrCPT.int32typ
+			END
+		ELSIF form IN realSet THEN	(* SR *)
+			typ := HrCPT.real64typ
+		ELSIF form IN charSet THEN
+			IF x.intval <= 255 THEN typ := HrCPT.char8typ
+			ELSE typ := HrCPT.char16typ
+			END
+		ELSE typ := HrCPT.undftyp
+		END
+	END GetConstType;
+	
+	PROCEDURE CheckConstType (x: HrCPT.Const; form: INTEGER; errno: SHORTINT);
+		VAR type: HrCPT.Struct;
+	BEGIN
+		GetConstType(x, form, errno, type);
+		IF  ~HrCPT.Includes(form, type.form)
+		& ((form # Int8) OR (x.realval # 0) OR (x.intval < -128) OR (x.intval > 127))
+		& ((form # Int16) OR (x.realval # 0) OR (x.intval < -32768) OR (x.intval > 32767)) 
+		& ((form # Real32) OR (ABS(x.realval) > HrM.MaxReal32) & (ABS(x.realval) # HrM.InfReal)) THEN
+			err(errno); x.intval := 1; x.realval := 0
+		END
+	END CheckConstType;
+	
+	PROCEDURE ConvConst (x: HrCPT.Const; from, to: INTEGER);
+		VAR sr: SHORTREAL;
+	BEGIN
+		IF from = Set THEN
+			x.intval := SetToInt(x.setval); x.realval := 0; x.setval := {};
+		ELSIF from IN intSet + charSet THEN
+			IF to = Set THEN CheckConstType(x, Int32, 203); x.setval := IntToSet(x.intval)
+			ELSIF to IN intSet THEN CheckConstType(x, to, 203)
+			ELSIF to IN realSet THEN x.realval := x.realval + x.intval; x.intval := HrM.ConstNotAlloc
+			ELSE (*to IN charSet*) CheckConstType(x, to, 220)
+			END
+		ELSIF from IN realSet THEN
+			IF to IN realSet THEN CheckConstType(x, to, 203);
+				IF to = Real32 THEN sr := SHORT(x.realval); x.realval := sr END	(* reduce precision *)
+			ELSE x.realval := Floor(x.realval); x.intval := 0; CheckConstType(x, to, 203)
+			END
+		END
+	END ConvConst;
+	
+	PROCEDURE Prepare (x: HrCPT.Const);
+		VAR r: REAL;
+	BEGIN
+		x.realval := x.realval + x.intval DIV 32768 * 32768;
+		x.intval := x.intval MOD 32768;
+		r := Floor(x.realval / 4096) * 4096;
+		x.intval := x.intval + SHORT(ENTIER(x.realval - r));
+		x.realval := r
+		(* ABS(x.intval) < 2^15  &  ABS(x.realval) MOD 2^12 = 0 *)
+	END Prepare;
+	
+	PROCEDURE AddConst (x, y, z: HrCPT.Const; VAR type: HrCPT.Struct);	(* z := x + y *)
+	BEGIN
+		IF type.form IN intSet THEN
+			Prepare(x); Prepare(y);
+			z.intval := x.intval + y.intval; z.realval := x.realval + y.realval
+		ELSIF type.form IN realSet THEN
+			IF (ABS(x.realval) = HrM.InfReal) & (x.realval = - y.realval) THEN err(212)
+			ELSE z.realval := x.realval + y.realval
+			END
+		ELSE HALT(100)
+		END;
+		GetConstType(z, type.form, 206, type)
+	END AddConst;
+	
+	PROCEDURE NegateConst (y, z: HrCPT.Const; VAR type: HrCPT.Struct);	(* z := - y *)
+	BEGIN
+		IF type.form IN intSet THEN Prepare(y); z.intval :=  -y.intval; z.realval := -y.realval
+		ELSIF type.form IN realSet THEN z.realval := -y.realval
+		ELSE HALT(100)
+		END;
+		GetConstType(z, type.form, 207, type)
+	END NegateConst;
+	
+	PROCEDURE SubConst (x, y, z: HrCPT.Const; VAR type: HrCPT.Struct);	(* z := x - y *)
+	BEGIN
+		IF type.form IN intSet THEN
+			Prepare(x); Prepare(y);
+			z.intval := x.intval - y.intval; z.realval := x.realval - y.realval
+		ELSIF type.form IN realSet THEN
+			IF (ABS(x.realval) = HrM.InfReal) & (x.realval =  y.realval) THEN err(212)
+			ELSE z.realval := x.realval - y.realval
+			END
+		ELSE HALT(100)
+		END;
+		GetConstType(z, type.form, 207, type)
+	END SubConst;
+	
+	PROCEDURE MulConst (x, y, z: HrCPT.Const; VAR type: HrCPT.Struct);	(* z := x * y *)
+	BEGIN
+		IF type.form IN intSet THEN
+			Prepare(x); Prepare(y);
+			z.realval := x.realval * y.realval + x.intval * y.realval + x.realval * y.intval;
+			z.intval := x.intval * y.intval
+		ELSIF type.form IN realSet THEN
+			IF (ABS(x.realval) = HrM.InfReal) & ( y.realval = 0.0) THEN err(212)
+			ELSIF (ABS(y.realval) = HrM.InfReal) & (x.realval = 0.0) THEN err(212)
+			ELSE z.realval := x.realval * y.realval
+			END
+		ELSE HALT(100)
+		END;
+		GetConstType(z, type.form, 204, type)
+	END MulConst;
+	
+	PROCEDURE DivConst (x, y, z: HrCPT.Const; VAR type: HrCPT.Struct);	(* z := x / y *)
+	BEGIN
+		IF type.form IN realSet THEN
+			IF (x.realval = 0.0) & (y.realval = 0.0) THEN err(212)
+			ELSIF (ABS(x.realval) =  HrM.InfReal) & (ABS(y.realval) =  HrM.InfReal) THEN err(212)
+			ELSE z.realval := x.realval / y.realval
+			END
+		ELSE HALT(100)
+		END;
+		GetConstType(z, type.form, 204, type)
+	END DivConst;
+	
+	PROCEDURE DivModConst (x, y: HrCPT.Const; div: BOOLEAN; VAR type: HrCPT.Struct);
+	(* x := x DIV y | x MOD y *)
+	BEGIN
+		IF type.form IN intSet THEN
+			IF y.realval + y.intval # 0 THEN
+				Prepare(x); Prepare(y);
+				quot.realval := Floor((x.realval + x.intval) / (y.realval + y.intval));
+				quot.intval := 0; Prepare(quot);
+				x.realval := x.realval - quot.realval * y.realval - quot.realval * y.intval - quot.intval * y.realval;
+				x.intval := x.intval - quot.intval * y.intval;
+				IF y.realval + y.intval > 0 THEN
+					WHILE x.realval + x.intval > 0 DO SubConst(x, y, x, type); INC(quot.intval) END;
+					WHILE x.realval + x.intval < 0 DO AddConst(x, y, x, type); DEC(quot.intval) END
+				ELSE
+					WHILE x.realval + x.intval < 0 DO SubConst(x, y, x, type); INC(quot.intval) END;
+					WHILE x.realval + x.intval > 0 DO AddConst(x, y, x, type); DEC(quot.intval) END
+				END;
+				IF div THEN x.realval := quot.realval; x.intval := quot.intval END;
+				GetConstType(x, type.form, 204, type)
+			ELSE err(205)
+			END
+		ELSE HALT(100)
+		END
+	END DivModConst;
+	
+	PROCEDURE EqualConst (x, y: HrCPT.Const; form: INTEGER): BOOLEAN;	(* x = y *)
+		VAR res: BOOLEAN;
+	BEGIN
+		CASE form OF
+		| Undef: res := TRUE
+		| Bool, Byte, Char8..Int32, Char16: res := x.intval = y.intval
+		| Int64: Prepare(x); Prepare(y); res := (x.realval - y.realval) + (x.intval - y.intval) = 0
+		| Real32, Real64: res := x.realval = y.realval
+		| Set: res := x.setval = y.setval
+		| String8, String16, Comp (* guid *): res := x.ext^ = y.ext^
+		| NilTyp, Pointer, ProcTyp: res := x.intval = y.intval
+		END;
+		RETURN res
+	END EqualConst;
+	
+	PROCEDURE LessConst (x, y: HrCPT.Const; form: INTEGER): BOOLEAN;	(* x < y *)
+		VAR res: BOOLEAN;
+	BEGIN
+		CASE form OF
+		| Undef: res := TRUE
+		| Byte, Char8..Int32, Char16: res := x.intval < y.intval
+		| Int64: Prepare(x); Prepare(y); res := (x.realval - y.realval) + (x.intval - y.intval) < 0
+		| Real32, Real64: res := x.realval < y.realval
+		| String8, String16: res := x.ext^ < y.ext^
+		| Bool, Set, NilTyp, Pointer, ProcTyp, Comp: err(108)
+		END;
+		RETURN res
+	END LessConst;
+	
+	PROCEDURE IsNegConst (x: HrCPT.Const; form: INTEGER): BOOLEAN;	(* x < 0  OR x = (-0.0) *)
+		VAR res: BOOLEAN;
+	BEGIN
+		CASE form OF
+		| Int8..Int32: res := x.intval < 0
+		| Int64: Prepare(x); res := x.realval + x.intval < 0
+		| Real32, Real64: res := (x.realval <= 0.) & (1. / x.realval <= 0.)
+		END;
+		RETURN res
+	END IsNegConst;
+
+
+	PROCEDURE NewIntConst*(intval: INTEGER): HrCPT.Node;
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.conval := HrCPT.NewConst();
+		x.conval.intval := intval; x.conval.realval := 0; x.typ := HrCPT.int32typ; RETURN x
+	END NewIntConst;
+	
+	PROCEDURE NewLargeIntConst* (intval: INTEGER; realval: REAL): HrCPT.Node;
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.conval := HrCPT.NewConst();
+		x.conval.intval := intval; x.conval.realval := realval; x.typ := HrCPT.int64typ; RETURN x
+	END NewLargeIntConst;
+	
+	PROCEDURE NewRealConst*(realval: REAL; typ: HrCPT.Struct): HrCPT.Node;
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.conval := HrCPT.NewConst();
+		x.conval.realval := realval; x.conval.intval := HrM.ConstNotAlloc;
+		IF typ = NIL THEN typ := HrCPT.real64typ END;
+		x.typ := typ;
+		RETURN x
+	END NewRealConst;
+	
+	PROCEDURE NewString*(str: HrCPT.String; lstr: POINTER TO ARRAY OF CHAR; len: INTEGER): HrCPT.Node;
+		VAR i, j, c: INTEGER; x: HrCPT.Node; ext: HrCPT.ConstExt;
+	BEGIN
+		x := HrCPT.NewNode(Nconst); x.conval := HrCPT.NewConst();
+		IF lstr # NIL THEN
+			x.typ := HrCPT.string16typ;
+			NEW(ext, 3 * len); i := 0; j := 0;
+			REPEAT c := ORD(lstr[i]); INC(i); HrM.PutUtf8(ext^, c, j) UNTIL c = 0;
+			x.conval.ext := ext
+		ELSE
+			x.typ := HrCPT.string8typ; x.conval.ext := str
+		END;
+		x.conval.intval := HrM.ConstNotAlloc; x.conval.intval2 := len;
+		RETURN x
+	END NewString;
+	
+	PROCEDURE CharToString8(n: HrCPT.Node);
+		VAR ch: SHORTCHAR;
+	BEGIN
+		n.typ := HrCPT.string8typ; ch := SHORT(CHR(n.conval.intval)); NEW(n.conval.ext, 2);
+		IF ch = 0X THEN n.conval.intval2 := 1 ELSE n.conval.intval2 := 2; n.conval.ext[1] := 0X END ;
+		n.conval.ext[0] := ch; n.conval.intval := HrM.ConstNotAlloc; n.obj := NIL
+	END CharToString8;
+	
+	PROCEDURE CharToString16 (n: HrCPT.Node);
+		VAR i: INTEGER;
+	BEGIN
+		n.typ := HrCPT.string16typ; NEW(n.conval.ext, 4);
+		IF n.conval.intval = 0 THEN
+			n.conval.ext[0] := 0X; n.conval.intval2 := 1
+		ELSE
+			i := 0; HrM.PutUtf8(n.conval.ext^, n.conval.intval, i);
+			n.conval.ext[i] := 0X; n.conval.intval2 := 2
+		END;
+		n.conval.intval := HrM.ConstNotAlloc; n.obj := NIL
+	END CharToString16;
+	
+	PROCEDURE String8ToString16 (n: HrCPT.Node);
+		VAR i, j, x: INTEGER; ext, new: HrCPT.ConstExt;
+	BEGIN
+		n.typ := HrCPT.string16typ; ext := n.conval.ext;
+		NEW(new, 2 * n.conval.intval2); i := 0; j := 0; 
+		REPEAT x := ORD(ext[i]); INC(i); HrM.PutUtf8(new^, x, j) UNTIL x = 0;
+		n.conval.ext := new; n.obj := NIL
+	END String8ToString16;
+	
+	PROCEDURE String16ToString8 (n: HrCPT.Node);
+		VAR i, j, x: INTEGER; ext, new: HrCPT.ConstExt;
+	BEGIN
+		n.typ := HrCPT.string8typ; ext := n.conval.ext;
+		NEW(new, n.conval.intval2); i := 0; j := 0;
+		REPEAT HrM.GetUtf8(ext^, x, i); new[j] := SHORT(CHR(x MOD 256)); INC(j) UNTIL x = 0;
+		n.conval.ext := new; n.obj := NIL
+	END String16ToString8;
+	
+	PROCEDURE StringToGuid (VAR n: HrCPT.Node);
+	BEGIN
+		ASSERT((n.class = Nconst) & (n.typ.form = String8));
+		IF ~HrM.ValidGuid(n.conval.ext^) THEN err(165) END;
+		n.typ := HrCPT.guidtyp
+	END StringToGuid;
+	
+	PROCEDURE NewOp2 (opcode: INTEGER; a, b: T.Expression; t: T.Type): T.Op;
+		VAR op: T.Op;
+	BEGIN op := T.dir.Op(); op.what := opcode; op.a := a; op.b := b; op.type := t; RETURN op
+	END NewOp2;
+	
+	PROCEDURE CheckBounds (from, to, val: LONGINT; errno: INTEGER);
+	BEGIN IF (val < from) OR (to > val) THEN err(errno) END
+	END CheckBounds;
+	
+	PROCEDURE InRange (from, to, val: LONGINT; errno, errsub: INTEGER): BOOLEAN;
+		VAR res: BOOLEAN;
+	BEGIN res := (from <= val) & (val <= to); IF ~res THEN Err(errno, errsub) END; RETURN res
+	END InRange;
+	
+	PROCEDURE ^ EvalSet* (e: T.Expression): SET;
+	PROCEDURE ^ EvalInt* (e: T.Expression): INTEGER;
+	PROCEDURE ^ EvalReal* (e: T.Expression): REAL;
+
+	PROCEDURE EvalChar* (e: T.Expression): CHAR;
+		VAR ch: CHAR;
+	BEGIN
+		WITH e: T.Char DO ch := e.ch 
+		| e: T.ConDes DO ch := e.const.val(T.Char).ch
+		| e: T.Op DO
+			CASE e.what OF
+			| T.maxfn:
+				IF (e.a = NIL) & (e.b = NIL) THEN
+					CASE e.type.what OF T.fChar8: ch := MAX(SHORTCHAR) | T.fChar16: ch := MAX(CHAR) 
+					ELSE HALT(20)
+					END
+				ELSIF (e.a # NIL) & (e.b # NIL) THEN ch := MAX(EvalChar(e.a), EvalChar(e.b))
+				ELSE HALT(20)
+				END
+			| T.minfn:
+				IF (e.a = NIL) & (e.b = NIL) THEN
+					CASE e.type.what OF T.fChar8: ch := MIN(SHORTCHAR) | T.fChar16: ch := MIN(CHAR) 
+					ELSE HALT(20)
+					END
+				ELSIF (e.a # NIL) & (e.b # NIL) THEN ch := MIN(EvalChar(e.a), EvalChar(e.b))
+				ELSE HALT(20)
+				END
+			| T.convfn: 
+				IF e.a.type.what IN integers THEN ch := CHR(EvalInt(e.a)) 
+				ELSIF e.a.type.what IN chars THEN ch := EvalChar(e.a)
+				ELSE HALT(20)
+				END
+			ELSE HALT(126)
+			END
+		ELSE HALT(126)
+		END;
+		RETURN ch
+	END EvalChar;
+	
+	PROCEDURE EvalLen (a: T.Expression; dim: INTEGER): INTEGER;
+		VAR res: INTEGER; at: T.Array;
+	BEGIN
+		WITH a: T.StringLit DO res := a(T.StringLit).len	;ASSERT(dim = 0)
+		| a: T.ConDes DO res := a.const.val(T.StringLit).len - 1	;ASSERT(dim = 0)
+		| a: T.Op DO ASSERT((a.what = T.plusfn) & (dim = 0)); res := EvalLen(a.a, 0) + EvalLen(a.b, 0)
+		ELSE ASSERT((a.type IS T.Array) & ~(T.open IN a.type.flags)); at := a.type(T.Array);
+			WHILE (at # NIL) & (dim > 0) DO 
+				IF at.elTyp IS T.Array THEN at := at.elTyp(T.Array) ELSE at := NIL END; DEC(dim)
+			END;
+			IF at # NIL THEN res := at.len ELSE Err(-1, 1) END
+		END;
+		RETURN res
+	END EvalLen;
+
+	PROCEDURE EvalLong* (e: T.Expression): LONGINT;
+		VAR long, q: LONGINT; a: T.Expression; w: INTEGER; shift: INTEGER;
+	BEGIN 
+		WITH e: T.Int DO long := e.long 
+		| e: T.ConDes DO long := e.const.val(T.Int).long
+		| e: T.Op DO
+			CASE e.what OF 
+			| T.convfn: w := e.a.type.what;
+				IF w IN integers THEN long := EvalLong(e.a)
+				ELSIF w IN chars THEN long := ORD(EvalChar(e.a))
+				ELSIF w = T.fSet THEN long := ORD(EvalSet(e.a))
+				ELSIF w IN T.reals THEN long := ENTIER(EvalReal(e.a))
+				ELSE HALT(126)
+				END
+			| T.maxsetfn: long := MAX(SET)
+			| T.maxfn:
+				IF (e.a = NIL) & (e.b = NIL) THEN
+					CASE e.type.what OF
+					| T.fInt8: long := MAX(BYTE)
+					| T.fInt16: long := MAX(SHORTINT)
+					| T.fInt32: long := MAX(INTEGER)
+					| T.fInt64: long := MAX(LONGINT)
+					ELSE HALT(20)
+					END
+				ELSIF (e.a # NIL) & (e.b # NIL) THEN long := MAX(EvalLong(e.a), EvalLong(e.b))
+				ELSE HALT(20)
+				END
+			| T.minsetfn: long := 0
+			| T.minfn:
+				IF (e.a = NIL) & (e.b = NIL) THEN
+					CASE e.type.what OF
+					| T.fInt8: long := MIN(BYTE)
+					| T.fInt16: long := MIN(SHORTINT)
+					| T.fInt32: long := MIN(INTEGER)
+					| T.fInt64: long := MIN(LONGINT)
+					ELSE HALT(20)
+					END
+				ELSIF (e.a # NIL) & (e.b # NIL) THEN long := MIN(EvalLong(e.a), EvalLong(e.b))
+				ELSE HALT(20)
+				END
+			| T.lenfn: long := EvalLen(e.a, EvalInt(e.b))
+			| T.ashfn: shift := EvalInt(e.b); long := ASH(EvalLong(e.a), shift)
+			| T.plusfn: long := EvalLong(e.a) + EvalLong(e.b)
+			| T.minusfn: long := EvalLong(e.a) - EvalLong(e.b)
+			| T.divfn: long := EvalLong(e.a) DIV EvalLong(e.b)
+			| T.modfn: q := EvalLong(e.b); long := EvalLong(e.a) MOD q
+			| T.timesfn: q := EvalLong(e.a) * EvalLong(e.b)
+			ELSE HALT(126)
+			END
+		ELSE HALT(126) END;
+		RETURN long
+	END EvalLong;
+
+	PROCEDURE EvalInt* (e: T.Expression): INTEGER;
+		VAR res: INTEGER; long: LONGINT;
+	BEGIN 
+		long := EvalLong(e);
+		IF (MIN(INTEGER) <= long) & (long <= MAX(INTEGER)) THEN res := SHORT(long) ELSE HALT(126) END;
+		RETURN res
+	END EvalInt;
+	
+	PROCEDURE EvalReal* (e: T.Expression): REAL;
+		VAR a, b, real: REAL; val: T.Literal;
+	BEGIN
+		WITH e: T.Real DO real := e.real
+		| e: T.Int DO real := e.long
+		| e: T.Char DO real := ORD(e.ch)
+		| e: T.ConDes DO val := e.const.val;
+			WITH val: T.Real DO real := val.real | val: T.Int DO real := val.long ELSE HALT(126) END
+		| e: T.Op DO
+			CASE e.what OF
+			| T.convfn:
+				IF e.type.what IN reals THEN real := EvalReal(e.a)
+				ELSIF e.type.what IN integers THEN real := EvalLong(e.a)
+				ELSE HALT(126)
+				END
+			| T.maxfn:
+				IF (e.a = NIL) & (e.b = NIL) THEN
+					CASE e.type.what OF T.fReal32: real := MAX(SHORTREAL) | T.fReal64: real := MAX(REAL) 
+					| T.fInt64: real := MAX(LONGINT) | T.fInt32: real := MAX(INTEGER) 
+					| T.fInt16: real := MAX(SHORTREAL) | T.fInt8: real := MAX(BYTE) 
+					| T.fChar16: real := ORD(MAX(CHAR))
+					ELSE HALT(20)
+					END
+				ELSIF (e.a # NIL) & (e.b # NIL) THEN real := MAX(EvalReal(e.a), EvalReal(e.b))
+				ELSE HALT(20)
+				END
+			| T.minfn:
+				IF (e.a = NIL) & (e.b = NIL) THEN
+					CASE e.type.what OF T.fReal32: real := MIN(SHORTREAL) | T.fReal64: real := MIN(REAL) 
+					ELSE HALT(20)
+					END
+				ELSIF (e.a # NIL) & (e.b # NIL) THEN real := MIN(EvalReal(e.a), EvalReal(e.b))
+				ELSE HALT(20)
+				END
+			| T.plusfn: real := EvalReal(e.a) + EvalReal(e.b)
+			| T.slashfn: real := EvalReal(e.a) / EvalReal(e.b)
+			| T.minusfn: real := EvalReal(e.a) - EvalReal(e.b)
+			| T.timesfn: real := EvalReal(e.a) * EvalReal(e.b)
+			ELSE HALT(126)
+			END
+		ELSE HALT(126)
+		END;
+		RETURN real
+	END EvalReal;
+	
+	PROCEDURE EvalSet* (e: T.Expression): SET;
+		VAR res: SET;
+	BEGIN
+		WITH e: T.Set DO res := e.set
+		| e: T.ConDes DO res := e.const.val(T.Set).set
+		| e: T.Op DO
+			CASE e.what OF
+			| T.range: IF e.b = NIL THEN res := { EvalInt(e.a) } ELSE res := { EvalInt(e.a)..EvalInt(e.b) } END
+			(*| T.setel: res := { EvalInt(e.a) }*)
+			| T.plusfn: res := EvalSet(e.a) + EvalSet(e.b)
+			ELSE HALT(126)
+			END
+		ELSE HALT(126)
+		END;
+		RETURN res
+	END EvalSet;
+	
+	PROCEDURE EvalBool* (e: T.Expression): BOOLEAN;
+		VAR res: BOOLEAN; w: INTEGER;
+	BEGIN
+		WITH e: T.Bool DO res := e.bool
+		| e: T.ConDes DO res := e.const.val(T.Bool).bool
+		| e: T.Op DO 
+			CASE e.what OF
+			| T.notfn: res := ~EvalBool(e.a)
+			| T.andfn: res := EvalBool(e.a) & EvalBool(e.b)
+			| T.orfn: res := EvalBool(e.a) OR EvalBool(e.b)
+			| T.eqlfn: w := e.a.type.what;
+				IF w IN T.integers THEN res := EvalLong(e.a) = EvalLong(e.b)
+				ELSIF w IN T.chars THEN res := EvalChar(e.a) = EvalChar(e.b)
+				ELSIF w IN T.strings THEN HALT(126)
+				ELSIF w IN T.booleans THEN res := EvalBool(e.a) = EvalBool(e.b)
+				ELSIF w = T.fNil THEN res := e.b.type.what = T.fNil
+				ELSE HALT(126)
+				END
+			| T.neqfn: e.what := T.eqlfn; res := ~EvalBool(e); e.what := T.neqfn
+			ELSE HALT(126)
+			END
+		ELSE HALT(126)
+		END;
+		RETURN res
+	END EvalBool;
+	
+	PROCEDURE EvalString* (e: T.Expression): POINTER TO T.String;
+		VAR res: POINTER TO T.String; a: T.Expression;
+	BEGIN
+		WITH 
+		| e: T.StringLit DO res := e.str
+		| e: T.Op DO 
+			IF e.what = T.convfn THEN a := e.a;
+				WITH a: T.Char DO NEW(res, 2); res[0] := a.ch; res[1] := 0X
+				| a: T.StringLit DO res := EvalString(a)
+				ELSE HALT(126)
+				END
+			ELSE HALT(126)
+			END
+		ELSE HALT(126)
+		END;
+		RETURN res
+	END EvalString;
+		
+
+	PROCEDURE NewOp (what: INTEGER; a, b: T.Expression): T.Op;
+		VAR op: T.Op;
+	BEGIN op := T.dir.Op(); op.what := what; op.a := a; op.b := b; 
+		IF a # NIL THEN
+			Flag(op.flags, T.immutable, (T.immutable IN a.flags) & ((b = NIL) OR (T.immutable IN b.flags)));
+			Flag(op.flags, T.const, (T.const IN a.flags) & ((b = NIL) OR (T.const IN b.flags)))
+		END;
+		RETURN op
+	END NewOp;
+	
+	PROCEDURE NewOpTyp (what: INTEGER; a, b: T.Expression; t: T.Type): T.Op;
+		VAR res: T.Op;
+	BEGIN res := NewOp(what, a, b); res.type := t; RETURN res
+	END NewOpTyp;
+	
+	
+	
+	(* Check<Type>Conv conventions:
+	res = NIL => explicit conversion required: i.e. shortchar := char is forbidden, but permitted with an explicit type conversion: shortcar := SHORT(char). So, the caller may then decide if it will allow the conversion (and create the conv op) or forbid and report and error. CheckAssign would do the latter, while SHORT would do the former.
+	Likewise, int := char yields res = NIL; it is forbidden in CheckAssign, but permitted in ORD: int := ORD(ch), which also should create the conv op.
+	ForceConvert could perform this activity: if res = NIL, a conv op is created.
+	Implicit conversion ops are created by CheckConv procedures:
+	char := shorchar requires an implicit conv op, and it should be created by CheckConv.
+	res # NIL => res.type = T.errtp | conversion possible, implicit defined, ~implicit => conv possible as is; implicit => conversion requires an implicit conv op. 
+	! CheckConv procedures assert that ex.type.what # to.what, and thus do not check this case.
+	
+	res is ex converted to to already, and no extra action is necessary.
+	*)
+	
+	PROCEDURE CheckCharConv (ex: T.Expression; to: T.Type; OUT implicit: BOOLEAN): T.Expression;
+		VAR ewhat, towhat: INTEGER; res: T.Expression; isConst: BOOLEAN; ch: CHAR; 
+			pstr: POINTER TO ARRAY OF CHAR; sstr: ARRAY 2 OF SHORTCHAR;
+	BEGIN towhat := to.what; ewhat := ex.type.what; ASSERT(ewhat IN chars, 20);
+		isConst := T.const IN ex.flags; 
+		IF isConst THEN WITH ex: T.Char DO ch := ex.ch ELSE ch := EvalChar(ex) END END;
+		CASE towhat OF
+		| T.fChar8, T.fChar16:
+			IF isConst & (towhat = T.fChar8) & (ch > 0FFX) THEN Mark(-523, 0, ex.pos); res := T.errex
+			ELSIF (ex IS T.Char) & (towhat = T.fChar16) THEN res := ex	(* optimization: *)
+			ELSE implicit := ewhat = T.fChar8
+			END
+		| T.fInt8, T.fInt16, T.fInt32, T.fInt64:
+			IF isConst & (towhat = T.fInt8) & (ch > CHR(MAX(BYTE))) THEN Err(-523, 1); res := T.errex
+			ELSIF isConst & (towhat = T.fInt16) & (ch > CHR(MAX(SHORTINT))) THEN Err(-523, 2); res := T.errex
+			ELSE implicit := FALSE
+			END
+		| T.fString8, T.fString16:
+			IF isConst THEN implicit := (towhat = T.fString16) OR (ewhat = T.fChar8) 
+			ELSE Mark(-524, 1, ex.pos); res := T.errex 
+			END
+		(*let's see if chars can be converted to reals in the backend...*)
+		| T.fReal32, T.fReal64: 
+			IF ewhat = T.fChar16 THEN implicit := TRUE ELSE Mark(-524, 5, ex.pos); res := T.errex END
+		(**)
+		| T.fArray: towhat := to(T.Array).elTyp.what;
+			IF isConst & (towhat IN T.chars) THEN
+				IF (towhat = T.fChar8) & (ch > 0FFX) THEN Mark(-524, 3, ex.pos); res := T.errex
+				ELSE 
+					IF ch < 0FFX THEN sstr[0] := SHORT(ch); sstr[1] := 0X; res := T.ThisString(sstr, NIL, 2)
+					ELSE NEW(pstr, 2); pstr^[0] := ch; pstr^[1] := 0X; res := T.ThisString(' ', pstr, 2)
+					END
+				END
+			ELSE Mark(-524, 4, ex.pos); res := T.errex
+			END
+		ELSE Mark(-524, 2, ex.pos); res := T.errex
+			;HALT(8)
+		END;
+		RETURN res
+	END CheckCharConv;
+
+	PROCEDURE CheckIntConv (ex: T.Expression; to: T.Type; OUT implicit: BOOLEAN): T.Expression;	
+		(* does NOT create a conv op!! res = NIL => OK to convert; res = T.errex | res # NIL => res is to be converted *)
+		VAR ewhat, towhat: INTEGER; res: T.Expression; long: LONGINT; isConst, good: BOOLEAN;
+	BEGIN implicit := FALSE;
+		towhat := to.what; ewhat := ex.type.what;
+		isConst := T.const IN ex.flags; 
+		IF isConst THEN WITH ex: T.Int DO long := ex.long ELSE long := EvalLong(ex) END END;
+		CASE towhat OF 
+		| T.fChar16: IF isConst & ((long < 0) OR (0FFFFH < long)) THEN Err(-203, 5); res := T.errex END 
+		| T.fChar8: IF isConst & ((long < 0) OR (0FFH < long)) THEN Err(-203, 6); res := T.errex END
+		| T.fInt8, T.fInt16, T.fInt32, T.fInt64:
+			IF isConst THEN
+				CASE towhat OF 
+				| T.fInt8: good := InRange(MIN(BYTE), MAX(BYTE), long, -203, 1)	(*$137*)
+				| T.fInt16: good := InRange(MIN(SHORTINT), MAX(SHORTINT), long, -203, 2)	(*$137*)
+				| T.fInt32: good := InRange(MIN(INTEGER), MAX(INTEGER), long, -203, 3)	(*$137*)
+				| T.fInt64: good := TRUE
+				END;
+				IF ~good THEN res := T.errex ELSE implicit := TRUE END
+			ELSE implicit := T.Includes(towhat, ewhat) 
+			END
+		| T.fSet: ASSERT(ewhat # T.fInt64, 20)
+		| T.fReal32, T.fReal64: (*convert in the backend*) implicit := TRUE
+		ELSE Mark(-203, 9, ex.pos); res := T.errex
+		END;
+		RETURN res
+	END CheckIntConv;
+
+	PROCEDURE CheckRealConv (ex: T.Expression; to: T.Type; OUT implicit: BOOLEAN): T.Expression;
+		VAR ewhat, towhat: INTEGER; res: T.Expression; real: REAL; isConst: BOOLEAN;
+	BEGIN towhat := to.what; ewhat := ex.type.what;
+		isConst := T.const IN ex.flags; 
+		IF isConst THEN WITH ex: T.Real DO real := ex.real ELSE real := EvalReal(ex) END END;
+		CASE towhat OF
+		| T.fReal32, T.fReal64:
+			IF isConst & (towhat = T.fReal32) & (ABS(real) > HrM.MaxReal32) & (ABS(real) # HrM.InfReal) THEN
+				Err(-203, 4); res := T.errex
+			ELSIF isConst & (towhat = T.fReal32) THEN implicit := TRUE
+			ELSE implicit := T.Includes(towhat, ewhat)
+			END
+		| T.fInt64: 
+			IF isConst & ((real - MIN(LONGINT) <= -1) OR (MAX(LONGINT) < real)) THEN Err(-203, 8); res := T.errex
+			END
+		ELSE
+		END;
+		RETURN res
+	END CheckRealConv;
+	
+	PROCEDURE CheckSetConv (ex: T.Expression; to: T.Type; OUT implicit: BOOLEAN): T.Expression;
+		VAR towhat: INTEGER; isConst: BOOLEAN; set: SET; res: T.Expression;
+	BEGIN implicit := FALSE;
+		towhat := to.what; isConst := T.const IN ex.flags; 
+		IF isConst THEN WITH ex: T.Set DO set := ex.set ELSE set := EvalSet(ex) END END;
+		CASE towhat OF
+		| (*T.fSet, *)T.fInt32:	(* ok *)
+		| T.fInt64: implicit := TRUE;
+		| T.fInt16: IF isConst & (ORD(set) > MAX(SHORTINT)) THEN Err(-203, 2); res := T.errex END
+		| T.fInt8: IF isConst & (ORD(set) > MAX(BYTE)) THEN Err(-203, 2); res := T.errex END
+		ELSE res := T.errex
+		END;
+		RETURN res
+	END CheckSetConv;
+	
+	PROCEDURE CheckStringConv (ex: T.Expression; to: T.Type; OUT implicit: BOOLEAN): T.Expression;
+		VAR el, ewhat, towhat: INTEGER; isConst: BOOLEAN; res: T.Expression;
+	BEGIN 
+		implicit := FALSE;
+		towhat := to.what; ewhat := ex.type.what;
+		ASSERT(ewhat IN strings, 20);
+		CASE towhat OF
+		| T.fArray: HALT(125); implicit := (to(T.Array).elTyp.what = T.fChar8) & (ewhat = T.fString16)
+		| T.fString8: ASSERT(ewhat = T.fString16)
+		| T.fString16: ASSERT(ewhat = T.fString8); implicit := TRUE
+		ELSE Err(-203, 7); res := T.errex
+		END;
+		RETURN res
+	END CheckStringConv;
+	
+	
+	
+	PROCEDURE ImplicitConvert (e: T.Expression; to: T.Type;
+		checker: PROCEDURE (e: T.Expression; to: T.Type; OUT impl: BOOLEAN): T.Expression
+	): T.Expression;
+		VAR res: T.Expression; implicit: BOOLEAN;
+	BEGIN 
+		res := checker(e, to, implicit); 
+		IF (res = NIL) & implicit THEN 
+			(*IF (to.what = T.fArray) & (to(T.Array).elTyp.what IN T.chars) THEN
+				res := e; res.type := to 	(* let's hope other checks have been done...*)
+			ELS*)
+			CASE e.type.what OF T.fString8: to := T.strtp | T.fString16: to := T.shortstrtp ELSE END;
+			IF T.SameGroup(to.what, e.type.what) & (e IS T.Op) & (e(T.Op).what = T.convfn) THEN 
+				res := e; res.type := to	(* this is an omptimization; not sure it's a good thing to have it *)
+			ELSIF T.Includes(to.what, e.type.what) & (e IS T.Int) THEN res := e; res.type := to	(* int literals *)
+			ELSE res := NewOpTyp(T.convfn, e, NIL, to)
+			END;
+			Flag(res.flags, T.const, T.const IN e.flags)
+		 END;
+		RETURN res
+	END ImplicitConvert;
+
+	PROCEDURE ^ ForceConvert (e: T.Expression; to: T.Type): T.Expression;
+
+	PROCEDURE DoCheckConvert (e: T.Expression; to: T.Type; force: BOOLEAN): T.Expression;
+	(** checks if implicit or explicit conversion is permitted. The result is:
+	- converted expression, if implicit conversion is permitted
+	- NIL, if explicit conversion is permitted
+	- T.errex | res.type = T.errtp if conversion is impossible
+	*)
+		VAR op: T.Op; res, a, b: T.Expression; towhat, ewhat: INTEGER; implicit: BOOLEAN;
+	BEGIN
+		towhat := to.what; ewhat := e.type.what; 
+		WITH e: T.Op DO IF e.what = T.convfn THEN op := e; a := e.a; b := e.b END ELSE END;
+		IF towhat = ewhat THEN res := e
+		ELSIF (op # NIL) & (T.Includes(towhat, ewhat) OR T.Includes(towhat, a.type.what)) THEN
+			(* dont create a new node, it's not necessary *)
+			IF a.type.what = towhat THEN res := a ELSE res := op (* op's type will be changed to to *) END
+		ELSIF force & (op # NIL) & T.SameGroup(towhat, ewhat) THEN res := ForceConvert(a, to)
+								(* this is an optimization; not sure it's a good thing to have it *)
+		(*ELSIF (op # NIL) & (ewhat IN strings) THEN op.a := CheckConvert(a, to); op.b := CheckConvert(b, to)
+			(**)  this case is tough: conversion of string operations... i don't understad why in CP2 it  *)
+		ELSIF ewhat IN integers THEN res := ImplicitConvert(e, to, CheckIntConv)
+		ELSIF ewhat IN chars THEN res := ImplicitConvert(e, to, CheckCharConv)
+		ELSIF ewhat IN reals THEN res := ImplicitConvert(e, to, CheckRealConv)
+		ELSIF ewhat = T.fSet THEN res := ImplicitConvert(e, to, CheckSetConv)
+		ELSIF ewhat IN strings THEN res := ImplicitConvert(e, to, CheckStringConv)
+		ELSIF ewhat = T.fNil THEN 
+			IF towhat IN T.pointers + { T.fProcedure} THEN res := e ELSE res := T.errex; Mark(-541, 0, e.pos) END
+		(*ELSE HALT(20)*)
+		END;
+		IF (res # NIL) & (res.type # T.errtp) THEN res.type := to END;
+		RETURN res
+	END DoCheckConvert;
+	
+	PROCEDURE CheckConvert (e: T.Expression; to: T.Type): T.Expression;
+	BEGIN RETURN DoCheckConvert(e, to, FALSE)
+	END CheckConvert;
+
+	PROCEDURE ConvOp (e: T.Expression; to: T.Type): T.Expression;
+		VAR res: T.Expression;
+	BEGIN res := NewOpTyp(T.convfn, e, NIL, to); Flag(res.flags, T.const, T.const IN e.flags); RETURN res
+	END ConvOp;
+	
+	PROCEDURE ForceConvert (e: T.Expression; to: T.Type): T.Expression;
+	(** checks if conversion is permitted, whether implicit or explicit, and performs a permitted conversion. Result:
+	- converted expression
+	- T.errex | res.type = T.errtp if conversion is impossible
+	res # NIL
+	*)
+		VAR res: T.Expression;
+	BEGIN 
+		res := DoCheckConvert(e, to, TRUE); 
+		IF res = NIL THEN res := ConvOp(e, to) END; 
+		RETURN res
+	END ForceConvert;
+	
+	PROCEDURE (b: Builder) Convert(***) (VAR e: T.Expression; t: T.Type), NEW, EXTENSIBLE;
+	BEGIN (*DoConvert(e, t)*)
+	END Convert;
+	(* My infrastructure is agnostic of constant string "character width" and encoding: string constants are represented as "wide" arrays of char. There is no point in actual conversions at the Builder's level, I think. The code generator will be fully capable, when encountering a Conv node, to generate a "narrow" string out of a "normal" or "wide" and place it with other literal constants in module text. It just needs a Conv node with appropriate types. Otherwise, if I wanted to do this in Builder, I would need a new type of node for a "narrow" string, or, like in OP2/CP2, i would need to convert character strings, respecting encoding, into byte strings, and represent those in the AST. Which I don't want to do, because the idea is to preserve the AST as close to the language as possible (thus removing it further from implementation). And encodings and byte strings are definitely an implementation issue.
+	Thus, on for a T.conv node with .a: T.StringLit and .t.what = T.fString8!
+	Same reasoning holds true for CHAR to string conversions: the backend (generator) should do the converting, taking into account all target architectural details.
+	Thus, on for T.conv nodes with .a: T.StringLit and .t.what IN charTypes. *)
+
+	PROCEDURE CheckString2 (VAR e: T.Expression; t: T.Type; errno, suberr: INTEGER);
+		VAR ewhat, twhat: INTEGER;
+	BEGIN ewhat := e.type.what; twhat := t.what;
+		(*IF twhat = T.fGuid) & (e IS T.StringLit) THEN StringToGuid(e)
+		ELS*)
+		IF (twhat = T.fArray) & (t(T.Array).elTyp.what = T.fChar8) OR (twhat = T.fString8)	(*ever?*)
+		THEN
+			IF (e IS T.Char) & (ewhat = T.fChar8) THEN e := ForceConvert(e, t)
+			ELSIF (ewhat = T.fArray) & (e.type(T.Array).elTyp.what = T.fChar8) OR (ewhat = T.fString8) THEN (* ok *)
+			ELSIF ewhat = T.fString16 THEN Err(-113, 17)
+			ELSE Err(errno, suberr)
+			END
+		ELSIF (twhat = T.fArray) & (t(T.Array).elTyp.what = T.fChar16) OR (twhat = T.fString16) THEN	(*ever?*)
+			IF ewhat = T.fString8 THEN e := ConvOp(e, T.strtp)
+			ELSIF (e IS T.Char) & (ewhat IN T.chars) THEN e := ForceConvert(e, t)
+			ELSIF (ewhat = T.fArray) & (e.type(T.Array).elTyp.what = T.fChar16) OR (ewhat = T.fString16) THEN (* ok *)
+			ELSE Err(errno, suberr)
+			END
+		ELSE Err(errno, suberr)
+		END
+	END CheckString2;
+	
+	PROCEDURE CheckString (n: HrCPT.Node; typ: HrCPT.Struct; e: SHORTINT);
+		VAR ntyp: HrCPT.Struct;
+	BEGIN
+		ntyp := n.typ;
+		IF (typ = HrCPT.guidtyp) & (n.class = Nconst) & (ntyp.form = String8) THEN StringToGuid(n)
+		ELSIF (typ.comp IN {Array, DynArr}) & (typ.BaseTyp.form = Char8) OR (typ.form = String8) THEN
+			IF (n.class = Nconst) & (ntyp.form = Char8) THEN CharToString8(n)
+			ELSIF (ntyp.comp IN {Array, DynArr}) & (ntyp.BaseTyp.form = Char8) OR (ntyp.form = String8) THEN (* ok *)
+			ELSE err(e)
+			END
+		ELSIF (typ.comp IN {Array, DynArr}) & (typ.BaseTyp.form = Char16) OR (typ.form = String16) THEN
+			IF (n.class = Nconst) & (ntyp.form IN charSet) THEN CharToString16(n)
+			ELSIF (n.class = Nconst) & (ntyp.form = String8) THEN String8ToString16(n)
+			ELSIF (ntyp.comp IN {Array, DynArr}) & (ntyp.BaseTyp.form = Char16) OR (ntyp.form = String16) THEN
+				(* ok *)
+			ELSE err(e)
+			END
+		ELSE err(e)
+		END
+	END CheckString;
+	
+	
+	PROCEDURE BindNodes(class: BYTE; typ: HrCPT.Struct; VAR x: HrCPT.Node; y: HrCPT.Node);
+		VAR node: HrCPT.Node;
+	BEGIN
+		node := HrCPT.NewNode(class); node.typ := typ;
+		node.left := x; node.right := y; x := node
+	END BindNodes;
+
+	PROCEDURE NotVar2 (e: T.Expression): BOOLEAN;
+	BEGIN
+		RETURN ~(e IS T.Target) & ~((e IS T.CallDes) & (e.type # NIL) & ((e.type IS T.RecPtr) OR (e.type IS T.ArrayPtr))
+			& ~((e IS T.Op) & (e(T.Op).what = T.valfn) & ~NotVar2(e(T.Op).a)))
+			(* this is different from NotVar: in my symtab, String8/String16 are T.Literals, which are not T.Targets;
+			also, I don't see how a type guard could be applied to a non-variable object: there is always a T.Target to 
+			the left of a Guard.*)
+	END NotVar2;
+	
+	PROCEDURE NotVar(x: HrCPT.Node): BOOLEAN;
+	BEGIN
+		RETURN (x.class >= Nconst) & ((x.class # Nmop) OR (x.subcl # val) OR NotVar(x.left))
+			OR (x.typ.form IN {String8, String16})
+			OR (x.class = Nguard) & NotVar(x.left)
+	END NotVar;
+
+	PROCEDURE Convert(VAR x: HrCPT.Node; typ: HrCPT.Struct);
+		VAR node: HrCPT.Node; f, g: SHORTINT;
+	BEGIN f := x.typ.form; g := typ.form;
+		IF x.class = Nconst THEN
+			IF g = String8 THEN
+				IF f = String16 THEN String16ToString8(x)
+				ELSIF f IN charSet THEN CharToString8(x)
+				ELSE typ := HrCPT.undftyp
+				END
+			ELSIF g = String16 THEN
+				IF f = String8 THEN String8ToString16(x)
+				ELSIF f IN charSet THEN CharToString16(x)
+				ELSE typ := HrCPT.undftyp
+				END
+			ELSE ConvConst(x.conval, f, g)
+			END;
+			x.obj := NIL
+		ELSIF (x.class = Nmop) & (x.subcl = conv) & (HrCPT.Includes(f, x.left.typ.form) OR HrCPT.Includes(f, g))
+		THEN
+			(* don't create new node *)
+			IF x.left.typ.form = typ.form THEN (* and suppress existing node *) x := x.left END
+		ELSE
+			IF (x.class = Ndop) & (x.typ.form IN {String8, String16}) THEN	(* propagate to leaf nodes *)
+				Convert(x.left, typ); Convert(x.right, typ)
+			ELSE
+				node := HrCPT.NewNode(Nmop); node.subcl := conv; node.left := x; x := node;
+			END
+		END;
+		x.typ := typ
+	END Convert;
+
+	PROCEDURE Promote (VAR left, right: HrCPT.Node; op: INTEGER);	(* check expression compatibility *)
+		VAR f, g: INTEGER; new: HrCPT.Struct;
+	BEGIN
+		f := left.typ.form; g := right.typ.form; new := left.typ;
+		IF f IN intSet + realSet THEN
+			IF g IN intSet + realSet THEN
+				IF (f = Real32) & (right.class = Nconst) & (g IN realSet) & (left.class # Nconst)
+					(* & ((ABS(right.conval.realval) <= CpjsM.MaxReal32)
+							OR (ABS(right.conval.realval) = CpjsM.InfReal)) *)
+				OR (g = Real32) & (left.class = Nconst) & (f IN realSet) & (right.class # Nconst)
+					(* & ((ABS(left.conval.realval) <= CpjsM.MaxReal32)
+							OR (ABS(left.conval.realval) = CpjsM.InfReal)) *) THEN
+						new := HrCPT.real32typ	(* SR *)
+				ELSIF (f = Real64) OR (g = Real64) THEN new := HrCPT.real64typ
+				ELSIF (f = Real32) OR (g = Real32) THEN new := HrCPT.real32typ	(* SR *)
+				ELSIF op = slash THEN new := HrCPT.real64typ
+				ELSIF (f = Int64) OR (g = Int64) THEN new := HrCPT.int64typ
+				ELSE new := HrCPT.int32typ
+				END
+			ELSE err(100)
+			END
+		ELSIF (left.typ = HrCPT.guidtyp) OR (right.typ = HrCPT.guidtyp) THEN
+			IF f = String8 THEN StringToGuid(left) END;
+			IF g = String8 THEN StringToGuid(right) END;
+			IF left.typ # right.typ THEN err(100) END;
+			f := Comp
+		ELSIF f IN charSet + {String8, String16} THEN
+			IF g IN charSet + {String8, String16} THEN
+				IF (f = String16) OR (g = String16) OR (f = Char16) & (g = String8) OR (f = String8) & (g = Char16) THEN
+					new := HrCPT.string16typ
+				ELSIF ((f = Char16) OR (g = Char16)) & (op # plus) THEN new := HrCPT.char16typ
+				ELSIF (f = String8) OR (g = String8) THEN new := HrCPT.string8typ
+				ELSIF op = plus THEN
+					IF (f = Char16) OR (g = Char16) THEN new := HrCPT.string16typ
+					ELSE new := HrCPT.string8typ
+					END
+				END;
+				IF (new.form IN {String8, String16})
+					& ((f IN charSet) & (left.class # Nconst) OR (g IN charSet) & (right.class # Nconst))
+				THEN
+					err(100)
+				END
+			ELSE err(100)
+			END
+		ELSIF (f IN {NilTyp, Pointer, ProcTyp}) & (g IN {NilTyp, Pointer, ProcTyp}) THEN
+			IF ~HrCPT.SameType(left.typ, right.typ) & (f # NilTyp) & (g # NilTyp)
+				& ~((f = Pointer) & (g = Pointer)
+					& (HrCPT.Extends(left.typ, right.typ) OR HrCPT.Extends(right.typ, left.typ))) THEN err(100) END
+		ELSIF f # g THEN err(100)
+		END;
+		IF ~(f IN {NilTyp, Pointer, ProcTyp, Comp}) THEN
+			IF g # new.form THEN Convert(right, new) END;
+			IF f # new.form THEN Convert(left, new) END
+		END
+	END Promote;
+
+	PROCEDURE CheckParameters* (fp, ap: HrCPT.Object; checkNames: BOOLEAN); (* checks par list match *)
+		VAR ft, at: HrCPT.Struct;
+	BEGIN
+		WHILE fp # NIL DO
+			IF ap # NIL THEN
+				ft := fp.typ; at := ap.typ;
+				IF fp.ptyp # NIL THEN ft := fp.ptyp END;	(* get original formal type *)
+				IF ap.ptyp # NIL THEN at := ap.ptyp END;	(* get original formal type *)
+				IF ~HrCPT.EqualType(ft, at)
+					OR (fp.mode # ap.mode) OR (fp.sysflag # ap.sysflag) OR (fp.vis # ap.vis)
+					OR checkNames & (fp.name^ # ap.name^) THEN err(115) END ;
+				ap := ap.link
+			ELSE err(116)
+			END;
+			fp := fp.link
+		END;
+		IF ap # NIL THEN err(116) END
+	END CheckParameters;
+	
+	(*PROCEDURE CheckParameters2* (fp, ap: POINTER TO ARRAY OF T.Par; checkNames: BOOLEAN);
+		VAR i, fl, al, len: INTEGER; f, a: T.Par;
+	BEGIN IF f = NIL THEN fl := 0 ELSE fl := LEN(fp) END; IF a = NIL THEN al := 0 ELSE al := LEN(ap) END;
+		len := MIN(fl, al);
+		i := 0; WHILE i < len DO
+			f := fp[i]; a := ap[i];
+			IF ~T.EqualTypes(f.type, a.type) THEN err(-115)
+			ELSIF f.flags * T.kindMask # a.flags * T.kindMask THEN err(-290)
+			ELSIF checkNames & (f.name^ # a.name^) THEN err(-291)
+			END;
+			INC(i)
+		END;
+		IF fl = al THEN ELSIF fl < al THEN err(292) ELSE err(-293) END
+	END CheckParameters2;*)
+
+	PROCEDURE EqualParams (fp, ap: POINTER TO ARRAY OF T.Par; checkNames: BOOLEAN): BOOLEAN;
+		VAR i, fl, al, len: INTEGER; f, a: T.Par; res: BOOLEAN;
+	BEGIN 
+		res := FALSE;
+		IF f = NIL THEN fl := 0 ELSE fl := LEN(fp) END; IF a = NIL THEN al := 0 ELSE al := LEN(ap) END;
+		len := MIN(fl, al);
+		i := 0; WHILE i < len DO
+			f := fp[i]; a := ap[i];
+			IF ~T.EqualTypes(f.type, a.type) THEN err(-115)
+			ELSIF f.flags * T.kindMask # a.flags * T.kindMask THEN err(-290)
+			ELSIF checkNames & (f.name^ # a.name^) THEN err(-291)
+			END;
+			INC(i)
+		END;
+		IF fl = al THEN res := TRUE ELSIF fl < al THEN err(-292) ELSE err(-293) END;
+		RETURN res
+	END EqualParams;
+
+	PROCEDURE CheckNewParamPair* (newPar, iidPar: HrCPT.Node);
+		VAR ntyp: HrCPT.Struct;
+	BEGIN
+		ntyp := newPar.typ.BaseTyp;
+		IF (newPar.class = Nvarpar) & ODD(newPar.obj.sysflag DIV newBit) THEN
+			IF (iidPar.class = Nvarpar) & ODD(iidPar.obj.sysflag DIV iidBit) & (iidPar.obj.mnolev = newPar.obj.mnolev)
+			THEN (* ok *)
+			ELSE err(168)
+			END
+		ELSIF ntyp.extlev = 0 THEN	(* ok *)
+		ELSIF (iidPar.class = Nconst) & (iidPar.obj # NIL) & (iidPar.obj.mode = Typ) THEN
+			IF ~HrCPT.Extends(iidPar.obj.typ, ntyp) THEN err(168) END
+		ELSE err(168)
+		END
+	END CheckNewParamPair;
+
+	PROCEDURE (b: Builder) Deref* (des: T.Designator): T.Designator, NEW, EXTENSIBLE;
+		VAR deref: T.Deref; t: T.Type; res: T.Designator;
+	BEGIN
+		(*IF (des IS T.TypeDes) OR (des IS T.ProcDes) THEN err(-78)
+		ELS*)IF des = T.errdes THEN
+		ELSE t := des.type;
+			WITH t: T.ArrayPtr DO deref := T.dir.Deref(); deref.what := des; deref.type := t.base
+			| t: T.RecPtr DO deref := T.dir.Deref(); deref.what := des; deref.type := t.base;
+			| t: T.Record DO 
+				IF t.typeName # NIL THEN t := t(T.Record).base; IF t # NIL THEN INCL(t.flags, T.pbused) END
+					(* In CP2, ALL types have a BaseType, ending in CPT.undeftyp that loops to itself. This way,
+					.pbused is set for all kinds of types. With me, only record types have a base, thus other types' 	
+					.pbused cannot be calculated *)
+				END
+			ELSE Mark(-84, 0, des.pos)
+			END;
+		END;
+		IF deref = NIL THEN res := T.errdes ELSE res := deref; deref.pos := HrM.errpos END; RETURN res
+	END Deref;
+	
+	PROCEDURE DeRef*(VAR x: HrCPT.Node);
+		VAR strobj, bstrobj: HrCPT.Object; typ, btyp: HrCPT.Struct;
+	BEGIN
+		typ := x.typ;
+		IF (x.class = Nconst) OR (x.class = Ntype) OR (x.class = Nproc) THEN err(78)
+		ELSIF typ.form = Pointer THEN
+			btyp := typ.BaseTyp; strobj := typ.strobj; bstrobj := btyp.strobj;
+			IF (strobj # NIL) & (strobj.name # HrCPT.null) & (bstrobj # NIL) & (bstrobj.name # HrCPT.null) THEN
+				btyp.pbused := TRUE
+			END ;
+			BindNodes(Nderef, btyp, x, NIL); x.subcl := 0
+		ELSE err(84)
+		END
+	END DeRef;
+	
+	PROCEDURE (b: Builder) StrSel* (s: T.Designator): T.Designator, NEW, EXTENSIBLE;
+		VAR t: T.Type; ss: T.StringSel; res: T.Designator;
+	BEGIN res := T.errdes;
+		IF s = T.errdes THEN res := s
+		ELSIF s IS T.Target THEN 
+			IF s.type IS T.ArrayPtr THEN s := b.Deref(s) END;
+			t := s.type;
+			WITH t: T.Array DO 
+				IF (t.elTyp.what = T.fChar8) OR (t.elTyp.what = T.fChar16) THEN
+					ss := T.dir.StringSel(); res := ss; ss.what := s; Flag(ss.flags, T.immutable, TRUE);
+					IF t.elTyp.what = T.fChar8 THEN ss.type := T.shortstrtp ELSE ss.type := T.strtp END
+				ELSE Err(-90, 6)	(*$118*)
+				END
+			ELSE Err(-90, 1)	(*$118*)
+			END
+		ELSIF s IS T.StringSel THEN Err(-90, 2)	(*$118*)
+		ELSIF s IS T.GuardDes THEN Err(-90, 3)
+		ELSIF s IS T.ProcDes THEN Err(-90, 4)
+		ELSIF s IS T.CallDes THEN Err(-90, 5)	(*$118*)
+		ELSE Err(-90, 7)	(* how to test? *)
+		END;
+		RETURN res
+	END StrSel;
+
+	PROCEDURE StrDeref*(VAR x: HrCPT.Node);
+		VAR typ, btyp: HrCPT.Struct;
+	BEGIN
+		typ := x.typ;
+		IF (x.class = Nconst) OR (x.class = Ntype) OR (x.class = Nproc) THEN err(78)
+		ELSIF ((typ.comp IN {Array, DynArr}) & (typ.BaseTyp.form IN charSet)) OR (typ.sysflag = jstr) THEN
+			IF (typ.BaseTyp # NIL) & (typ.BaseTyp.form = Char8) THEN btyp := HrCPT.string8typ
+			ELSE btyp := HrCPT.string16typ
+			END;
+			BindNodes(Nderef, btyp, x, NIL); x.subcl := 1
+		ELSE err(90)
+		END
+	END StrDeref;
+	
+	PROCEDURE (b: Builder) Index* (a: T.Designator; ind: T.Expression): T.Designator, NEW, EXTENSIBLE;
+		CONST none = -1;
+		VAR index: T.Index; type: T.Type; w, i, j: INTEGER; long: LONGINT; check: BOOLEAN; q: T.Array;
+			res: T.Designator; deref: T.Deref;
+	BEGIN
+		w := ind.type.what;
+		IF (w = none) OR ~(w IN T.integers) (*OR (ind IS T.ProcDes) OR (ind IS T.TypeDes)*) THEN err(-80) END;
+		
+		IF a.type IS T.ArrayPtr THEN deref := T.dir.Deref(); deref.what := a; deref.type := a.type(T.ArrayPtr).base;
+			Flag(deref.flags, T.immutable, T.immutable IN a.flags); deref.pos := a.pos; a := deref
+		END;
+		IF a.type IS T.Array THEN
+			i := 0;
+			WITH a: T.Index DO index := a; WHILE a.dim[i] # NIL DO INC(i) END; ASSERT(i > 0)
+			ELSE 
+				IF (a IS T.VarDes) OR (a IS T.FieldDes) OR (a IS T.Deref) & (a.type IS T.Array) THEN 
+					type := a.type; 
+					index := T.dir.Index(); index.arr := a; Flag(index.flags, T.immutable, T.immutable IN a.flags)
+				ELSE err(-79); (*index := T.dir.Index(); index.type := T.errtp; type := T.errtp *)
+				END
+			END;
+			IF index # NIL THEN
+				IF i = 0 THEN q := type(T.Array); index.types[0] := type;
+					j := 0; REPEAT w := q.len; IF T.open IN q.flags THEN w := -q.len ELSE w := q.len END; 
+						index.dims[j] := w;
+						type := q.elTyp; WITH type: T.Array DO q := type ELSE q := NIL END;
+						INC(j); index.types[j] := type
+					UNTIL q = NIL;
+					(*index.topDim := j - 1*)
+				END;
+				(*ASSERT(i <= index.topDim, 60);*)
+				index.ipos[i] := HrM.errpos;
+				(*IF i > index.topDim THEN err(502(*82*)); index.type := T.errtp	(* ? index := T.errdes *)
+				ELSE*)
+					index.dim[i] := ind; index.type := index.types[i + 1];
+					check := TRUE; 
+					WITH ind: T.Int DO long := ind.long 
+					| ind: T.ConDes DO 
+						IF ind.const.val IS T.Int THEN long := ind.const.val(T.Int).long ELSE check := FALSE END
+					ELSE check := FALSE
+					END;
+					IF check & ((long < 0) OR (index.dims[i] > 0) & (index.dims[i] <= long)) THEN err(-81) END;
+				(*END;*)
+				ASSERT(index.type # NIL);
+			END
+		ELSE IF a IS T.Index THEN err(-502) ELSE err(-82) END
+		END;
+		IF index = NIL THEN res := T.errdes ELSE res := index END; RETURN res
+	END Index;
+
+	PROCEDURE Index*(VAR x: HrCPT.Node; y: HrCPT.Node);
+		VAR f: SHORTINT; typ: HrCPT.Struct;
+	BEGIN
+		f := y.typ.form;
+		IF (x.class = Nconst) OR (x.class = Ntype) OR (x.class = Nproc) THEN err(79)
+		ELSIF ~(f IN intSet) OR (y.class IN {Nproc, Ntype}) THEN err(80); y.typ := HrCPT.int32typ END ;
+		IF f = Int64 THEN Convert(y, HrCPT.int32typ) END;
+		IF x.typ.comp = Array THEN typ := x.typ.BaseTyp;
+			IF (y.class = Nconst) & ((y.conval.intval < 0) OR (y.conval.intval >= x.typ.n)) THEN err(81) END
+		ELSIF x.typ.comp = DynArr THEN typ := x.typ.BaseTyp;
+			IF (y.class = Nconst) & (y.conval.intval < 0) THEN err(81) END
+		ELSE err(82); typ := HrCPT.undftyp
+		END ;
+		BindNodes(Nindex, typ, x, y); x.readonly := x.left.readonly
+	END Index;
+	
+	PROCEDURE (b: Builder) ProcDes* (p: T.Proc): T.Designator, NEW, EXTENSIBLE;
+		VAR pd: T.ProcDes; res: T.Designator;
+	BEGIN 
+		IF p IS T.TProc THEN err(-537); res := T.errdes
+		ELSE pd := T.dir.ProcDes(); res := pd; pd.pos := b.incomppos;
+			pd.proc := p; Flag(pd.flags, T.immutable, TRUE); pd.pos := b.incomppos
+		END;
+		RETURN pd
+	END ProcDes;
+	
+	PROCEDURE (b: Builder) BoundProc* (rcv: T.Designator; p: T.TProc; 
+		OUT ap: POINTER TO ARRAY OF T.Expression
+	): T.Designator, NEW, EXTENSIBLE;
+		VAR len: INTEGER;
+	BEGIN
+		len := LEN(p.par); NEW(ap, len); ap[0] := rcv;
+		RETURN b.incompdes
+	END BoundProc;
+	
+	PROCEDURE (b: Builder) Field* (rec: T.Designator; field: T.Field): T.Designator, NEW, EXTENSIBLE;
+		VAR f: T.FieldDes; res: T.Designator; deref: T.Deref;
+	BEGIN
+		IF (rec IS T.Target) OR (rec IS T.GuardDes) OR (rec IS T.CallDes) THEN
+			IF rec.type IS T.RecPtr THEN 
+				deref := T.dir.Deref(); deref.what := rec; deref.type := rec.type(T.RecPtr).base; 
+				Flag(deref.flags, T.immutable, T.immutable IN rec.flags); deref.pos := rec.pos;
+				rec := deref
+			END;
+			IF rec.type IS T.Record THEN
+				f := T.dir.FieldDes(); f.type := field.type; f.rec := rec; f.field := field;
+				Flag(f.flags, T.immutable, (T.immutable IN rec.flags) OR (T.readOnly IN field.flags))
+			END
+		END;
+		IF f = NIL THEN err(77); res := T.errdes ELSE res := f END;
+		RETURN res
+	END Field;
+	
+	PROCEDURE Field*(VAR x: HrCPT.Node; y: HrCPT.Object);
+	BEGIN (*x.typ.comp = Record*)
+		IF (x.class = Nconst) OR (x.class = Ntype) OR (x.class = Nproc) THEN err(77) END ;
+		IF (y # NIL) & (y.mode IN {Fld, TProc}) THEN
+			BindNodes(Nfield, y.typ, x, NIL); x.obj := y;
+			x.readonly := x.left.readonly OR ((y.vis = externalR) & (y.mnolev < 0))
+		ELSE err(83); x.typ := HrCPT.undftyp
+		END
+	END Field;
+	
+	PROCEDURE TestOrGuard (des: T.Designator; typeName: T.Object; guard: BOOLEAN; pos: INTEGER): T.Expression;
+		VAR res: T.Expression; t, u, a, b: T.Type; kind: SET; g: T.GuardDes; is: T.IsOp; isSysPtr: BOOLEAN;
+		PROCEDURE E (c: INTEGER): INTEGER; BEGIN IF ~guard THEN INC(c) END; RETURN c END E;
+		PROCEDURE DoMark(e, f: INTEGER); BEGIN Mark(e, f, des.pos); res := T.errdes END DoMark;
+	BEGIN ASSERT(des # NIL, 20); ASSERT(typeName # NIL, 21);
+		WITH typeName: T.TypeName DO
+			res := T.errdes; isSysPtr := FALSE;
+			IF des # T.errdes THEN
+				IF (des IS T.Target) OR (des IS T.GuardDes) OR (des IS T.CallDes) THEN t := des.type; res := des;
+					WITH t: T.RecPtr DO a := t.base
+					| t: T.SysPtr DO (*a := NIL*) isSysPtr := TRUE
+					| t: T.Record DO 
+						WITH des: T.VarDes DO 
+							IF des.var IS T.Par THEN kind := des.var.flags * T.kindMask;
+								IF (kind = T.inK) OR (kind = T.varK) THEN a := t ELSE DoMark(-87, E(1)) END 	(*$116*)
+							ELSE DoMark(-87, E(3))	(*$116*)
+							END
+						ELSE DoMark(-87, E(3))	(*$116*)
+						END
+					ELSE DoMark(-87, E(5))	(*$116*)
+					END
+				ELSE DoMark(-87, E(5))	(* guard applied to a $ or a ProcDes? *)	(*$*)
+				END;
+				u := typeName.type; 
+				WITH u: T.RecPtr DO b := u.base | u: T.Record DO b := u ELSE Err(-86, E(1)); res := T.errdes END;	(*$116*)
+				IF b # NIL THEN
+					IF isSysPtr THEN res := des; des.type := b	(* any guard succeeds on SYSTEM.PTR *)
+					ELSIF a # NIL THEN
+						IF T.SameType(a, b) THEN res := T.errdes; Err(-85, E(3))
+							(* In CP2, v: T => v IS T. In Hershcel, v: T => v IS T is an error: the Language Report has it in 8.2.5: 'v IS T stands for "the dynamic type of v is T (or an extension of T)" and is called a type test. It is applicable if...2. T is an extension of the static type of v '. My interpretation of this passage is that T cannot be the same type as v's formal type, while CP2 seemingly interprets 'an extension' in this passage as referring to 'Appendix A... Type Extension'.
+							The implementation of CP2 interpretation is as follows:
+							IF ~guard THEN res := T.true ELSE res := des END*)
+						ELSIF (t IS T.Pointer) & ~(u IS T.Pointer) THEN Err(-86, E(3)); res := T.errdes	(*$104*)
+						ELSIF T.Is(b, a) (* and some java-related checks *) THEN
+							IF guard THEN g := T.dir.GuardDes(); g.type := b; g.what := des; 
+								Flag(g.flags, T.immutable, T.immutable IN des.flags);
+								res := g
+							ELSE is := T.dir.IsOp(); is.des := des; is.typeName := typeName; is.type := T.booltp; res := is 
+							END;
+							res.pos := pos
+						ELSE Err(-85, E(1)); res := T.errdes	(*$116*)
+						END
+					END
+				END
+			END
+		ELSE IF typeName # T.errid THEN Mark(-48, 2, typeName.textpos) END; res := T.errdes 	(*$116*)
+		END;
+		ASSERT(res # NIL, 60);
+		RETURN res
+	END TestOrGuard;
+	
+	PROCEDURE (bld: Builder) Guard* (des: T.Designator; type: T.Object; pos: INTEGER): T.Designator, NEW, EXTENSIBLE;
+	BEGIN RETURN TestOrGuard(des, type, TRUE, pos)(T.Designator)
+	END Guard;
+	
+	PROCEDURE (b: Builder) Is* (des: T.Designator; type: T.Object; pos: INTEGER): T.Expression, NEW, EXTENSIBLE;
+	BEGIN RETURN TestOrGuard(des, type, FALSE, pos)
+	END Is;
+	
+	PROCEDURE TypTest*(VAR x: HrCPT.Node; obj: HrCPT.Object; guard: BOOLEAN);
+
+		PROCEDURE GTT(t0, t1: HrCPT.Struct);
+			VAR node: HrCPT.Node;
+		BEGIN
+			IF (t0 # NIL) & HrCPT.SameType(t0, t1) & (guard OR (x.class # Nguard)) THEN
+				IF ~guard THEN x := NewBoolConst(TRUE) END
+			ELSIF (t0 = NIL) OR HrCPT.Extends(t1, t0) OR (t0.sysflag = jint) OR (t1.sysflag = jint)
+					OR (t1.comp = DynArr) & (HrM.java IN HrM.options) THEN
+				IF guard THEN BindNodes(Nguard, NIL, x, NIL); x.readonly := x.left.readonly
+				ELSE node := HrCPT.NewNode(Nmop); node.subcl := is; node.left := x; node.obj := obj; x := node
+				END
+			ELSE err(85)
+			END
+		END GTT;
+
+	BEGIN
+		IF (x.class = Nconst) OR (x.class = Ntype) OR (x.class = Nproc) THEN err(112)
+		ELSIF x.typ.form = Pointer THEN
+			IF x.typ = HrCPT.sysptrtyp THEN
+				IF obj.typ.form = Pointer THEN GTT(NIL, obj.typ.BaseTyp)
+				ELSE err(86)
+				END
+			ELSIF x.typ.BaseTyp.comp # Record THEN err(85)
+			ELSIF obj.typ.form = Pointer THEN GTT(x.typ.BaseTyp, obj.typ.BaseTyp)
+			ELSE err(86)
+			END
+		ELSIF (x.typ.comp = Record) & (x.class = Nvarpar) & (x.obj.vis # outPar) & (obj.typ.comp = Record) THEN
+			GTT(x.typ, obj.typ)
+		ELSE err(87)
+		END ;
+		IF guard THEN x.typ := obj.typ ELSE x.typ := HrCPT.booltyp END
+	END TypTest;
+	
+	PROCEDURE In*(VAR x: HrCPT.Node; y: HrCPT.Node);
+		VAR f: SHORTINT; k: INTEGER;
+	BEGIN f := x.typ.form;
+		IF (x.class = Ntype) OR (x.class = Nproc) OR (y.class = Ntype) OR (y.class = Nproc) THEN err(126)
+		ELSIF (f IN intSet) & (y.typ.form = Set) THEN
+			IF f = Int64 THEN Convert(x, HrCPT.int32typ) END;
+			IF x.class = Nconst THEN
+				k := x.conval.intval;
+				IF (k < 0) OR (k > HrM.MaxSet) THEN err(202)
+				ELSIF y.class = Nconst THEN x.conval.intval := BoolToInt(k IN y.conval.setval); x.obj := NIL
+				ELSE BindNodes(Ndop, HrCPT.booltyp, x, y); x.subcl := in
+				END
+			ELSE BindNodes(Ndop, HrCPT.booltyp, x, y); x.subcl := in
+			END
+		ELSE err(92)
+		END ;
+		x.typ := HrCPT.booltyp
+	END In;
+	
+	PROCEDURE NegateConst2 (c: T.Literal): T.Expression;
+		VAR int: T.Int; real: T.Real; ex: T.Expression;
+	BEGIN
+		WITH c: T.Int DO ex := T.ThisInt(-c.long)
+		| c: T.Real DO ex := T.ThisReal(-c.real)
+		ELSE HALT(20)
+		END;
+		RETURN ex
+	END NegateConst2;
+	
+	(* weird... at the time, Monadic is only called for ~, +, - from P. All others are processed in .StdCall2. Gotta sort it out..*)
+	PROCEDURE (b: Builder) Monadic* (op: INTEGER; ex: T.Expression): T.Expression, NEW, EXTENSIBLE;
+		VAR e: T.Expression; t: T.Type; v, what: INTEGER;
+	BEGIN
+		(*IF (ex IS T.ProcDes) & (op # adr) & (op # typfn) & (op # size) THEN Err(-126, 3)
+		ELSE*) what := ex.type.what;
+			MarkUsed(ex);
+			CASE op OF
+			| T.notfn: 
+				IF what = T.fBool THEN 
+					IF ex = T.true THEN e := T.false ELSIF ex = T.false THEN e := T.true
+					ELSE e := NewOpTyp(T.notfn, ex, NIL, ex.type)
+					END
+				ELSE Err(-98, 1)	(*$134*)
+				END
+			| T.plusfn: IF what IN T.integers + T.reals THEN e := ex ELSE Err(-96, 1) (*$134*) END
+			| T.minusfn: 
+				IF what IN integers + reals + {T.fSet} THEN
+					WITH ex: T.Literal DO
+						WITH ex: T.Set DO HALT(126)
+						ELSE e := NegateConst2(ex)
+						END
+					ELSE IF what IN (integers - { T.fInt64 }) THEN ex := CheckConvert(ex, T.inttp) END;
+						e := NewOpTyp(T.minusfn, ex, NIL, ex.type)
+					END
+				ELSE Err(-97, 0)	(*$134*)
+				END
+			| T.absfn: 
+				IF what IN integers + reals THEN e := NewOpTyp(T.absfn, ex, NIL, ex.type) ELSE Err(-111, 17)  (*$143*)
+				END
+			| T.capfn: 
+				IF what IN chars THEN e := NewOpTyp(T.capfn, ex, NIL, ex.type) ELSE Err(-111, 18) END	(*$143*)
+			| T.oddfn: 
+				IF what IN integers THEN e := NewOpTyp(T.oddfn, ex, NIL, T.booltp) ELSE Err(-111, 3) END	(*$143*)
+			| T.adrfn: 
+				WITH ex: T.ProcDes DO
+					IF ex.proc IS T.CProc THEN Err(-111, 4); e := T.errex
+					ELSIF ex.proc.level > 0 THEN Err(-114, 5); e := T.errex
+					END
+				| ex: T.TypeDes DO t := ex.type;
+					IF (T.untagged IN t.flags) OR (t IS T.Basic) THEN Err(-111, 6); e := T.errex END
+				ELSE
+					IF (ex IS T.VarDes) OR (ex IS T.FieldDes) OR (ex IS T.Deref) OR (ex IS T.Index) OR (ex IS T.GuardDes)
+					OR (ex IS T.StringLit) OR (ex IS T.ConDes) & (ex.type.what IN T.strings) THEN
+					ELSE Err(-111, 7); e := T.errex
+					END
+				END; 
+				IF e = NIL THEN e := NewOpTyp(T.adrfn, ex, NIL, T.addrtp) END
+			| T.typfn, T.sizefn: 	(* SYSTEM.TYP, SIZE *)
+				e := NewOpTyp(what, ex, NIL, T.inttp)
+			| T.ccfn:
+				IF (what IN integers) & (T.const IN ex.flags) THEN 
+					v := EvalInt(ex);
+					IF (0 <= v) & (v <= HrM.MaxCC) THEN (* ok *) e := NewOpTyp(cc, ex, NIL, T.booltp)
+					ELSE Err(-219, 0)
+					END
+				ELSE Err(-69, 0)
+				END
+			ELSE HALT(126)
+			END;
+		(*END;*)
+		IF e = NIL THEN e := T.errex END;
+		ASSERT(e.type # NIL, 60);
+		RETURN e
+	END Monadic;
+	
+	PROCEDURE MOp* (op: BYTE; VAR x: HrCPT.Node);
+		VAR f: SHORTINT; typ: HrCPT.Struct; z: HrCPT.Node;
+		
+		PROCEDURE NewOp(op: BYTE; typ: HrCPT.Struct; z: HrCPT.Node): HrCPT.Node;
+			VAR node: HrCPT.Node;
+		BEGIN
+			node := HrCPT.NewNode(Nmop); node.subcl := op; node.typ := typ;
+			node.left := z; RETURN node
+		END NewOp;
+
+	BEGIN 
+		
+		z := x;
+		IF ((z.class = Ntype) OR (z.class = Nproc)) & (op # adr) & (op # typfn) & (op # size) THEN err(126)	(* !!! *)
+		ELSE
+			typ := z.typ; f := typ.form; (* type := xx.type; f := type(??T.Basic).what *)
+			CASE op OF
+			| not:
+				IF f = Bool THEN
+					IF z.class = Nconst THEN
+						z.conval.intval := BoolToInt(~IntToBool(z.conval.intval)); z.obj := NIL
+					ELSE z := NewOp(op, typ, z)
+					END
+				ELSE err(98)
+				END
+			| plus:
+				IF ~(f IN intSet + realSet) THEN err(96) END
+			| minus:
+				IF f IN intSet + realSet + {Set} THEN
+					IF z.class = Nconst THEN
+						IF f = Set THEN z.conval.setval := -z.conval.setval
+						ELSE NegateConst(z.conval, z.conval, z.typ)
+						END;
+						z.obj := NIL
+					ELSE
+						IF f < Int32 THEN Convert(z, HrCPT.int32typ) END;
+						z := NewOp(op, z.typ, z)
+					END
+				ELSE err(97)
+				END
+			| abs:
+				IF f IN intSet + realSet THEN
+					IF z.class = Nconst THEN
+						IF IsNegConst(z.conval, f) THEN NegateConst(z.conval, z.conval, z.typ) END;
+						z.obj := NIL
+					ELSE
+						IF f < Int32 THEN Convert(z, HrCPT.int32typ) END;
+						z := NewOp(op, z.typ, z)
+					END
+				ELSE err(111)
+				END
+			| cap:
+				IF f IN charSet THEN
+					IF z.class = Nconst THEN
+						IF ODD(z.conval.intval DIV 32) THEN DEC(z.conval.intval, 32) END;
+						z.obj := NIL
+					ELSE z := NewOp(op, typ, z)
+					END
+				ELSE err(111); z.typ := HrCPT.char8typ
+				END
+			| odd:
+				IF f IN intSet THEN
+					IF z.class = Nconst THEN
+						DivModConst(z.conval, two, FALSE, z.typ);	(* z MOD 2 *)
+						z.obj := NIL
+					ELSE z := NewOp(op, typ, z)
+					END
+				ELSE err(111)
+				END ;
+				z.typ := HrCPT.booltyp
+			| adr: (*ADR*)
+				IF (z.class = Nproc) & (z.obj.mode # CProc) THEN
+					IF z.obj.mnolev > 0 THEN err(73)
+					ELSIF z.obj.mode = LProc THEN z.obj.mode := XProc
+					END;
+					z := NewOp(op, typ, z)
+				ELSIF z.class = Ntype THEN
+					IF z.obj.typ.untagged OR (typ.comp = Basic) & (f # Pointer) THEN err(111) END;
+					z := NewOp(op, typ, z)
+				ELSIF (z.class < Nconst) OR (z.class = Nconst) & (f IN {String8, String16}) THEN
+					z := NewOp(op, typ, z)
+				ELSE err(127)
+				END ;
+				z.typ := HrCPT.int32typ
+			| typfn, size: (*TYP, SIZE*)
+				z := NewOp(op, typ, z);
+				z.typ := HrCPT.int32typ
+			| cc: (*SYSTEM.CC*)
+				IF (f IN intSet) & (z.class = Nconst) THEN
+					IF (0 <= z.conval.intval) & (z.conval.intval <= HrM.MaxCC) & (z.conval.realval = 0) THEN
+						z := NewOp(op, typ, z)
+					ELSE err(219)
+					END
+				ELSE err(69)
+				END;
+				z.typ := HrCPT.booltyp
+			END
+		END;
+		x := z;
+		(*IF xx # NIL THEN ASSERT(e # NIL, 60) END; RETURN e*)
+	END MOp;
+	
+	PROCEDURE ConstOp(op: SHORTINT; x, y: HrCPT.Node);
+		VAR f: SHORTINT; i, j: INTEGER; xval, yval: HrCPT.Const; ext: HrCPT.ConstExt;
+	BEGIN
+		f := x.typ.form;
+		IF f = y.typ.form THEN
+			xval := x.conval; yval := y.conval;
+			CASE op OF
+			| times:
+				IF f IN intSet + realSet THEN MulConst(xval, yval, xval, x.typ)
+				ELSIF f = Set THEN xval.setval := xval.setval * yval.setval
+				ELSIF f # Undef THEN err(101)
+				END
+			| slash:
+				IF f IN realSet THEN DivConst(xval, yval, xval, x.typ)
+				ELSIF f = Set THEN xval.setval := xval.setval / yval.setval
+				ELSIF f # Undef THEN err(102)
+				END
+			| div:
+				IF f IN intSet THEN DivModConst(xval, yval, TRUE, x.typ)
+				ELSIF f # Undef THEN err(103)
+				END
+			| mod:
+				IF f IN intSet THEN DivModConst(xval, yval, FALSE, x.typ)
+				ELSIF f # Undef THEN err(104)
+				END
+			| and:
+				IF f = Bool THEN xval.intval := BoolToInt(IntToBool(xval.intval) & IntToBool(yval.intval))
+				ELSE err(94)
+				END
+			| plus:
+				IF f IN intSet + realSet THEN AddConst(xval, yval, xval, x.typ)
+				ELSIF f = Set THEN xval.setval := xval.setval + yval.setval
+				ELSIF (f IN {String8, String16}) & (xval.ext # NIL) & (yval.ext # NIL) THEN
+					NEW(ext, LEN(xval.ext^) + LEN(yval.ext^));
+					i := 0; WHILE xval.ext[i] # 0X DO ext[i] := xval.ext[i]; INC(i) END;
+					j := 0; WHILE yval.ext[j] # 0X DO ext[i] := yval.ext[j]; INC(i); INC(j) END;
+					ext[i] := 0X; xval.ext := ext; INC(xval.intval2, yval.intval2 - 1)
+				ELSIF f # Undef THEN err(105)
+				END
+			| minus:
+				IF f IN intSet + realSet THEN SubConst(xval, yval, xval, x.typ)
+				ELSIF f = Set THEN xval.setval := xval.setval - yval.setval
+				ELSIF f # Undef THEN err(106)
+				END
+			| min:
+				IF f IN intSet + realSet THEN
+					IF LessConst(yval, xval, f) THEN xval^ := yval^ END
+				ELSIF f # Undef THEN err(111)
+				END
+			| max:
+				IF f IN intSet + realSet THEN
+					IF LessConst(xval, yval, f) THEN xval^ := yval^ END
+				ELSIF f # Undef THEN err(111)
+				END
+			| or:
+				IF f = Bool THEN xval.intval := BoolToInt(IntToBool(xval.intval) OR IntToBool(yval.intval))
+				ELSE err(95)
+				END
+			| eql: xval.intval := BoolToInt(EqualConst(xval, yval, f)); x.typ := HrCPT.booltyp
+			| neq: xval.intval := BoolToInt(~EqualConst(xval, yval, f)); x.typ := HrCPT.booltyp
+			| lss: xval.intval := BoolToInt(LessConst(xval, yval, f)); x.typ := HrCPT.booltyp
+			| leq: xval.intval := BoolToInt(~LessConst(yval, xval, f)); x.typ := HrCPT.booltyp
+			| gtr: xval.intval := BoolToInt(LessConst(yval, xval, f)); x.typ := HrCPT.booltyp
+			| geq: xval.intval := BoolToInt(~LessConst(xval, yval, f)); x.typ := HrCPT.booltyp
+			END
+		ELSE err(100)
+		END;
+		x.obj := NIL
+	END ConstOp;
+	
+	PROCEDURE MinComType (a, b: T.Type): T.Type;	(* minimal common type for a, b in the same group *)
+		VAR res: T.Type;
+	BEGIN 
+		IF a.what IN T.basics + T.strings THEN 
+			IF a.what <= b.what THEN res := b ELSE res := a END
+		ELSIF a.what IN T.pointers THEN
+			IF a.what = b.what THEN res := a 
+			ELSIF a.what = T.fSysPtr THEN res := a 
+			ELSIF b.what = T.fSysPtr THEN res := b 
+			ELSE HALT(126) 
+			END
+		ELSE HALT(126)
+		END;
+		RETURN res
+	END MinComType;
+	
+	PROCEDURE InitApplicants;
+	BEGIN
+		applicants[T.timesfn] := T.numbers + T.sets;
+		applicants[T.slashfn] := T.numbers + T.sets; 
+		applicants[T.divfn] := T.integers; 
+		applicants[T.modfn] := T.integers;
+		applicants[T.andfn] := { T.fBool };
+		applicants[T.plusfn] := T.numbers + T.chars + T.strings + T.sets; 
+		applicants[T.minusfn] := T.numbers + T.sets; 
+		applicants[T.orfn] := { T.fBool };
+		applicants[T.eqlfn] := T.numbers + T.chars + T.strings + T.sets + T.pointers + { T.fBool, T.fProcedure };
+		applicants[T.neqfn] := T.numbers + T.chars + T.strings + T.sets + T.pointers + { T.fBool, T.fProcedure };
+		applicants[T.lssfn] := T.numbers + T.chars + T.strings; 
+		applicants[T.leqfn] := T.numbers + T.chars + T.strings;
+		applicants[T.gtrfn] := T.numbers + T.chars + T.strings;
+		applicants[T.geqfn] := T.numbers + T.chars + T.strings;
+		applicants[T.infn] := T.integers;
+		applicants[T.isfn] := { T.fSysPtr, T.fRecPtr, T.fRecord };
+	END InitApplicants;
+	
+	(*ThisFunc - moved to HrP*)
+	
+	PROCEDURE ThisFamily (wx: INTEGER): INTEGER;	(** translates type code into type family code *)
+		CONST int = 0; real = 1; set = 2; bool = 3; ptr = 4; proc = 5; nil = 6; char = 7; string = 8; rec = 9; type = 10;
+		VAR res: INTEGER;
+	BEGIN
+		IF wx IN T.integers THEN res := int 
+		ELSIF wx IN T.reals THEN res := real
+		ELSIF wx = T.fSet THEN res := set
+		ELSIF wx = T.fBool THEN res := bool
+		ELSIF wx = T.fNil THEN res := nil
+		ELSIF wx IN T.pointers THEN res := ptr
+		ELSIF wx = T.fProcedure THEN res := proc
+		ELSIF wx IN T.strings THEN res := string
+		ELSIF wx IN T.chars THEN res := char
+		ELSIF wx = T.fRecord THEN res := rec
+		ELSIF wx = T.fType THEN res := type
+		ELSE res := -1
+		END;
+		RETURN res
+	END ThisFamily;
+	
+	PROCEDURE (b: Builder) CheckPtrStrSel (x: T.Expression): T.Expression, NEW;
+		VAR wx: INTEGER; 
+	BEGIN wx := x.type.what;
+		IF (wx = T.fArrayPtr) THEN x := b.Deref(x(T.Designator)); wx := x.type.what END;
+		IF (wx = T.fArray) & (x.type(T.Array).elTyp.what IN T.chars) THEN x := b.StrSel(x(T.Designator)) END;
+		RETURN x
+	END CheckPtrStrSel;
+
+	PROCEDURE (b: Builder) CheckStrSel (x: T.Expression): T.Expression, NEW;
+	BEGIN
+		IF (x.type.what = T.fArray) & (x.type(T.Array).elTyp.what IN T.chars) THEN x := b.StrSel(x(T.Designator)) END;
+		RETURN x
+	END CheckStrSel;
+	
+	PROCEDURE Shorter (e: T.Expression): T.Type;
+		VAR res: T.Type; r: REAL;
+	BEGIN
+		res := e.type;
+		IF (T.const IN e.flags) & (e.type.what = T.fReal64) THEN 
+			r := EvalReal(e);
+			IF (MIN(SHORTREAL) <= r) & (r <= MAX(SHORTREAL)) THEN res := T.shortrealtp END
+		END;
+		RETURN res
+	END Shorter;
+	
+	PROCEDURE (bld: Builder) Dyadic* (op: INTEGER; x, y: T.Expression; pos: INTEGER
+	): T.Expression, NEW, EXTENSIBLE;
+		CONST relations = { T.eqlfn..T.isfn };
+		VAR res: T.Expression; fam, wx, wy: INTEGER; right, a, b: T.Expression; at, bt, t, q: T.Type; valid: BOOLEAN;
+			opEnt: OpEntry; long: LONGINT; next: T.Op;
+	BEGIN ASSERT((x # NIL) & (y # NIL), 20);
+		res := T.errex; 
+		(*IF x IS T.MetaDes THEN Mark(-126, 8, x.pos); x := NIL END;  (*$155*)
+		IF y IS T.MetaDes THEN Mark(-126, 8, y.pos); y := NIL END;  (*$155*)   *)
+		IF (x = NIL) OR (y = NIL) THEN
+		ELSIF (x.type = T.errtp) OR (y.type = T.errtp) THEN 	(* suppress further error messages *)
+		ELSE 
+			MarkUsed(x); MarkUsed(y);
+			IF op = T.plusfn THEN x := bld.CheckPtrStrSel(x); y := bld.CheckPtrStrSel(y) 
+			ELSIF op IN relations THEN x := bld.CheckStrSel(x); y := bld.CheckStrSel(y)
+			END;
+			wx := x.type.what; wy := y.type.what; a := x; 
+			fam := ThisFamily(wx); ASSERT(op # -1, 60);
+			IF (fam = -1) OR ~(wx IN applicants[op]) THEN Mark(-91, 4, x.pos); a := NIL; valid := FALSE	(*$155*)
+			ELSE opEnt := operators[op, fam]; valid := wy IN opEnt.right; t := opEnt.corr
+			END;
+			IF (wx = T.fSet) & (wy = T.fSet) & (x IS T.Set) & (y IS T.Set) THEN 
+				WITH x: T.Set DO x.set := x.set + y(T.Set).set END; res := x
+			ELSIF (a # NIL) & valid THEN b := y; 
+				IF op = T.infn THEN 
+					IF T.const IN a.flags THEN long := EvalLong(a); 
+						IF (long < 0) OR (HrM.MaxSet < long) THEN Mark(-202, 1, a.pos); a := T.errex END	(*$173*)
+					END;
+					IF a # T.errex THEN a := ForceConvert(a, T.inttp) END
+				ELSIF op = T.isfn THEN 	(* no conversion applied to arguments *)
+				ELSIF wx IN T.basics + T.strings THEN	(* type conversions only apply to basic types, no pointers *)
+					at := Shorter(a); bt := Shorter(b);
+					q := MinComType(at, bt); 
+					IF op = T.plusfn THEN
+						IF q.what = T.fChar8 THEN q := T.shortstrtp ELSIF q.what = T.fChar16 THEN q := T.strtp END
+					END;
+					IF t # NIL THEN q := MinComType(q, t) END;
+					a := ForceConvert(a, q); b := ForceConvert(b, q)
+				END;
+				IF op IN relations THEN q := T.booltp END;
+				IF (a.type # T.errtp) & (b.type # T.errtp) THEN 
+					IF (op = T.plusfn) & (q.what IN T.strings) & (a IS T.Op) & (a(T.Op).what = T.plusfn) THEN 
+						res := a;
+						WITH a: T.Op DO
+							REPEAT
+								right := a.b; next := NIL; 
+								WITH right: T.Op DO IF right.what = T.plusfn THEN next := right END ELSE END;
+								IF next # NIL THEN a := next END
+							UNTIL next = NIL;
+							a.b := NewOpTyp(T.plusfn, a.b, b, q); a.b.pos := pos
+						END
+					ELSE
+						res := NewOpTyp(op, a, b, q); 
+						IF (T.const IN res.flags) & (q.what = T.fInt32) THEN 	
+							long := EvalLong(res);	(* Situations like x := MAX(INTEGER) * 2 require the op to return LONGINT rather than the default INT *)
+							IF (long < MIN(INTEGER)) OR (MAX(INTEGER) < long) THEN res.type := T.longtp END
+						END
+					END;
+					res.pos := pos
+				ELSE (* may need an error msg *)
+				END
+			ELSIF (op = T.infn) & (wy # T.fSet) OR (op = T.isfn) & (wy # T.fType) 
+				OR ~(op IN { T.infn, T.isfn }) & ~(wy IN applicants[op]) THEN 
+				Mark(-91, 6, y.pos)	(*$155*)
+			ELSIF (a # NIL) & ~valid THEN Mark(-100, 0, pos) 	(*$155*)
+			END;
+			
+		END;
+		RETURN res
+	END Dyadic;
+	
+	
+	PROCEDURE InitOperators (OUT o: Operators);	(* Implement the following chart for operator handling:	Func	Left op	Valid Right Op	Minimal Result type (correction after minimal common denom)
+	*, +, -	int	int, real	int32
+		real	int, real	
+		set	set	
+	+	char	string, char
+		string	string, char
+	/	int	int, real	real
+		real	int, real	real
+		set	set	
+	DIV, MOD	int	int	
+	&, OR	bool	bool	
+	
+	=, #, <, <=, >, >=	int	int, real	
+		real	int, real	
+		char	char, string	
+		string	string, char	
+	=, #	bool	bool	
+		set	set	
+		ptr	ptr, nil*	
+		proc	proc, nil
+		nil	ptr, proc	
+	IN	int	set	bool	*with special treatment of operand types
+	IS	ptr	type	bool	*with special treatment of operand types
+		rec	type	bool	*with special treatment of operand types
+	---------
+	* nil: is special: it is treated as a separate cluster of types in the chart, however it is included in T.pointers, which is used to implement the Valid Right Op column.
+	
+	Special treatment (not in Dyadic):
+	IN
+	IS
+*)
+		CONST int = 0; real = 1; set = 2; bool = 3; ptr = 4; proc = 5; nil = 6; char = 7; string = 8; rec = 9; type = 10;
+		VAR or: OpEntry; l: INTEGER; r: SET;
+	BEGIN
+		or.right := T.numbers; or.corr := T.inttp; l := int; o[T.timesfn, l] := or; o[T.plusfn, l] := or; o[T.minusfn, l] := or; 
+		or.corr := NIL; l := real; o[T.timesfn, l] := or; o[T.plusfn, l] := or; o[T.minusfn, l] := or; 
+		or.right := T.sets; l := set; o[T.timesfn, l] := or; o[T.plusfn, l] := or; o[T.minusfn, l] := or; 
+		
+		o[T.plusfn, string].right := T.strings + T.chars;
+		o[T.plusfn, char].right := T.strings + T.chars;
+		
+		or.right := T.numbers; or.corr := T.shortrealtp; o[T.slashfn, int] := or; o[T.slashfn, real] := or;
+		o[T.slashfn, set].right := T.sets;
+		or.right := T.integers; or.corr := NIL; o[T.divfn, int] := or; o[T.modfn, int] := or;
+		o[T.andfn, bool].right := { T.fBool }; o[T.orfn, bool].right := { T.fBool };
+		l := int; r := T.numbers;
+		o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; o[T.lssfn, l].right := r; o[T.leqfn, l].right := r; o[T.gtrfn, l].right := r; 
+		o[T.geqfn, l].right := r; 
+		l := real; r := T.numbers;
+		o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; o[T.lssfn, l].right := r; o[T.leqfn, l].right := r; o[T.gtrfn, l].right := r; 
+		o[T.geqfn, l].right := r; 
+		l := char; r := T.chars + T.strings;
+		o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; o[T.lssfn, l].right := r; o[T.leqfn, l].right := r; o[T.gtrfn, l].right := r; 
+		o[T.geqfn, l].right := r; 
+		l := string; r := T.chars + T.strings;
+		o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; o[T.lssfn, l].right := r; o[T.leqfn, l].right := r; o[T.gtrfn, l].right := r; 
+		o[T.geqfn, l].right := r; 
+		l := bool; r := { T.fBool }; o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; 
+		l := set; r := T.sets; o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; 
+		l := ptr; r := T.pointers + { T.fNil }; o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; 
+		l := proc; r := { T.fProcedure, T.fNil }; o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; 
+		l := nil; r := T.pointers + { T.fProcedure }; o[T.eqlfn, l].right := r; o[T.neqfn, l].right := r; 
+		o[T.infn, int].right := T.sets;
+		o[T.isfn, ptr].right := { T.fType }; o[T.isfn, rec].right := { T.fType };
+	END InitOperators;
+	
+	PROCEDURE Op*(op: BYTE; VAR x: HrCPT.Node; y: HrCPT.Node);
+		VAR f, g: SHORTINT; t, z: HrCPT.Node; typ: HrCPT.Struct; do: BOOLEAN; val: INTEGER;
+
+		PROCEDURE NewOp(op: BYTE; typ: HrCPT.Struct; VAR x: HrCPT.Node; y: HrCPT.Node);
+			VAR node: HrCPT.Node;
+		BEGIN
+			node := HrCPT.NewNode(Ndop); node.subcl := op; node.typ := typ;
+			node.left := x; node.right := y; x := node
+		END NewOp;
+
+	BEGIN z := x;
+		IF (z.class = Ntype) OR (z.class = Nproc) OR (y.class = Ntype) OR (y.class = Nproc) THEN err(126)
+		ELSE
+			Promote(z, y, op);
+			IF (z.class = Nconst) & (y.class = Nconst) THEN ConstOp(op, z, y)
+			ELSE
+				typ := z.typ; f := typ.form; g := y.typ.form;
+				CASE op OF
+				| times:
+					do := TRUE;
+					IF f IN intSet THEN
+						IF z.class = Nconst THEN
+							IF EqualConst(z.conval, one, f) THEN do := FALSE; z := y
+							ELSIF EqualConst(z.conval, zero, f) THEN do := FALSE
+							ELSE val := Log(z);
+								IF val >= 0 THEN
+									t := y; y := z; z := t;
+									op := ash; y.typ := HrCPT.int32typ; y.conval.intval := val; y.obj := NIL
+								END
+							END
+						ELSIF y.class = Nconst THEN
+							IF EqualConst(y.conval, one, f) THEN do := FALSE
+							ELSIF EqualConst(y.conval, zero, f) THEN do := FALSE; z := y
+							ELSE val := Log(y);
+								IF val >= 0 THEN
+									op := ash; y.typ := HrCPT.int32typ; y.conval.intval := val; y.obj := NIL
+								END
+							END
+						END
+					ELSIF ~(f IN {Undef, Real32..Set}) THEN err(105); typ := HrCPT.undftyp
+					END ;
+					IF do THEN NewOp(op, typ, z, y) END;
+				| slash:
+					IF f IN realSet THEN (* OK *)
+					ELSIF (f # Set) & (f # Undef) THEN err(102); typ := HrCPT.undftyp
+					END ;
+					NewOp(op, typ, z, y)
+				| div:
+					do := TRUE;
+					IF f IN intSet THEN
+						IF y.class = Nconst THEN
+							IF EqualConst(y.conval, zero, f) THEN err(205)
+							ELSIF EqualConst(y.conval, one, f) THEN do := FALSE
+							ELSE val := Log(y);
+								IF val >= 0 THEN
+									op := ash; y.typ := HrCPT.int32typ; y.conval.intval := -val; y.obj := NIL
+								END
+							END
+						END
+					ELSIF f # Undef THEN err(103); typ := HrCPT.undftyp
+					END ;
+					IF do THEN NewOp(op, typ, z, y) END;
+				| mod:
+					IF f IN intSet THEN
+						IF y.class = Nconst THEN
+							IF EqualConst(y.conval, zero, f) THEN err(205)
+							ELSE val := Log(y);
+								IF val >= 0 THEN
+									op := msk; y.conval.intval := ASH(-1, val); y.obj := NIL
+								END
+							END
+						END
+					ELSIF f # Undef THEN err(104); typ := HrCPT.undftyp
+					END ;
+					NewOp(op, typ, z, y);
+				| and:
+					IF f = Bool THEN
+						IF z.class = Nconst THEN
+							IF IntToBool(z.conval.intval) THEN z := y END
+						ELSIF (y.class = Nconst) & IntToBool(y.conval.intval) THEN (* optimize z & TRUE -> z *)
+						ELSE NewOp(op, typ, z, y)
+						END
+					ELSIF f # Undef THEN err(94); z.typ := HrCPT.undftyp
+					END
+				| plus:
+					IF ~(f IN {Undef, Int8..Set, Int64, String8, String16}) THEN err(105); typ := HrCPT.undftyp END;
+					do := TRUE;
+					IF f IN intSet THEN
+						IF (z.class = Nconst) & EqualConst(z.conval, zero, f) THEN do := FALSE; z := y END ;
+						IF (y.class = Nconst) & EqualConst(y.conval, zero, f) THEN do := FALSE END
+					ELSIF f IN {String8, String16} THEN
+						IF (z.class = Nconst) & (z.conval.intval2 = 1) THEN do := FALSE; z := y END ;
+						IF (y.class = Nconst) & (y.conval.intval2 = 1) THEN do := FALSE END;
+						IF do THEN
+							IF z.class = Ndop THEN
+								t := z; WHILE t.right.class = Ndop DO t := t.right END;
+								IF (t.right.class = Nconst) & (y.class = Nconst) THEN
+									ConstOp(op, t.right, y); do := FALSE
+								ELSIF (t.right.class = Nconst) & (y.class = Ndop) & (y.left.class = Nconst) THEN
+									ConstOp(op, t.right, y.left); y.left := t.right; t.right := y; do := FALSE
+								ELSE
+									NewOp(op, typ, t.right, y); do := FALSE
+								END
+							ELSE
+								IF (z.class = Nconst) & (y.class = Ndop) & (y.left.class = Nconst) THEN
+									ConstOp(op, z, y.left); y.left := z; z := y; do := FALSE
+								END
+							END
+						END
+					END ;
+					IF do THEN NewOp(op, typ, z, y) END;
+				| minus:
+					IF ~(f IN {Undef, Int8..Set, Int64}) THEN err(106); typ := HrCPT.undftyp END;
+					IF ~(f IN intSet) OR (y.class # Nconst) OR ~EqualConst(y.conval, zero, f) THEN NewOp(op, typ, z, y)
+					END;
+				| min, max:
+					IF ~(f IN {Undef} + intSet + realSet + charSet) THEN err(111); typ := HrCPT.undftyp END;
+					NewOp(op, typ, z, y);
+				| or:
+					IF f = Bool THEN
+						IF z.class = Nconst THEN
+							IF ~IntToBool(z.conval.intval) THEN z := y END
+						ELSIF (y.class = Nconst) & ~IntToBool(y.conval.intval) THEN (* optimize z OR FALSE -> z *)
+						ELSE NewOp(op, typ, z, y)
+						END
+					ELSIF f # Undef THEN err(95); z.typ := HrCPT.undftyp
+					END
+				| eql, neq, lss, leq, gtr, geq:
+					IF f IN {String8, String16} THEN
+						IF (f = String16) & (z.class = Nmop) & (z.subcl = conv) & (y.class = Nmop) & (y.subcl = conv) THEN
+							z := z.left; y := y.left	(* remove LONG on both sides *)
+						ELSIF (z.class = Nconst) & (z.conval.intval2 = 1) & (y.class = Nderef) THEN (* y$ = "" -> y[0] = 0X *)
+							y := y.left; Index(y, NewIntConst(0)); z.typ := y.typ; z.conval.intval := 0; z.obj := NIL
+						ELSIF (y.class = Nconst) & (y.conval.intval2 = 1) & (z.class = Nderef) THEN (* z$ = "" -> z[0] = 0X *)
+							z := z.left; Index(z, NewIntConst(0)); y.typ := z.typ; y.conval.intval := 0; y.obj := NIL
+						END;
+						typ := HrCPT.booltyp
+					ELSIF (f IN {Undef, Char8..Real64, Char16, Int64})
+							OR (op <= neq) & ((f IN {Bool, Set, NilTyp, Pointer, ProcTyp}) OR (typ = HrCPT.guidtyp)) THEN
+						typ := HrCPT.booltyp
+					ELSE err(107); typ := HrCPT.undftyp
+					END;
+					NewOp(op, typ, z, y)
+				END
+			END
+		END;
+		x := z
+	END Op;
+	
+	PROCEDURE (b: Builder) SetRange* (from, to: T.Expression): T.Expression, NEW, EXTENSIBLE;
+		VAR res: T.Expression; f, t: INTEGER; fbad, tbad: BOOLEAN; 
+		set: SET;
+	BEGIN res := T.errex;
+		IF (from = b.incompdes) OR (to = b.incompdes) THEN HALT(20) END;
+		(**)
+		fbad := ~(from.type.what IN integers); IF fbad THEN Mark(-93, 1, from.pos) END;	(*$134*)
+		tbad := ~(to.type.what IN integers); IF tbad THEN Mark(-93, 1, to.pos) END;	(*$134*)
+		IF ~fbad & ~tbad THEN
+			IF (T.const IN from.flags) & (T.const IN to.flags) THEN 
+				f := EvalInt(from); t := EvalInt(to); fbad := FALSE;
+				fbad := (f < 0) OR (HrM.MaxSet < f); IF fbad THEN Mark(-202, 1, from.pos) END;	(*$134*)
+				tbad := (t < 0) OR (HrM.MaxSet < t); IF tbad THEN Mark(-202, 1, to.pos) END;	(*$134*)
+				IF ~fbad & ~tbad THEN 
+					IF f > t THEN Err(-201, 1) ELSE res := T.ThisRange(f, t); res.pos := from.pos END	(*$134*)
+				END
+			ELSE res := NewOpTyp(T.range, from, to, T.settp); res.pos := from.pos
+			END
+		END;
+		ASSERT(res # NIL, 60);
+		RETURN res
+	END SetRange;
+
+	PROCEDURE SetRange*(VAR x: HrCPT.Node; y: HrCPT.Node);
+		VAR k, l: INTEGER; bad: BOOLEAN;
+	BEGIN
+		IF (x.class = Ntype) OR (x.class = Nproc) OR (y.class = Ntype) OR (y.class = Nproc) THEN err(126)	
+		ELSIF (x.typ.form IN intSet) & (y.typ.form IN intSet) THEN
+			IF x.typ.form = Int64 THEN Convert(x, HrCPT.int32typ) END;
+			IF y.typ.form = Int64 THEN Convert(y, HrCPT.int32typ) END;
+			bad := FALSE;
+			IF x.class = Nconst THEN
+				k := x.conval.intval;
+				IF (0 > k) OR (k > HrM.MaxSet) OR (x.conval.realval # 0) THEN err(202); bad := TRUE END
+			END ;
+			IF y.class = Nconst THEN
+				l := y.conval.intval;
+				IF (0 > l) OR (l > HrM.MaxSet) OR (y.conval.realval # 0) THEN err(202); bad := TRUE END
+			END ;
+			IF bad THEN x.conval.setval := {}; x.obj := NIL
+			ELSIF (x.class = Nconst) & (y.class = Nconst) THEN
+				IF k <= l THEN
+					x.conval.setval := {k..l}
+				ELSE err(201); x.conval.setval := {l..k}
+				END ;
+				x.obj := NIL
+			ELSE BindNodes(Nupto, HrCPT.settyp, x, y)
+			END
+		ELSE err(93)
+		END ;
+		x.typ := HrCPT.settyp
+	END SetRange;
+	
+	PROCEDURE (b: Builder) SetElem* (e: T.Expression): T.Expression, NEW, EXTENSIBLE;
+		VAR res: T.Expression; v: LONGINT;
+	BEGIN res := T.errex;
+		IF e.type.what IN integers THEN
+			WITH e: T.Int DO v := e.long;
+				IF (v < 0) OR (HrM.MaxSet < v) THEN Err(-202, 1); res := T.empset 
+				ELSE res := T.ThisRange(SHORT(v), SHORT(v)); res.pos := e.pos
+				END
+			ELSE res := NewOpTyp(T.range, e, NIL, T.settp); res.pos := e.pos
+			END
+		ELSE Err(-93, 1)
+		END;
+		ASSERT(res # NIL, 60);
+		RETURN res
+	END SetElem;
+	
+
+	PROCEDURE SetElem*(VAR x: HrCPT.Node);
+		VAR k: INTEGER;
+	BEGIN
+		IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126) END;
+		IF x.typ.form IN intSet THEN
+			IF x.typ.form = Int64 THEN Convert(x, HrCPT.int32typ) END;
+			IF x.class = Nconst THEN
+				k := x.conval.intval;
+				IF (0 <= k) & (k <= HrM.MaxSet) & (x.conval.realval = 0) THEN x.conval.setval := {k}
+				ELSE err(202)
+				END ;
+				x.obj := NIL
+			ELSE BindNodes(Nmop, HrCPT.settyp, x, NIL); x.subcl := bit
+			END ;
+		ELSE err(93)
+		END;
+		x.typ := HrCPT.settyp
+	END SetElem;
+	
+	PROCEDURE (b: Builder) Cast* (ex: T.Expression; to: INTEGER): T.Expression, NEW, EXTENSIBLE;
+	BEGIN RETURN ex
+	END Cast;
+	
+	PROCEDURE (b: Builder) CheckAssign* (to: T.Type; ex: T.Expression): T.Expression, NEW, EXTENSIBLE;
+		VAR v, towhat, ew: INTEGER; from: T.Type; res: T.Expression; arr: T.Array; proc: T.Proc;
+	BEGIN from := ex.type;
+		(*IF ~(to IS T.Procedure) & (ex IS T.ProcDes) THEN err(-500); HALT(4); to := T.errtp END;*)
+		(*IF ex IS T.TypeDes THEN err(-501); to := T.errtp END;*)
+		towhat := to.what; ew := from.what;
+		res := T.errex;
+		IF (ex.type = T.errtp) OR (to = T.errtp) THEN	(* suppress further error messages *)
+		ELSIF (ew IN T.basics) & (towhat IN T.basics) THEN 
+			IF towhat = ew THEN res := ex
+			ELSE res := CheckConvert(ex, to); IF res = NIL THEN Err(-113, 10); res := T.errex END 	(*$158*)
+			END
+		ELSE
+			WITH 
+			
+			| to : T.Procedure DO 
+				IF ew # T.fProcedure THEN Err(-113, 14) 
+				ELSE 
+					IF T.EqualTypes(to, from) OR (from.what = T.fNil) THEN (* ok *) res := ex
+						(* how about checking different calling conventions? *)
+					ELSE
+						 (*check calling conventions & (to.flags*)
+						WITH ex: T.ProcDes DO proc := ex.proc;
+							WITH proc: T.LProc DO HALT(126)  ELSE END;
+							res := ex;
+							IF ~(proc.owner IS T.Mod) THEN Err(-73, 0); res := T.errex END;
+							IF to.flags * T.pfMask # proc.flags * T.pfMask THEN Err(-73, 1); res := T.errex END;
+							IF ~T.MatchingPars(to.par, proc.par, to.res, proc.type, FALSE) THEN 
+								Err(-73, 2); res := T.errex 
+							END
+						(* other designators may yield procedures as well... *)
+						ELSE Err(-113, 18)
+						END
+					END
+				END
+			| to: T.SysPtr DO IF from IS T.Pointer THEN res := ex ELSE Err(-113, 3) END
+			| to: T.ArrayPtr DO arr := to.base;
+				IF ew IN { T.fNil, T.fSysPtr } THEN res := ex
+				ELSIF T.EqualTypes(to, from) THEN res := ex
+				ELSIF { T.untagged, T.open } * arr.flags = { T.untagged, T.open } THEN
+					(* to: POINTER TO ARRAY [untagged] OF arr.elTyp *)
+					IF ex.type.what = T.fNil THEN res := ex
+					ELSIF T.const IN ex.flags THEN CheckString2(ex, arr, -113, 16); res := ex 
+					ELSIF (from.what # T.fArray) OR ~T.EqualTypes(arr.elTyp, from(T.Array).elTyp) THEN Err(-113, 17)
+					(*ELSIF (from.what = T.fArray) & T.EqualTypes(arr.elTyp, from(T.Array).elTyp) THEN res := ex
+					ELSIF (from.what # T.fArrayPtr) OR ~T.EqualTypes(arr.elTyp, from(T.ArrayPtr).base.elTyp) THEN 
+						Err(-113, 17) *)
+					ELSE res := ex
+					END
+				ELSIF (ew = T.fInt64) & (ex IS T.Op) & (ex(T.Op).what = T.adrfn) THEN HALT(126)
+				ELSE Err(-113, 19)
+				END
+			| to: T.Pointer DO 
+				IF ew = T.fNil THEN res := ex
+				(*ELSIF (y = T.anytptrtp) & CpjsM.isJava THEN (* ok *)*)
+				ELSIF T.Is(from, to) THEN res := ex
+				(*ELSIF pointer to untagged open array, p := ADR(r), jstr ...*)
+				ELSE Err(-113, 15)
+				END
+			| to: T.Record DO 	(* should dereferecing be done here? *)
+				IF ~T.EqualTypes(to, from) THEN Err(-113, 1) 	(*$158*)
+				ELSIF to.flags * {T.abstract, T.limited, T.extensible} # {} THEN Err(-113, 2) 	(*$158*)
+				ELSE res := ex
+				END
+				(*...*)
+			| to: T.Array DO 
+				IF ex.type = T.errtp THEN (* suppress further error messages *)
+				ELSIF ew IN T.chars + T.strings THEN 
+					IF to.elTyp.what = T.fChar8 THEN to := T.shortstrtp 
+					ELSIF to.elTyp.what = T.fChar16 THEN to := T.strtp
+					ELSE to := NIL
+					END;
+					IF to # NIL THEN 
+						res := CheckConvert(ex, to); IF res = NIL THEN Err(-113, 12); res := T.errex END 	(*$157*)
+					ELSE Err(-113, 13) 	(*$157*)
+					END
+				
+				ELSIF (T.open IN to.flags) OR (T.open IN from.flags) THEN Err(-113, 11) 	(*$118*)
+				ELSIF ~T.EqualTypes(to, from) THEN Err(-113, 5) 	(*$118*)
+				ELSE res := ex
+				END
+			ELSE Err(-113, 0)	(*$158*)
+			END
+		END;
+		RETURN res
+	END CheckAssign;
+
+	PROCEDURE (b: Builder) CheckAssignNew* (to: T.Type; ex: T.Expression): T.Expression, NEW, EXTENSIBLE;
+		VAR res: T.Expression;
+	BEGIN res := CheckConvert(ex, to); IF res = NIL THEN Err(-113, 10); res := T.errex END; RETURN res
+	END CheckAssignNew;
+	
+	PROCEDURE CheckAssign* (x: HrCPT.Struct; VAR ynode: HrCPT.Node);
+	(* x := y, checks assignment compatibility *)
+		VAR f, g: SHORTINT; y, b: HrCPT.Struct;
+	BEGIN
+		y := ynode.typ; f := x.form; g := y.form;
+		IF (ynode.class = Ntype) OR (ynode.class = Nproc) & (f # ProcTyp) THEN err(126) END ;
+		CASE f OF
+		| Undef, String8, String16, Byte:
+		| Bool, Set, T.fJString:
+			IF g # f THEN err(113) END
+		| Int8, Int16, Int32, Int64, Real32, Real64:	(* SR *)
+			IF (g IN intSet) OR (g IN realSet) & (f IN realSet) THEN
+				IF ynode.class = Nconst THEN Convert(ynode, x)
+				ELSIF ~HrCPT.Includes(f, g) THEN err(113)
+				END
+			ELSE err(113)
+			END
+(*			
+			IF ~(g IN intSet + realSet) OR ~CpjsCPT.Includes(f, g) & (~(g IN intSet) OR (ynode.class # Nconst)) THEN
+				err(113)
+			ELSIF ynode.class = Nconst THEN Convert(ynode, x)
+			END
+*)
+		| Char8, Char16:
+			IF ~(g IN charSet) OR ~HrCPT.Includes(f, g) THEN err(113)
+			ELSIF ynode.class = Nconst THEN Convert(ynode, x)
+			END
+		| Pointer:
+			b := x.BaseTyp;
+			IF HrCPT.Extends(y, x)
+				OR (g = NilTyp)
+				OR (g = Pointer)
+					& ((x = HrCPT.sysptrtyp) OR (HrM.java IN HrM.options) & (x = HrCPT.anyptrtyp))
+			THEN (* ok *)
+			ELSIF (b.comp = DynArr) & b.untagged THEN	(* pointer to untagged open array *)
+				IF ynode.class = Nconst THEN CheckString(ynode, b, 113)
+				ELSIF ~(y.comp IN {Array, DynArr}) OR ~HrCPT.EqualType(b.BaseTyp, y.BaseTyp) THEN err(113)
+				END
+			ELSIF b.untagged & (ynode.class = Nmop) & (ynode.subcl = adr) THEN	(* p := ADR(r) *)
+				IF (b.comp = DynArr) & (ynode.left.class = Nconst) THEN CheckString(ynode.left, b, 113)
+				ELSIF ~HrCPT.Extends(ynode.left.typ, b) THEN err(113)
+				END
+			ELSIF (b.sysflag = jstr) & ((g = String16) OR (ynode.class = Nconst) & (g IN {Char8, Char16, String8}))
+			THEN
+				IF g # String16 THEN Convert(ynode, HrCPT.string16typ) END
+			ELSE err(113)
+			END
+		| ProcTyp:
+			IF HrCPT.EqualType(x, y) OR (g = NilTyp) THEN (* ok *)
+			ELSIF (ynode.class = Nproc) & (ynode.obj.mode IN {XProc, IProc, LProc}) THEN
+				IF ynode.obj.mode = LProc THEN
+					IF ynode.obj.mnolev = 0 THEN ynode.obj.mode := XProc ELSE err(73) END
+				END;
+				IF (x.sysflag = 0) & (ynode.obj.sysflag >= 0) OR (x.sysflag = ynode.obj.sysflag) THEN
+					IF HrCPT.EqualType(x.BaseTyp, ynode.obj.typ) THEN CheckParameters(x.link, ynode.obj.link, FALSE)
+					ELSE err(117)
+					END
+				ELSE err(113)
+				END
+			ELSE err(113)
+			END
+		| NoTyp, NilTyp: err(113)
+		| Comp:
+			x.pvused := TRUE;	(* idfp of y guarantees assignment compatibility with x *)
+			IF x.comp = Record THEN
+				IF ~HrCPT.EqualType(x, y) OR (x.attribute # 0) THEN err(113) END
+			ELSIF g IN {Char8, Char16, String8, String16} THEN
+				IF (x.BaseTyp.form = Char16) & (g = String8) THEN Convert(ynode, HrCPT.string16typ)
+				ELSE CheckString(ynode, x, 113);
+				END;
+				IF (x # HrCPT.guidtyp) & (x.comp = Array) & (ynode.class = Nconst) & (ynode.conval.intval2 > x.n) THEN
+					err(114)
+				END
+			ELSIF (x.comp = Array) & HrCPT.EqualType(x, y) THEN (* ok *)
+			ELSE err(113)
+			END
+		END
+	END CheckAssign;
+	
+	PROCEDURE AssignString (VAR x: HrCPT.Node; str: HrCPT.Node);	(* x := str or x[0] := 0X *)
+	BEGIN
+		ASSERT((str.class = Nconst) & (str.typ.form IN {String8, String16}));
+		IF (x.typ.comp IN {Array, DynArr}) & (str.conval.intval2 = 1) THEN	(* x := "" -> x[0] := 0X *)
+			Index(x, NewIntConst(0));
+			str.typ := x.typ; str.conval.intval := 0; str.obj := NIL
+		END;
+		BindNodes(Nassign, HrCPT.notyp, x, str); x.subcl := assign
+	END AssignString;
+	
+	PROCEDURE MarkReferenced (e: T.Expression; dynArrToo: BOOLEAN);
+		VAR g: T.Expression;
+	BEGIN
+		WITH e: T.Op DO IF e.what = T.valfn THEN g := e.a END ELSE END; IF g # NIL THEN e := g; g := NIL END;
+		WITH e: T.GuardDes DO g := e.what ELSE END; IF g # NIL THEN e := g; g := NIL END;
+		WITH e: T.VarDes DO 
+			IF dynArrToo OR ~((e.type IS T.Array) & (T.open IN e.type.flags)) THEN INCL(e.var.flags, T.ref) END
+		ELSE 
+		END
+	END MarkReferenced;
+	
+	PROCEDURE CheckLeaf(x: HrCPT.Node; dynArrToo: BOOLEAN);
+	BEGIN
+		IF (x.class = Nmop) & (x.subcl = val) THEN x := x.left END ;
+		IF x.class = Nguard THEN x := x.left END ;	(* skip last (and unique) guard *)
+		IF (x.class = Nvar) & (dynArrToo OR (x.typ.comp # DynArr)) THEN x.obj.leaf := FALSE END
+	END CheckLeaf;
+	
+	PROCEDURE CheckOldType (x: HrCPT.Node);
+	BEGIN
+		IF ~(HrM.oberon IN HrM.options)
+			& ((x.typ = HrCPT.lreal64typ) OR (x.typ = HrCPT.lint64typ) OR (x.typ = HrCPT.lchar16typ)) THEN
+			err(198)
+		END
+	END CheckOldType;
+	
+	PROCEDURE ConvFunc (e: T.Expression; t: T.Type; valid: SET; suberr: INTEGER): T.Expression;
+		VAR res: T.Expression;
+	BEGIN res := T.errex;
+		IF e.type.what IN valid THEN res := ForceConvert(e, t) ELSE Mark(-111, suberr, e.pos) END;	(*$137+*)
+		RETURN res
+	END ConvFunc;
+	
+	(*StPar0*)
+	
+	PROCEDURE StPar0*(VAR par0: HrCPT.Node; fctno: SHORTINT);	(* par0: first param of standard proc *)
+		VAR f: SHORTINT; typ: HrCPT.Struct; x: HrCPT.Node;
+	BEGIN x := par0; f := x.typ.form;
+		CASE fctno OF
+		  haltfn: (*HALT*)
+				IF (f IN intSet - {Int64}) & (x.class = Nconst) THEN
+					IF (HrM.MinHaltNr <= x.conval.intval) & (x.conval.intval <= HrM.MaxHaltNr) THEN
+						BindNodes(Ntrap, HrCPT.notyp, x, x)
+					ELSE err(218)
+					END
+				ELSIF (HrM.java IN HrM.options)			
+					& ((x.class = Ntype) OR (x.class = Nvar))
+					& (x.typ.form = Pointer)
+				THEN
+					BindNodes(Ntrap, HrCPT.notyp, x, x)
+				ELSE err(69)
+				END ;
+				x.typ := HrCPT.notyp
+		| newfn: (*NEW*)
+				typ := HrCPT.notyp;
+				IF NotVar(x) THEN err(112)
+				ELSIF f = Pointer THEN
+					IF HrM.NEWusingAdr THEN CheckLeaf(x, TRUE) END ;
+					IF x.readonly THEN err(76)
+					ELSIF (x.typ.BaseTyp.attribute = absAttr)
+						OR (x.typ.BaseTyp.attribute = limAttr) & (x.typ.BaseTyp.mno # 0) THEN err(193)
+					ELSIF (x.obj # NIL) & ODD(x.obj.sysflag DIV newBit) THEN err(167)
+					END ;
+					MarkAsUsed(x);
+					f := x.typ.BaseTyp.comp;
+					IF f IN {Record, DynArr, Array} THEN
+						IF f = DynArr THEN typ := x.typ.BaseTyp END ;
+						BindNodes(Nassign, HrCPT.notyp, x, NIL); x.subcl := newfn
+					ELSE err(111)
+					END
+				ELSE err(111)
+				END ;
+				x.typ := typ
+		| absfn: (*ABS*)
+				MOp(abs, x)
+		| capfn: (*CAP*)
+				MOp(cap, x)
+		| ordfn: (*ORD*) 
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f = Char8 THEN Convert(x, HrCPT.int16typ)
+				ELSIF f = Char16 THEN Convert(x, HrCPT.int32typ)
+				ELSIF f = Set THEN Convert(x, HrCPT.int32typ)
+				ELSE err(111)
+				END
+		| bitsfn: (*BITS*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN {Int8, Int16, Int32} THEN Convert(x, HrCPT.settyp)
+				ELSE err(111)
+				END
+		| entierfn: (*ENTIER*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN realSet THEN Convert(x, HrCPT.int64typ)
+				ELSE err(111)
+				END ;
+				x.typ := HrCPT.int64typ
+		| lentierfcn: (* LENTIER *)
+				IF ~(HrM.oberon IN HrM.options) THEN err(199) END;
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN realSet THEN Convert(x, HrCPT.int64typ)
+				ELSE err(111)
+				END ;
+				x.typ := HrCPT.int64typ
+		| oddfn: (*ODD*)
+				MOp(odd, x)
+		| minfn: (*MIN*)
+				IF x.class = Ntype THEN
+					CheckOldType(x);
+					CASE f OF
+					  Bool:  x := NewBoolConst(FALSE)
+					| Char8:  x := NewIntConst(0); x.typ := HrCPT.char8typ
+					| Char16:  x := NewIntConst(0); x.typ := HrCPT.char8typ
+					| Int8:  x := NewIntConst(-128)
+					| Int16:   x := NewIntConst(-32768)
+					| Int32:  x := NewIntConst(-2147483648)
+					| Int64:  x := NewLargeIntConst(0, -9223372036854775808.0E0)	(* -2^63 *)
+					| Set:   x := NewIntConst(0) (*; x.typ := CpjsCPT.int16typ *)
+					| Real32:  x := NewRealConst(HrM.MinReal32, HrCPT.real64typ)
+					| Real64: x := NewRealConst(HrM.MinReal64, HrCPT.real64typ)
+					ELSE err(111)
+					END;
+					x.hint := 1
+				ELSIF ~(f IN intSet + realSet + charSet) THEN err(111)
+				END
+		| maxfn: (*MAX*)
+				IF x.class = Ntype THEN
+					CheckOldType(x);
+					CASE f OF
+					  Bool:  x := NewBoolConst(TRUE)
+					| Char8:  x := NewIntConst(0FFH); x.typ := HrCPT.char8typ
+					| Char16:  x := NewIntConst(0FFFFH); x.typ := HrCPT.char16typ
+					| Int8:  x := NewIntConst(127)
+					| Int16:   x := NewIntConst(32767)
+					| Int32:  x := NewIntConst(2147483647)
+					| Int64:  x := NewLargeIntConst(-1, 9223372036854775808.0E0)	(* 2^63 - 1 *)
+					| Set:   x := NewIntConst(31) (*; x.typ := CpjsCPT.int16typ *)
+					| Real32:  x := NewRealConst(HrM.MaxReal32, HrCPT.real64typ)
+					| Real64: x := NewRealConst(HrM.MaxReal64, HrCPT.real64typ)
+					ELSE err(111)
+					END;
+					x.hint := 1
+				ELSIF ~(f IN intSet + realSet + charSet) THEN err(111)
+				END
+		| chrfn: (*CHR*) 
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN {Undef, Int8..Int32, Int64} THEN Convert(x, HrCPT.char16typ)
+				ELSE err(111); x.typ := HrCPT.char16typ
+				END
+		| lchrfn: (* LCHR *)
+				IF ~(HrM.oberon IN HrM.options) THEN err(199) END;
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN {Undef, Int8..Int32, Int64} THEN Convert(x, HrCPT.char16typ)
+				ELSE err(111); x.typ := HrCPT.char16typ
+				END
+		| shortfn: (*SHORT*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSE
+					IF (x.typ.comp IN {Array, DynArr}) & (x.typ.BaseTyp.form IN charSet) THEN StrDeref(x); f := x.typ.form
+					END;
+					IF f = Int16 THEN Convert(x, HrCPT.int8typ)
+					ELSIF f = Int32 THEN Convert(x, HrCPT.int16typ)
+					ELSIF f = Int64 THEN Convert(x, HrCPT.int32typ)
+					ELSIF f = Real64 THEN Convert(x, HrCPT.real32typ)
+					ELSIF f = Char16 THEN Convert(x, HrCPT.char8typ)
+					ELSIF f = String16 THEN Convert(x, HrCPT.string8typ)
+					ELSE err(111)
+					END
+				END
+		| longfn: (*LONG*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSE
+					IF (x.typ.comp IN {Array, DynArr}) & (x.typ.BaseTyp.form IN charSet) THEN StrDeref(x); f := x.typ.form
+					END;
+					IF f = Int8 THEN Convert(x, HrCPT.int16typ)
+					ELSIF f = Int16 THEN Convert(x, HrCPT.int32typ)
+					ELSIF f = Int32 THEN Convert(x, HrCPT.int64typ)
+					ELSIF f = Real32 THEN Convert(x, HrCPT.real64typ)
+					ELSIF f = Char8 THEN Convert(x, HrCPT.char16typ)
+					ELSIF f = String8 THEN Convert(x, HrCPT.string16typ)
+					ELSE err(111)
+					END
+				END
+		| incfn, decfn: (*INC, DEC*) 
+				IF NotVar(x) THEN err(112)
+				ELSIF ~(f IN intSet) THEN err(111)
+				ELSIF x.readonly THEN err(76)
+				END;
+				MarkAsUsed(x)
+		| inclfn, exclfn: (*INCL, EXCL*)
+				IF NotVar(x) THEN err(112)
+				ELSIF f # Set THEN err(111); x.typ := HrCPT.settyp
+				ELSIF x.readonly THEN err(76)
+				END;
+				MarkAsUsed(x)
+		| lenfn: (*LEN*)
+				IF (* (x.class = Ntype) OR *) (x.class = Nproc) THEN err(126)	(* !!! *)
+				(* ELSIF x.typ.sysflag = jstr THEN StrDeref(x) *)
+				ELSE
+					IF x.typ.form = Pointer THEN DeRef(x) END;
+					IF x.class = Nconst THEN
+						IF x.typ.form = Char8 THEN CharToString8(x)
+						ELSIF x.typ.form = Char16 THEN CharToString16(x)
+						END
+					END;
+					IF ~(x.typ.comp IN {DynArr, Array}) & ~(x.typ.form IN {String8, String16}) THEN err(131) END
+				END
+		| copyfn: (*COPY*)
+				IF ~(HrM.oberon IN HrM.options) THEN err(199) END;
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126) END
+		| ashfn: (*ASH*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN intSet THEN
+					IF f < Int32 THEN Convert(x, HrCPT.int32typ) END
+				ELSE err(111); x.typ := HrCPT.int32typ
+				END
+		| adrfn: (*ADR*)
+				IF x.class = Ntype THEN CheckOldType(x) END;
+				CheckLeaf(x, FALSE); MOp(adr, x)
+		| typfn: (*TYP*)
+				CheckLeaf(x, FALSE);
+				IF x.class = Ntype THEN
+					CheckOldType(x);
+					IF x.typ.form = Pointer THEN x := NewLeaf(x.typ.BaseTyp.strobj) END;
+					IF x.typ.comp # Record THEN err(111) END;
+					MOp(adr, x)
+				ELSE
+					IF x.typ.form = Pointer THEN DeRef(x) END;
+					IF x.typ.comp # Record THEN err(111) END;
+					MOp(typfn, x)
+				END
+		| sizefn: (*SIZE*)
+				IF x.class # Ntype THEN err(110); x := NewIntConst(1)
+				ELSIF (f IN {Byte..Set, Pointer, ProcTyp, Char16, Int64}) OR (x.typ.comp IN {Array, Record}) THEN
+					CheckOldType(x); x.typ.pvused := TRUE;
+					IF typSize # NIL THEN
+						typSize(x.typ); x := NewIntConst(x.typ.size)
+					ELSE
+						MOp(size, x )
+					END
+				ELSE err(111); x := NewIntConst(1)
+				END
+		| thisrecfn, (*THISRECORD*)
+		  thisarrfn: (*THISARRAY*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN {Int8, Int16} THEN Convert(x, HrCPT.int32typ)
+				ELSIF f # Int32 THEN err(111)
+				END
+		| ccfn: (*SYSTEM.CC*)
+				MOp(cc, x)
+		| lshfn, rotfn: (*SYSTEM.LSH, SYSTEM.ROT*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF ~(f IN intSet + charSet + {Byte, Set}) THEN err(111)
+				END
+		| getfn, putfn, bitfn, movefn: (*SYSTEM.GET, SYSTEM.PUT, SYSTEM.BIT, SYSTEM.MOVE*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF (x.class = Nconst) & (f IN {Int8, Int16}) THEN Convert(x, HrCPT.int32typ)
+				ELSIF ~(f IN {Int32, Pointer}) THEN err(111); x.typ := HrCPT.int32typ
+				END
+		| getrfn, putrfn: (*SYSTEM.GETREG, SYSTEM.PUTREG*)
+				IF (f IN intSet) & (x.class = Nconst) THEN
+					IF (x.conval.intval < HrM.MinRegNr) OR (x.conval.intval > HrM.MaxRegNr) THEN err(220)
+					END
+				ELSE err(69)
+				END
+		| valfn: (*SYSTEM.VAL*)
+				IF x.class # Ntype THEN err(110)
+				ELSIF (f IN {Undef, String8, String16, NoTyp, NilTyp}) (* OR (x.typ.comp = DynArr) *) THEN err(111)
+				ELSE CheckOldType(x)
+				END
+		| assertfn: (*ASSERT*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126); x := NewBoolConst(FALSE)
+				ELSIF f # Bool THEN err(120); x := NewBoolConst(FALSE)
+				ELSE MOp(not, x)
+				END
+		| validfn: (* VALID *)
+				IF (x.class = Nvarpar) & ODD(x.obj.sysflag DIV nilBit) THEN
+					MOp(adr, x); x.typ := HrCPT.sysptrtyp; Op(neq, x, Nil())
+				ELSE err(111)
+				END;
+				x.typ := HrCPT.booltyp
+		| iidfn: (* COM.IID *)
+				IF (x.class = Nconst) & (f = String8) THEN StringToGuid(x)
+				ELSE
+					typ := x.typ;
+					IF typ.form = Pointer THEN typ := typ.BaseTyp END;
+					IF (typ.sysflag = interface) & (typ.ext # NIL) & (typ.strobj # NIL) THEN
+						IF x.obj # typ.strobj THEN x := NewLeaf(typ.strobj) END
+					ELSE err(111)
+					END;
+					x.class := Nconst; x.typ := HrCPT.guidtyp
+				END
+		| queryfn: (* COM.QUERY *)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f # Pointer THEN err(111)
+				END
+		END ;
+		par0 := x
+	END StPar0;
+
+	PROCEDURE StPar1*(VAR par0: HrCPT.Node; x: HrCPT.Node; fctno: BYTE);
+	(* x: second parameter of standard proc *)
+		VAR f, n, L, i: INTEGER; typ, tp1: HrCPT.Struct; p, t: HrCPT.Node;
+		
+		PROCEDURE NewOp(class, subcl: BYTE; left, right: HrCPT.Node): HrCPT.Node;
+			VAR node: HrCPT.Node;
+		BEGIN
+			node := HrCPT.NewNode(class); node.subcl := subcl;
+			node.left := left; node.right := right; RETURN node
+		END NewOp;
+		
+	BEGIN p := par0; f := x.typ.form;
+		CASE fctno OF
+		  incfn, decfn: (*INC DEC*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126); p.typ := HrCPT.notyp
+				ELSE
+					IF f # p.typ.form THEN
+						IF f IN intSet THEN Convert(x, p.typ)
+						ELSE err(111)
+						END
+					END ;
+					p := NewOp(Nassign, fctno, p, x);
+					p.typ := HrCPT.notyp
+				END
+		| inclfn, exclfn: (*INCL, EXCL*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN intSet THEN
+					IF f = Int64 THEN Convert(x, HrCPT.int32typ) END;
+					IF (x.class = Nconst) & ((0 > x.conval.intval) OR (x.conval.intval > HrM.MaxSet)) THEN err(202)
+					END ;
+					p := NewOp(Nassign, fctno, p, x)
+				ELSE err(111)
+				END ;
+				p.typ := HrCPT.notyp
+		| lenfn: (*LEN*)
+				IF ~(f IN intSet) OR (x.class # Nconst) THEN err(69)
+				ELSE
+					IF f = Int64 THEN Convert(x, HrCPT.int32typ) END;
+					L := SHORT(x.conval.intval); typ := p.typ;
+					WHILE (L > 0) & (typ.comp IN {DynArr, Array}) DO typ := typ.BaseTyp; DEC(L) END ;
+					IF (L # 0) OR ~(typ.comp IN {DynArr, Array}) THEN err(132)
+					ELSE x.obj := NIL;
+						IF typ.comp = DynArr THEN
+							WHILE p.class = Nindex DO
+								p := p.left; INC(x.conval.intval) (* possible side effect ignored *)
+							END;
+							p := NewOp(Ndop, len, p, x); p.typ := HrCPT.int32typ
+						ELSE p := x; p.conval.intval := typ.n; p.typ := HrCPT.int32typ
+						END
+					END
+				END
+		| copyfn: (*COPY*)
+				IF NotVar(x) THEN err(112)
+				ELSIF x.readonly THEN err(76)
+				ELSE
+					CheckString(p, x.typ, 111); t := x; x := p; p := t;
+					IF (x.class = Nconst) & (x.typ.form IN {String8, String16}) THEN AssignString(p, x)
+					ELSE p := NewOp(Nassign, copyfn, p, x)
+					END
+				END ;
+				p.typ := HrCPT.notyp; MarkAsUsed(x)
+		| ashfn: (*ASH*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN intSet THEN
+					IF (x.class = Nconst) & ((x.conval.intval > 64) OR (x.conval.intval < -64)) THEN err(208)
+					ELSIF (p.class = Nconst) & (x.class = Nconst) THEN
+						n := x.conval.intval;
+						IF n > 0 THEN
+							WHILE n > 0 DO MulConst(p.conval, two, p.conval, p.typ); DEC(n) END
+						ELSE
+							WHILE n < 0 DO DivModConst(p.conval, two, TRUE, p.typ); INC(n) END
+						END;
+						p.obj := NIL
+					ELSE
+						IF f = Int64 THEN Convert(x, HrCPT.int32typ) END;
+						typ := p.typ; p := NewOp(Ndop, ash, p, x); p.typ := typ
+					END
+				ELSE err(111)
+				END
+		| minfn: (*MIN*)
+				IF p.class # Ntype THEN Op(min, p, x) ELSE err(64) END
+		| maxfn: (*MAX*)
+				IF p.class # Ntype THEN Op(max, p, x) ELSE err(64) END
+		| newfn: (*NEW(p, x...)*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF p.typ.comp = DynArr THEN
+					IF f IN intSet THEN
+						IF f = Int64 THEN Convert(x, HrCPT.int32typ) END;
+						IF (x.class = Nconst) & (x.conval.intval <= 0)
+							& (~(HrM.java IN HrM.options) OR (x.conval.intval < 0))THEN err(63) END
+					ELSE err(111)
+					END ;
+					p.right := x; p.typ := p.typ.BaseTyp
+				ELSIF (p.left # NIL) & (p.left.typ.form = Pointer) THEN
+					typ := p.left.typ;
+					WHILE (typ # HrCPT.undftyp) & (typ.BaseTyp # NIL) DO typ := typ.BaseTyp END;
+					IF typ.sysflag = interface THEN
+						typ := x.typ;
+						WHILE (typ # HrCPT.undftyp) & (typ.BaseTyp # NIL) DO typ := typ.BaseTyp END;
+						IF (f = Pointer) & (typ.sysflag = interface) THEN
+							p.right := x
+						ELSE err(169)
+						END
+					ELSE err(64)
+					END
+				ELSE err(111)
+				END
+		| thisrecfn, (*THISRECORD*)
+		  thisarrfn: (*THISARRAY*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN {Int8, Int16, Int32} THEN
+					IF f < Int32 THEN Convert(x, HrCPT.int32typ) END;
+					p := NewOp(Ndop, fctno, p, x); p.typ := HrCPT.undftyp
+				ELSE err(111)
+				END
+		| lshfn, rotfn: (*SYSTEM.LSH, SYSTEM.ROT*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF ~(f IN intSet) THEN err(111)
+				ELSE
+					IF fctno = lshfn THEN p := NewOp(Ndop, lsh, p, x) ELSE p := NewOp(Ndop, rot, p, x) END ;
+					p.typ := p.left.typ
+				END
+		| getfn, putfn, getrfn, putrfn: (*SYSTEM.GET, SYSTEM.PUT, SYSTEM.GETREG, SYSTEM.PUTREG*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN {Undef..Set, NilTyp, Pointer, ProcTyp, Char16, Int64} THEN
+					IF (fctno = getfn) OR (fctno = getrfn) THEN
+						IF NotVar(x) THEN err(112) END ;
+						t := x; x := p; p := t
+					END ;
+					p := NewOp(Nassign, fctno, p, x)
+				ELSE err(111)
+				END ;
+				p.typ := HrCPT.notyp
+		| bitfn: (*SYSTEM.BIT*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF f IN intSet THEN
+					p := NewOp(Ndop, bit, p, x)
+				ELSE err(111)
+				END ;
+				p.typ := HrCPT.booltyp
+		| valfn: (*SYSTEM.VAL*)	(* type is changed without considering the byte ordering on the target machine *)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF x.typ.comp = DynArr THEN
+					IF x.typ.untagged & ((p.typ.comp # DynArr) OR p.typ.untagged) THEN	(* ok *)
+					ELSIF (p.typ.comp = DynArr) & (x.typ.n = p.typ.n) THEN
+						typ := x.typ;
+						WHILE typ.comp = DynArr DO typ := typ.BaseTyp END;
+						tp1 := p.typ;
+						WHILE tp1.comp = DynArr DO tp1 := tp1.BaseTyp END;
+						IF typ.size # tp1.size THEN err(115) END
+					ELSE err(115)
+					END
+				ELSIF p.typ.comp = DynArr THEN err(115)
+				ELSIF (x.class = Nconst) & (f = String8) & (p.typ.form = Int32) & (x.conval.intval2 <= 5) THEN
+					i := 0; n := 0;
+					WHILE i < x.conval.intval2 - 1 DO n := 256 * n + ORD(x.conval.ext[i]); INC(i) END;
+					x := NewIntConst(n)
+				ELSIF (f IN {Undef, NoTyp(*, NilTyp*)}) OR (f IN {String8, String16}) & ~(HrM.java IN HrM.options) THEN err(111)
+				END ;
+				IF (x.class = Nconst) & (x.typ = p.typ) THEN	(* ok *)
+				ELSIF (x.class >= Nconst) OR ((f IN realSet) # (p.typ.form IN realSet))
+						OR (HrM.options * {HrM.java, HrM.allSysVal} # {}) THEN
+					t := HrCPT.NewNode(Nmop); t.subcl := val; t.left := x; x := t
+				ELSE x.readonly := FALSE
+				END ;
+				x.typ := p.typ; p := x
+		| movefn: (*SYSTEM.MOVE*)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF (x.class = Nconst) & (f IN {Int8, Int16}) THEN Convert(x, HrCPT.int32typ)
+				ELSIF ~(f IN {Int32, Pointer}) THEN err(111); x.typ := HrCPT.int32typ
+				END ;
+				p.link := x
+		| assertfn: (*ASSERT*)
+				IF (f IN intSet - {Int64}) & (x.class = Nconst) THEN
+					IF (HrM.MinHaltNr <= x.conval.intval) & (x.conval.intval <= HrM.MaxHaltNr) THEN
+						BindNodes(Ntrap, HrCPT.notyp, x, x);
+						Construct(Nif, p, x); Construct(Nifelse, p, NIL); OptIf(p);
+					ELSE err(218)
+					END
+				ELSIF
+					(HrM.java IN HrM.options) & ((x.class = Ntype) OR (x.class = Nvar)) & (x.typ.form = Pointer)
+				THEN
+					BindNodes(Ntrap, HrCPT.notyp, x, x);
+					Construct(Nif, p, x); Construct(Nifelse, p, NIL); OptIf(p);
+				ELSE err(69)
+				END;
+				IF p = NIL THEN	(* ASSERT(TRUE) *)
+				ELSIF p.class = Ntrap THEN err(99)
+				ELSE p.subcl := assertfn
+				END
+		| queryfn: (* COM.QUERY *)
+				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+				ELSIF x.typ # HrCPT.guidtyp THEN err(111); x.typ := HrCPT.guidtyp
+				END;
+				p.link := x
+		ELSE err(64)
+		END ;
+		par0 := p
+	END StPar1;
+
+	PROCEDURE StParN*(VAR par0: HrCPT.Node; x: HrCPT.Node; fctno, n: SHORTINT);
+	(* x: n+1-th param of standard proc *)
+		VAR node: HrCPT.Node; f: SHORTINT; p: HrCPT.Node;
+	BEGIN p := par0; f := x.typ.form;
+		IF fctno = newfn THEN (*NEW(p, ..., x...*)
+			IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+			ELSIF p.typ.comp # DynArr THEN err(64)
+			ELSIF f IN intSet THEN
+				IF f = Int64 THEN Convert(x, HrCPT.int32typ) END;
+				IF (x.class = Nconst) & (x.conval.intval <= 0) THEN err(63) END;
+				node := p.right;
+				IF node # NIL THEN (* append x to param list *)
+					WHILE node.link # NIL DO node := node.link END;
+					node.link := x
+				ELSE p.right := x (* error recovery *)
+				END;
+				p.typ := p.typ.BaseTyp
+			ELSE err(111)
+			END
+		ELSIF (fctno = movefn) & (n = 2) THEN (*SYSTEM.MOVE*)
+			IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+			ELSIF f IN intSet THEN
+				node := HrCPT.NewNode(Nassign); node.subcl := movefn; node.right := p;
+				node.left := p.link; p.link := x; p := node
+			ELSE err(111)
+			END ;
+			p.typ := HrCPT.notyp
+		ELSIF (fctno = queryfn) & (n = 2) THEN (* COM.QUERY *)
+			IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
+			ELSIF (x.class < Nconst) & (f = Pointer) & (x.typ.sysflag = interface) THEN
+				IF ~HrCPT.Extends(p.typ, x.typ) THEN err(164) END;
+				IF x.readonly THEN err(76) END;
+				CheckNewParamPair(x, p.link);
+				MarkAsUsed(x);
+				node := HrCPT.NewNode(Ndop); node.subcl := queryfn;
+				node.left := p; node.right := p.link; p.link := NIL; node.right.link := x; p := node
+			ELSE err(111)
+			END;
+			p.typ := HrCPT.booltyp
+		ELSE err(64)
+		END ;
+		par0 := p
+	END StParN;
+	
+	PROCEDURE ^ (b: Builder) Assign* (des: T.Designator; ex: T.Expression): T.Assign, NEW, EXTENSIBLE;
+
+	PROCEDURE (b: Builder) StdCall* (x, y: T.Expression; num, arity: INTEGER; OUT ex: T.Expression; 
+		OUT stat: T.Stat
+	), NEW, EXTENSIBLE;
+		VAR as: T.Assign; i: INTEGER; fixed: BOOLEAN; trap: T.Trap;
+	BEGIN HALT(126)
+	END StdCall;
+	
+	PROCEDURE ArrayDepth (t: T.Array; openOnly: BOOLEAN): INTEGER;	(** count number of  *)
+		VAR dep: INTEGER; el: T.Type;
+	BEGIN dep := 0;
+		WHILE (t # NIL) & (~openOnly OR (T.open IN t.flags)) DO
+			INC(dep); el := t.elTyp; WITH el: T.Array DO t := el ELSE t := NIL END 
+		END;
+		RETURN dep
+	END ArrayDepth;
+	
+	PROCEDURE (bld: Builder) Len (x, y: T.Expression): T.Expression, NEW;
+		VAR fixed: BOOLEAN; a, b, c, res: T.Expression; w, i, depth: INTEGER; dim: LONGINT; 
+			str: POINTER TO ARRAY OF CHAR; at: T.Array;
+	BEGIN 
+		(*IF (x IS T.TypeDes) OR (x IS T.ProcDes) THEN Mark(-126, 10, x.pos)	(*$145*)
+		ELSE*)
+		w := x.type.what;
+		IF w = T.fErr THEN
+		ELSE
+			IF x.type IS T.Pointer THEN x := bld.Deref(x(T.Designator)) END;
+			IF x IS T.Char THEN NEW(str, 2); str[0] := x(T.Char).ch; str[1] := 0X; x := T.ThisString('', str, 2) END;
+			IF ~(x.type.what IN { T.fArray } + T.strings) THEN Mark(-131, 1, x.pos) ELSE a := x END;	(*$145*)
+		END;
+		(*END;*)
+		res := T.errex;
+		dim := -1;
+		IF y = NIL THEN dim := 0; b := T.zero
+		ELSE w := y.type.what; 
+			IF (a # NIL) & (a.type.what IN T.strings) THEN Mark(-64, 3, y.pos) END;	(*$145*)
+			IF w = T.fErr THEN
+			ELSIF (w IN T.integers) & (T.const IN y.flags) THEN b := y;
+				dim := EvalLong(y); IF dim < 0 THEN Mark(-132, 3, y.pos); dim := -1 END	(*$145*)
+			ELSE Mark(-132, 1, y.pos)	(*$145*)
+			END
+		END;
+		IF (a # NIL) & (dim # -1) THEN 
+			IF a.type.what IN T.strings THEN b := T.zero
+			ELSIF a.type.what = T.fArray THEN 
+				i := 0; 	(* count number of indexes in the index designator, if any *)
+				c := a;
+				WITH c: T.Index DO WHILE c.dim[i] # NIL DO INC(i) END; a := c.arr ELSE END;
+				at := a.type(T.Array); 
+				INC(dim, i);
+				IF dim = 0 THEN b := T.zero END;
+				depth := ArrayDepth(at, FALSE);
+				IF dim >= depth THEN Mark(-132, 2, y.pos); b := NIL 	(*$145*)
+				ELSIF i > 0 THEN 
+					IF (b # NIL) & (EvalLong(b) # 0) THEN b := bld.Dyadic(T.plusfn, T.ThisInt(i), b, 0) 
+					ELSE b := T.ThisInt(i)
+					END;
+					IF y # NIL THEN b.pos := y.pos ELSE b.pos := x.pos END
+				END
+			ELSE HALT(40)
+			END;
+			IF b # NIL THEN res := NewOpTyp(T.lenfn, a, b, T.inttp); 
+				IF ~(T.open IN a.type.flags) THEN INCL(res.flags, T.const) END 
+			END
+		END;
+		RETURN res
+	END Len;
+	
+	PROCEDURE (b: Builder) Size (x: T.Expression): T.Expression, NEW;
+		VAR w: INTEGER; res: T.Expression;
+	BEGIN 
+		WITH x: T.TypeDes DO w := x.name.type.what;
+			IF (w = T.fArray) & (T.open IN x.type.flags) THEN Mark(-111, 31, x.pos)	(*$147*)
+			ELSIF (w IN T.integers + T.reals+ T.chars + 
+				{ T.fSet, T.fBool, T.fSysPtr, T.fArrayPtr, T.fRecPtr, T.fRecord, T.fProcedure, T.fArray }) THEN
+				res := NewOpTyp(T.sizefn, x, NIL, T.inttp)
+			END
+		ELSE 
+		END;
+		IF (res = NIL) & (x.type # T.errtp) THEN Mark(-110, 1, x.pos); res := T.errex END;	(*$147*)
+		RETURN res
+	END Size;
+	
+	PROCEDURE (b: Builder) Halt (x: T.Expression): T.Stat, NEW;
+		VAR trap: T.Trap; long: LONGINT; w: INTEGER;
+	BEGIN w := x.type.what;
+		IF w = T.fErr THEN
+		ELSIF ~(T.const IN x.flags) THEN Mark(-69, 0, x.pos)	(*$147*)
+		ELSIF w IN T.integers THEN long := EvalLong(x); 
+			IF (long < HrM.MinHaltNr) OR (HrM.MaxHaltNr < long) THEN Mark(-218, 0, x.pos) 	(*$147*)
+			ELSE trap := T.dir.Trap(); trap.num := ForceConvert(x, T.inttp)
+			END
+		ELSE Mark(-69, 0, x.pos)	(*$147*)
+		END;
+		RETURN trap
+	END Halt;
+	
+	PROCEDURE (b: Builder) Assert (x, y: T.Expression): T.Stat, NEW;
+		VAR a: T.Expression; res: T.Stat; w: INTEGER;
+	BEGIN
+		(*IF (x IS T.TypeDes) OR (x IS T.ProcDes) THEN Mark(-126, 13, x.pos)	(*$147*)
+		ELS*)
+		w := x.type.what;
+		IF w = T.fErr THEN	(* suppress further error messages *)
+		ELSIF x.type.what # T.fBool THEN Mark(-111, 32, x.pos)	(*$147*)
+		ELSIF (T.const IN x.flags) & ~EvalBool(x) THEN Mark(-99, 0, x.pos)	(*$147*)
+		ELSE a := x
+		END;
+		IF y = NIL THEN y := T.zero END;
+		res := b.Halt(y);
+		IF (a # NIL) & (res # NIL) THEN res(T.Trap).cond := a END;
+		RETURN res
+	END Assert;
+	
+	PROCEDURE (b: Builder) Ash (x, y: T.Expression): T.Expression, NEW;
+		VAR w: INTEGER; long: LONGINT; res: T.Expression;
+	BEGIN 
+		(*IF (x IS T.TypeDes) OR (x IS T.ProcDes) THEN Mark(-126, 13, x.pos); x := NIL	(*$149*)
+		ELSE *)w := x.type.what;
+			IF w IN T.integers THEN IF w # T.fInt64 THEN x := ForceConvert(x, T.inttp) END 
+			ELSIF w # T.fErr THEN Mark(-111, 30, x.pos); x := NIL	(*$149*)
+			END;
+		(*END;*)
+		IF y = NIL THEN
+		(*ELSIF (y IS T.TypeDes) OR (y IS T.ProcDes) THEN Mark(-126, 13, y.pos); y := NIL	(*$149*)  *)
+		ELSE w := y.type.what; 
+			IF w IN T.integers THEN
+				IF T.const IN y.flags THEN long := EvalLong(y); 
+					IF (long < -64) OR (64 < long) THEN Mark(-208, 1, y.pos); y := NIL END	(*$149*)
+				END;
+				IF (w # T.fInt32) & (y # NIL) THEN y := ForceConvert(y, T.inttp) END
+			ELSIF w # T.fErr THEN Mark(-111, 30, y.pos); y := NIL	(*$149*)
+			END;
+		END;
+		IF (x # NIL) & (y # NIL) THEN res := NewOpTyp(T.ashfn, x, y, x.type) ELSE res := T.errex END;
+		RETURN res
+	END Ash;
+	
+	PROCEDURE (bld: Builder) IncDec (func: INTEGER; x, y: T.Expression): T.Stat, NEW;
+		VAR a: T.Designator; b: T.Expression; as: T.Assign;
+	BEGIN
+		IF ~(x IS T.Target) THEN Mark(-112, 1, x.pos)		(*$143*)
+		ELSIF x.type.what = T.fErr THEN 	(* suppress further error messages *)
+		ELSIF ~(x.type.what IN integers) THEN Mark(-111, 19, x.pos)		(*$143*)
+		ELSIF T.immutable IN x.flags THEN Mark(-76, 1, x.pos)		(*$143*)
+		ELSE a := x(T.Designator); MarkUsed(x)
+		END;
+		IF y = NIL THEN b := T.one
+		ELSIF y.type.what = T.fErr THEN 	(* suppress further error messages *)
+		(*ELSIF (y IS T.TypeDes) OR (y IS T.ProcDes) THEN Mark(-126, 15, y.pos)*)
+		ELSIF ~(y.type.what IN T.integers) THEN Mark(-111, 19, y.pos)
+		ELSIF a = NIL THEN 	(* prevent further checks if 1st arg is bad *)
+		ELSIF y.type.what # a.type.what THEN b := ForceConvert(y, a.type)
+		ELSE b := y
+		END;
+		IF (a # NIL) & (b # NIL) THEN as := T.dir.Assign(); as.des := a; as.expr := b; as.kind := func END;
+		RETURN as
+	END IncDec;
+	
+	PROCEDURE (bld: Builder) InclExcl (func: INTEGER; x, y: T.Expression): T.Stat, NEW;
+		VAR a, b: T.Expression; w: INTEGER; long: LONGINT; as: T.Assign;
+	BEGIN w := x.type.what;
+		IF ~(x IS T.Target) THEN Mark(-112, 2, x.pos)	(*$151*)
+		ELSIF w = T.fErr THEN
+		ELSIF w # T.fSet THEN Mark(-111, 2, x.pos)	(*$151*)
+		ELSIF T.immutable IN x.flags THEN Mark(-76, 1, x.pos)	(*$*)
+		ELSE a := x; MarkUsed(x)
+		END;
+		IF y = NIL THEN
+		ELSIF y.type.what IN T.integers THEN 
+			IF T.const IN y.flags THEN long := EvalLong(y);
+				IF (long < 0) OR (HrM.MaxSet < long) THEN Mark(-202, 1, y.pos) ELSE b := y END	(*$151*)
+			ELSE b := y
+			END
+		ELSIF y.type.what # T.fErr THEN Mark(-111, 3, y.pos)	(*$151*)
+		END;
+		IF (a # NIL) & (b # NIL) THEN 
+			as := T.dir.Assign(); as.des := a(T.Designator); as.expr := ForceConvert(b, T.inttp); as.kind := func END;
+		RETURN as
+	END InclExcl;
+
+	PROCEDURE (b: Builder) Ord (x: T.Expression): T.Expression, NEW;
+		VAR res: T.Expression; to: T.Type;
+	BEGIN
+		(*IF (x IS T.TypeDes) OR (x IS T.ProcDes) THEN Mark(-126, 9, x.pos)	(*$137*)
+		ELSE *)
+			CASE x.type.what OF T.fChar8: to := T.shorttp | T.fChar16: to := T.inttp | T.fSet: to := T.inttp 
+			ELSE Mark(-111, 8, x.pos)	(*$137*)
+			END;
+			IF to # NIL THEN res := ForceConvert(x, to) END;
+		(*END;*)
+		IF res = NIL THEN res := T.errex END;
+		RETURN res
+	END Ord;
+	
+	PROCEDURE (b: Builder) Short (x: T.Expression): T.Expression, NEW;
+		VAR res: T.Expression; to: T.Type;
+	BEGIN
+		(*IF (x IS T.TypeDes) OR (x IS T.ProcDes) THEN Mark(-126, 11, x.pos)	(*$139*)
+		ELSE*)
+			CASE x.type.what OF
+			| T.fInt16: to := T.bytetp
+			| T.fInt32: to := T.shorttp
+			| T.fInt64: to := T.inttp
+			| T.fReal64: to := T.shortrealtp
+			| T.fChar16: to := T.shortchartp
+			| T.fString16: to := T.shortstrtp
+			| T.fString8: Mark(-111, 12, x.pos)	(*$139*)
+			| T.fArray:
+				CASE x.type(T.Array).elTyp.what OF
+				| T.fChar16: x := b.StrSel(x(T.Designator)); to := T.shortstrtp
+				| T.fChar8: Mark(-111, 13, x.pos)	(*$139*)
+				ELSE Mark(-111, 11, x.pos)	(*$139*)
+				END
+			ELSE Mark(-111, 11, x.pos)	(*$139*)
+			END;
+		(*END;*)
+		IF to # NIL THEN res := ForceConvert(x, to) ELSE res := T.errex END;
+		RETURN res
+	END Short;
+	
+	PROCEDURE (b: Builder) Long (x: T.Expression): T.Expression, NEW;
+		VAR res: T.Expression; to: T.Type;
+	BEGIN
+		(*IF (x IS T.TypeDes) OR (x IS T.ProcDes) THEN Mark(-126, 12, x.pos)	(*$139*)
+		ELSE*)
+			CASE x.type.what OF
+			| T.fInt8: to := T.shorttp
+			| T.fInt16: to := T.inttp
+			| T.fInt32: to := T.longtp
+			| T.fReal32: to := T.realtp
+			| T.fChar8: to := T.chartp
+			| T.fString8: to := T.strtp
+			| T.fString16: Mark(-111, 15, x.pos)	(*$139*)
+			| T.fArray:
+				CASE x.type(T.Array).elTyp.what OF
+				| T.fChar8: x := b.StrSel(x(T.Designator)); to := T.strtp
+				| T.fChar16: Mark(-111, 16, x.pos)	(*$139*)
+				ELSE Mark(-111, 14, x.pos)	(*$139*)
+				END
+			ELSE Mark(-111, 14, x.pos)	(*$139*)
+			END;
+		(*END;*)
+		IF to # NIL THEN res := ForceConvert(x, to) ELSE res := T.errex END;
+		RETURN res
+	END Long;
+	
+	PROCEDURE (b: Builder) MinMax (func: INTEGER; x, y: T.Expression): T.Expression, NEW;
+		CONST valid = T.integers + T.reals + T.chars;
+		VAR res: T.Expression; w, v: INTEGER; t: T.Type;
+	BEGIN
+		(*IF x.type # NIL THEN *)
+		
+		(*END;*)
+		(*IF x IS T.ProcDes THEN Mark(-126, 16, x.pos)  	(*$141*)
+		ELS*) 
+		WITH x: T.TypeDes DO (* CheckOldType was called in CP2 *)
+			w := x.name.type.what;
+			IF w IN T.basics THEN 
+				IF w = T.fSet THEN 
+					IF func = T.maxfn THEN func := T.maxsetfn ELSIF func = T.minfn THEN func := T.minsetfn 
+					ELSE HALT(20)
+					END
+				END; (*not sure why i converted maxfn to maxsetfn*)
+				res := NewOp(func, NIL, NIL); INCL(res.flags, T.const);
+				IF w = T.fSet THEN res.type := T.inttp ELSE res.type := x.name.type END;
+				IF y # NIL THEN Mark(-64, 2, y.pos) END  	(*$141*)
+			ELSE Mark(-111, 10, x.pos) 	(*$141*)
+			END
+		ELSE 
+			w := x.type.what;
+			IF w IN valid THEN 
+				IF y = NIL THEN Mark(-65, 0, x.pos)   	(*$141*)
+				(*ELSIF y IS T.MetaDes THEN Mark(-126, 16, y.pos)  	(*$141*)  *)
+				ELSE v := y.type.what;
+					IF v IN valid THEN 
+						CASE w OF
+						| T.fChar8: IF v IN chars THEN t := y.type ELSE Mark(-111, 33, y.pos) END  	(*$141*)
+						| T.fChar16: IF v IN chars THEN t := T.chartp ELSE Mark(-111, 33, y.pos) END  	(*$141*)
+						| T.fInt8, T.fInt16, T.fInt32: 
+							IF v = T.fInt64 THEN t := T.longtp
+							ELSIF v IN T.integers (*- { T.fInt64 }*) THEN t := T.inttp 
+							ELSIF v IN reals THEN t := y.type
+							ELSE Mark(-111, 34, y.pos)  	(*$141*)
+							END
+						| T.fInt64: 
+							IF v IN T.integers THEN t := T.longtp
+							ELSIF v IN reals THEN t := y.type
+							ELSE Mark(-111, 34, y.pos)  	(*$141*)
+							END
+						| T.fReal32: 
+							IF v IN T.integers + { T.fReal32 } THEN t := T.shortrealtp
+							ELSIF v = T.fReal64 THEN t := T.realtp
+							ELSE Mark(-111, 34, y.pos)  	(*$141*)
+							END
+						| T.fReal64:
+							IF v IN T.integers + T.reals THEN t := T.realtp
+							ELSE Mark(-111, 34, y.pos)   	(*$141*)
+							END
+						ELSE HALT(40)
+						END;
+						IF t # NIL THEN 
+							IF w # t.what THEN x := ForceConvert(x, t) END; IF v # t.what THEN y := ForceConvert(y, t) 
+							END;
+							res := NewOpTyp(func, x, y, t) 
+						END
+					ELSIF v # T.fErr THEN Mark(-111, 10, y.pos)  	(*$141*)
+					END
+				END
+			ELSIF w # T.fErr THEN Mark(-111, 10, x.pos)	(*$141*)
+			END
+		END;
+		IF res = NIL THEN res := T.errex END;
+		RETURN res
+	END MinMax;
+	
+	PROCEDURE ValidOp (valid: SET; func: INTEGER; x: T.Expression; t: T.Type; suberr: INTEGER): T.Expression;
+		VAR res: T.Expression; w: INTEGER;
+	BEGIN w := x.type.what;
+		(*IF x IS T.MetaDes THEN Mark(-126, suberr, x.pos)
+		ELS*)IF w IN valid THEN res := NewOpTyp(func, x, NIL, t) 
+		ELSIF w # T.fErr THEN Mark(-111, suberr, x.pos) 
+		END;
+		IF res = NIL THEN res := T.errex END;
+		RETURN res
+	END ValidOp;
+	
+	(* Individual standard procedure handlers:
+	Exactly 1 argument: guaranteed preconditions: x # NIL, x.type # T.errtp, for all but sizefn, maxfn, minfn: ~(x IS T.MetaDes)
+	Exactly two arguments: x # NIL; y may be NIL; x is bad <=> ~y is bad
+	One or two arguments: pre: two args cannot be bad at the same time; x is bad => y is good *)
+	
+	PROCEDURE (bld: Builder) New (x: T.Expression; IN dims: ARRAY OF T.Expression): T.Stat, NEW;
+		VAR a, y: T.Expression; b: ARRAY 16 OF T.Expression; new: T.New; long: LONGINT; 
+			i, depth, w: INTEGER; t: T.Type;
+	BEGIN t := x.type;
+		IF t.what = T.fErr THEN
+		ELSIF ~(x IS T.Target) THEN Mark(-112, 3, x.pos)	(*$153*)
+		ELSIF T.immutable IN x.flags THEN Mark(-76, 2, x.pos)	(*$153*)
+		ELSIF t IS T.SysPtr THEN Mark(-138, 1, x.pos)	(*$*)
+		ELSIF t IS T.Pointer THEN 
+			IF T.untagged IN t.flags THEN Mark(-138, 2, x.pos)	(*$*)
+			ELSE
+				WITH t: T.RecPtr DO depth := -1;
+					IF T.abstract IN t.base.flags THEN Mark(-193, 1, x.pos) 	(*$153*)
+					ELSIF (T.limited IN t.base.flags) & (t.base.typeName.imno # 0) THEN Mark(-193, 2, x.pos) 	(*$*)
+					ELSE a := x END;
+					IF dims[1] # NIL THEN Mark(-64, 4, dims[1].pos) END	(*$153*)
+				| t: T.ArrayPtr DO 
+					IF T.open IN t.base.flags THEN depth := ArrayDepth(t.base, TRUE); a := x
+					ELSIF dims[1] # NIL THEN Mark(-64, 5, dims[1].pos) 	(*$153*)
+					ELSE a := x
+					END
+				ELSE (* CP2 has another COM-related check, err 167 *) HALT(126)
+				END
+			END
+		ELSE Mark(-111, 9, x.pos)	(*$153*)
+		END;
+		i := 0; y := dims[1];
+		WHILE y # NIL DO
+			IF i = depth THEN Mark(-64, 5, y.pos) END;	(*$153*)
+			(*IF y IS T.MetaDes THEN IF i # 0 (* suppress duplicate 126 msg *) THEN Mark(-126, 17, y.pos) END (*$153*)
+			ELS*)IF y.type.what = T.fErr THEN a := NIL
+			ELSIF y.type.what IN T.integers THEN b[i] := ForceConvert(y, T.inttp); 
+				IF T.const IN y.flags THEN long := EvalLong(y); IF long <= 0 THEN Mark(-63, 1, y.pos) END END (*$153*)
+			ELSE Mark(-111, 17, y.pos)	(*$153*)
+			END;
+			IF b[i] = NIL THEN a := NIL END;
+			INC(i); IF i + 1 < LEN(dims) THEN y := dims[i + 1] ELSE y := NIL END
+		END;
+		IF i < depth THEN Err(-65, 1) END;	(*$153*)
+		IF a # NIL THEN new := T.dir.New(); new.des := a(T.Designator); 
+			WHILE i > 0 DO DEC(i); MarkUsed(b[i]); new.dim[i] := b[i] END
+		END;
+		RETURN new
+	END New;
+	
+	PROCEDURE (b: Builder) Val* (t, e: T.Expression): T.Expression, NEW, EXTENSIBLE;	(* SYSTEM.VAL *)
+		VAR res: T.Expression; val: T.Op; w: INTEGER; long: LONGINT; char: CHAR; set: SET;
+	BEGIN																(* In CP2, in some cases SYS.VAL was eliminated *)
+		WITH t: T.TypeDes DO
+			ASSERT(t.name.type.what IN T.languageTypes);	(* this excludes string constants, which are  *)
+			IF (t.type.what = T.fArray) & (T.open IN t.type.flags) THEN HALT(126) 
+			ELSIF (e.type.what = T.fArray) & (T.open IN e.type.flags) THEN Mark(-115, 1, t.pos)
+			ELSIF (e IS T.StringLit) & (e(T.StringLit).len <= 5) THEN HALT(126)
+			ELSIF (e.type.what IN T.strings) (*& ~HrM.java IN HrM.options *) THEN HALT(126) (*Mark(-111, ?, e.pos)*)
+			END;
+			IF (t.type.what = T.fBool) & (T.const IN e.flags) THEN 
+				w := e.type.what;
+				IF (w IN T.booleans) OR (w = T.fNil) THEN
+				ELSIF w IN T.integers THEN 
+					long := EvalLong(e); IF (long # 0) & (long # 1) THEN Mark(-220, 1, e.pos); res := T.errex END
+				ELSIF w IN T.chars THEN
+					char := EvalChar(e); IF (char # 0X) & (char # 1X) THEN Mark(-220, 2, e.pos); res := T.errex END
+				ELSIF w IN T.sets THEN
+					set := EvalSet(e); IF (set # {}) & (set # {0}) THEN Mark(-220, 3, e.pos); res := T.errex END
+				ELSE HALT(126)
+				END
+			ELSIF (e IS T.Literal) & (t.type = e.type)
+				OR (e IS T.Op) OR (e IS T.IsOp) OR ((t.type.what IN T.reals) # (e.type.what IN T.reals))
+				(* OR java in compiler options OR allSysVal IN HrM.options *) THEN	(* nothing *)
+			ELSE EXCL(e.flags, T.immutable)	(* review this branching - it's essentially to turn off immutable smtms *)
+			END;
+			IF res = NIL THEN
+				val := T.dir.Op(); val.what := T.valfn; val.a := e; 
+				(*IF val # NIL THEN res := val ELSE res := e END;*) 
+				res := val; res.type := t.name.type
+			END
+		ELSE Mark(-110, 2, t.pos)
+		END;
+		IF res = NIL THEN res := T.errex END;
+		RETURN res
+	END Val;
+	
+	PROCEDURE Adr (ex: T.Expression): T.Expression;
+		VAR res: T.Expression; t: T.Type;
+	BEGIN
+		WITH ex: T.ProcDes DO
+			IF ex.proc IS T.CProc THEN Err(-111, 4); res := T.errex
+			ELSIF ex.proc.level > 0 THEN Err(-114, 5); res := T.errex
+			END
+		| ex: T.TypeDes DO t := ex.type;
+			IF (T.untagged IN t.flags) OR (t IS T.Basic) THEN Err(-111, 6); res := T.errex END
+		ELSE
+			IF (ex IS T.VarDes) OR (ex IS T.FieldDes) OR (ex IS T.Deref) OR (ex IS T.Index) OR (ex IS T.GuardDes)
+			OR (ex IS T.StringLit) OR (ex IS T.ConDes) & (ex.type.what IN T.strings) THEN
+			ELSE Err(-111, 7); res := T.errex
+			END
+		END; 
+		IF res = NIL THEN res := NewOpTyp(T.adrfn, ex, NIL, T.addrtp) END;
+		RETURN res
+	END Adr;
+	
+	PROCEDURE SysTyp (ex: T.Expression): T.Expression;
+		VAR res: T.Expression; t: T.Type;
+	BEGIN
+		(* more checks required against v IS T where v: T *)
+		t := ex.type;
+		IF (T.untagged IN t.flags) THEN Err(-111, 41); res := T.errex
+		ELSIF ~(t.what IN { T.fRecord, T.fRecPtr, T.fType }) THEN Err(-111, 42); res := T.errex
+		ELSE res := NewOpTyp(T.typfn, ex, NIL, T.addrtp);
+			WITH ex: T.TypeDes DO INCL(ex.name.flags, T.used);
+				t := ex.name.type;
+				WITH t: T.RecPtr DO INCL(t.base.flags, T.used) 	(* S.TYP(RecPtr) => S.TYP(RecPtr^) *)
+				ELSE 
+				END
+			ELSE INCL(t.typeName.flags, T.used) 
+			END
+		END;
+		RETURN res
+	END SysTyp;
+	
+	PROCEDURE GetrPutr (op: INTEGER; x, y: T.Expression): T.Stat;
+		VAR res: T.Stat; st: T.PutReg; reg: INTEGER;
+	BEGIN
+		res := T.errstat;
+		IF ~(x.type.what IN T.integers) THEN Err(-111, 36); x := NIL
+		ELSIF ~(T.const IN x.flags) THEN Err(-111, 37); x := NIL
+		ELSE reg := EvalInt(x); IF (reg < 0) OR (HrM.maxReg < reg) THEN Err(-111, 38); x := NIL END
+		END;
+		IF ~(x.type.what IN T.basics + T.pointers + { T.fProcedure } - { T.fJString }) THEN Err(-111, 39); y := NIL 
+		ELSIF (op = T.getrfn) & ~((y IS T.VarDes) OR (y IS T.FieldDes) OR (y IS T.Index)) THEN Err(-111, 40); y := NIL
+		END;
+		IF (x # NIL) & (y # NIL) THEN st := T.dir.PutReg(); res := st; st.reg := x; st.expr := y; st.put := op = T.putrfn
+		END;
+		RETURN res
+	END GetrPutr;
+	
+	PROCEDURE (b: Builder) StdCall2* (x, y: T.Expression; IN actuals: ARRAY OF T.Expression; num, arity: INTEGER; OUT ex: T.Expression; OUT stat: T.Stat ), NEW, EXTENSIBLE;
+		VAR
+	BEGIN
+		IF x = NIL THEN Err(-65, 0); ex := T.errex
+		ELSE
+			(*IF x IS T.MetaDes THEN 
+				CASE num OF T.sizefn, T.maxfn, T.minfn: ELSE Mark(-126, 0, x.pos); x := T.errex END
+			END;
+			IF (y # NIL) & (y IS T.MetaDes) THEN Mark(-126, 0, y.pos); y := T.errex END;*)
+			CASE num OF	(* exactly one argument *)
+			| T.ordfn, T.chrfn, T.shortfn, T.longfn, T.absfn, T.capfn, T.bitsfn, T.entierfn, T.oddfn, T.haltfn, T.sizefn,
+				T.adrfn, T.typfn: 
+				IF arity > 1 THEN Mark(-64, 0, y.pos) END;
+				IF x.type # T.errtp THEN
+					CASE num OF
+					| T.chrfn: ex := ConvFunc(x, T.chartp, T.integers, 22)
+					| T.entierfn: ex := ConvFunc(x, T.longtp, T.reals, 20);
+					| T.ordfn: ex := b.Ord(x)
+					| T.shortfn: ex := b.Short(x)
+					| T.longfn: ex := b.Long(x)
+					| T.absfn: ex := ValidOp(T.integers + T.reals, T.absfn, x, x.type, 23)	(*$143*)
+					| T.capfn: ex := ValidOp(T.chars, T.capfn, x, x.type, 24)	(*$143*)
+					| T.bitsfn: ex := ConvFunc(x, T.settp, { T.fInt8, T.fInt16, T.fInt32 }, 21) 	(*$143*)
+					| T.oddfn: ex := ValidOp(T.integers, T.oddfn, x, T.booltp, 25)	(*$143*)
+					| T.haltfn: stat := b.Halt(x)
+					| T.sizefn: ex := b.Size(x)
+					| T.adrfn: ex := Adr(x)
+					| T.typfn: ex := SysTyp(x)
+					ELSE HALT(126)
+					END
+				ELSE ex := T.errex
+				END
+			| T.ashfn, T.exclfn, T.inclfn, T.valfn, T.putrfn, T.getrfn: 	(* exactly two arguments *)
+				IF y = NIL THEN Err(-65, 0) ELSIF actuals[2] # NIL THEN Mark(-64, 0, actuals[2].pos) END;
+				IF (x.type # T.errtp) OR ((y # NIL) & (y.type # T.errtp)) THEN
+					CASE num OF 
+					| T.ashfn: ex := b.Ash(x, y)
+					| T.inclfn, T.exclfn: stat := b.InclExcl(num, x, y)
+					| T.valfn: ex := b.Val(x, y)
+					| T.putrfn, T.getrfn: stat := GetrPutr(num, x, y)
+					ELSE HALT(126)
+					END
+				ELSE ex := T.errex
+				END
+			| T.lenfn, T.assertfn, T.maxfn, T.minfn, T.incfn, T.decfn:	(* one or two arguments *)
+				IF arity > 2 THEN Mark(-64, 0, actuals[2].pos) END;
+				IF (x.type # T.errtp) OR (y # NIL) & (y.type # T.errtp) THEN
+					CASE num OF 
+					| T.incfn, T.decfn: stat := b.IncDec(num, x, y)
+					| T.lenfn: ex := b.Len(x, y)
+					| T.assertfn: stat := b.Assert(x, y)
+					| T.maxfn, T.minfn: ex := b.MinMax(num, x, y)
+					ELSE HALT(126)
+					END
+				ELSE ex := T.errex
+				END
+			| T.newfn: stat := b.New(x, actuals)	(* 0..MaxArrayDimensions arguments *)
+			ELSE HALT(126)
+			END
+		END
+	END StdCall2;
+
+	PROCEDURE StFct*(VAR par0: HrCPT.Node; fctno: BYTE; parno: SHORTINT);
+		VAR dim: SHORTINT; x, p: HrCPT.Node;
+	BEGIN p := par0;
+		IF fctno <= ashfn THEN
+			IF (fctno = newfn) & (p.typ # HrCPT.notyp) THEN
+				IF p.typ.comp = DynArr THEN err(65) END ;
+				p.typ := HrCPT.notyp
+			ELSIF (fctno = minfn) OR (fctno = maxfn) THEN
+				IF (parno < 1) OR (parno = 1) & (p.hint # 1) THEN err(65) END;
+				p.hint := 0
+			ELSIF fctno <= sizefn THEN (* 1 param *)
+				IF parno < 1 THEN err(65) END
+			ELSE (* more than 1 param *)
+				IF ((fctno = incfn) OR (fctno = decfn)) & (parno = 1) THEN (*INC, DEC*)
+					BindNodes(Nassign, HrCPT.notyp, p, NewIntConst(1)); p.subcl := fctno; p.right.typ := p.left.typ
+				ELSIF (fctno = lenfn) & (parno = 1) THEN (*LEN*)
+					IF p.typ.form IN {String8, String16} THEN
+						IF p.class = Nconst THEN p := NewIntConst(p.conval.intval2 - 1)
+						ELSIF (p.class = Ndop) & (p.subcl = plus) THEN	(* propagate to leaf nodes *)
+							StFct(p.left, lenfn, 1); StFct(p.right, lenfn, 1); p.typ := HrCPT.int32typ
+						ELSE
+							WHILE (p.class = Nmop) & (p.subcl = conv) DO p := p.left END;
+							IF HrM.errors = 0 THEN ASSERT(p.class = Nderef) END;
+							BindNodes(Ndop, HrCPT.int32typ, p, NewIntConst(0)); p.subcl := len
+						END
+					ELSIF p.typ.comp = DynArr THEN dim := 0;
+						WHILE p.class = Nindex DO p := p.left; INC(dim) END ;	(* possible side effect ignored *)
+						BindNodes(Ndop, HrCPT.int32typ, p, NewIntConst(dim)); p.subcl := len
+					ELSE
+						p := NewIntConst(p.typ.n)
+					END
+				ELSIF parno < 2 THEN err(65)
+				END
+			END
+		ELSIF fctno = assertfn THEN
+			IF parno = 1 THEN x := NIL;
+				BindNodes(Ntrap, HrCPT.notyp, x, NewIntConst(AssertTrap));
+				Construct(Nif, p, x); Construct(Nifelse, p, NIL); OptIf(p);
+				IF p = NIL THEN	(* ASSERT(TRUE) *)
+				ELSIF p.class = Ntrap THEN err(99)
+				ELSE p.subcl := assertfn
+				END
+			ELSIF parno < 1 THEN err(65)
+			END
+		ELSIF (fctno >= lchrfn) & (fctno <= bytesfn) THEN
+			IF parno < 1 THEN err(65) END
+		ELSIF fctno < validfn THEN (*SYSTEM*)
+			IF (parno < 1) OR
+				(fctno > ccfn) & (parno < 2) OR
+				(fctno = movefn) & (parno < 3) THEN err(65)
+			END
+		ELSIF (fctno = thisrecfn) OR (fctno = thisarrfn) THEN
+			IF parno < 2 THEN err(65) END
+		ELSE (* COM *)
+			IF fctno = queryfn THEN
+				IF parno < 3 THEN err(65) END
+			ELSE
+				IF parno < 1 THEN err(65) END
+			END
+		END ;
+		par0 := p
+	END StFct;
+	
+	PROCEDURE OpenArrParCheck (ft: T.Array; VAR e: T.Expression; byval: BOOLEAN);
+		CONST none = -1;
+		VAR ftype, atype, et, t: T.Type; ewhat, felwhat: INTEGER;
+	BEGIN ASSERT(T.open IN ft.flags, 20);
+		et := e.type; ewhat := et.what;
+		t := ft.elTyp; felwhat := t.what;
+		IF ewhat IN {T.fChar8, T.fChar16, T.fString8, T.fString16} THEN 
+			IF byval & (felwhat = T.fChar16) &  (ewhat = T.fString8) THEN e := ForceConvert(e, T.strtp)
+			ELSE CheckString2(e, ft, -1067, 0)
+			END
+		ELSE
+			atype := e.type; ftype := ft;
+			WHILE (ftype.what = T.fArray) & (T.open IN ftype.flags) & (atype.what = T.fArray) DO
+				ftype := ftype(T.Array).elTyp;
+				atype := atype(T.Array).elTyp
+			END;
+			IF atype.what = T.fErr THEN (* suppress further error msgs *)
+			ELSIF (ftype.what = T.fArray) & (T.open IN ftype.flags) THEN err(-67)
+			ELSIF byval & (ftype IS T.Pointer) & (T.Is(atype, ftype) OR T.EqualTypes(ftype, atype)) THEN	(* ok *)
+			ELSIF ~T.EqualTypes(ftype, atype) THEN err(-66)
+			END
+			
+		END
+	END OpenArrParCheck;
+	
+	PROCEDURE DynArrParCheck (ftyp: HrCPT.Struct; VAR ap: HrCPT.Node; fvarpar: BOOLEAN);
+	(* check array compatibility *)
+		VAR atyp: HrCPT.Struct;
+	BEGIN (* ftyp.comp = DynArr *)
+		atyp := ap.typ;
+		IF atyp.form IN {Char8, Char16, String8, String16} THEN
+			IF ~fvarpar & (ftyp.BaseTyp.form = Char16) & (atyp.form = String8) THEN Convert(ap, HrCPT.string16typ)
+			ELSE CheckString(ap, ftyp, 67)
+			END
+		ELSE		
+			WHILE (ftyp.comp = DynArr) & ((atyp.comp IN {Array, DynArr}) OR (atyp.form IN {String8, String16})) DO
+				ftyp := ftyp.BaseTyp; atyp := atyp.BaseTyp
+			END;
+			IF ftyp.comp = DynArr THEN err(67)
+			ELSIF ~fvarpar & (ftyp.form = Pointer) & HrCPT.Extends(atyp, ftyp) THEN (* ok *)
+			ELSIF ~HrCPT.EqualType(ftyp, atyp) THEN err(66)
+			END
+		END
+	END DynArrParCheck;
+	
+	PROCEDURE (b: Builder) MarkNesting* (deltadepth: INTEGER; var: BOOLEAN), NEW, EXTENSIBLE;
+		VAR s: T.SCope;
+	BEGIN s := T.nowScope; 
+		WHILE deltadepth > 0 DO DEC(deltadepth); s.flags := s.flags + T.callsNestedF; s := s.owner END;
+		IF var THEN s.flags := s.flags + T.imVarF END
+	END MarkNesting;
+	
+	PROCEDURE (b: Builder) PrepCall* (VAR des: T.Designator; p: T.Proc; isSuper: BOOLEAN; 
+		OUT fp: POINTER TO ARRAY OF T.Par; OUT first: INTEGER; VAR ap: POINTER TO ARRAY OF T.Expression;
+		OUT stmt: T.Stat
+	), NEW, EXTENSIBLE;
+		VAR (*p: T.Proc;*) call: T.Call; calldes: T.CallDes; t, res: T.Type; nst: INTEGER; 
+			what: T.Designator;
+		PROCEDURE DoAp;
+		BEGIN
+			IF (ap = NIL) & (fp # NIL) THEN NEW(ap, LEN(fp)) END;
+			IF (ap # NIL) & (ap[0] # NIL) THEN first := 1 ELSE first := 0 END
+		END DoAp;
+	BEGIN
+		IF p # NIL THEN INCL(p.flags, T.used);
+			IF p.par # NIL THEN fp := p.par END; DoAp; 
+			IF p.type = NIL THEN call := T.dir.Call(); call.proc := p 
+			ELSE calldes := T.dir.CallDes(); calldes.type := p.type; calldes.proc := p; calldes.type := p.type
+			END;
+			nst := p.nesting; IF nst > 1 THEN b.MarkNesting(T.nowScope.nesting - nst, FALSE) END;
+			IF p IS T.IProc THEN err(-527) END
+		ELSE ASSERT(des # NIL);
+			(*IF des IS T.TypeDes THEN err(-536); des := T.errdes
+			ELS*)IF des = T.errdes THEN (* do not print more error messages *)
+			ELSE t := des.type;
+				WITH t: T.Procedure DO 
+					fp := t.par; DoAp;
+					IF t.res = NIL THEN call := T.dir.Call(); call.what := des
+					ELSE calldes := T.dir.CallDes(); calldes.what := des; calldes.type := t.res
+					END
+				ELSE Mark(-526, 0, des.pos); des := T.errdes
+				END
+			END
+		END;
+		IF call # NIL THEN (* stmt *) stmt := call; call.super := isSuper; call.actuals := ap
+		ELSE des := calldes; calldes.super := isSuper; calldes.apar := ap
+		END
+	END PrepCall;
+	
+	PROCEDURE PrepCall*(VAR x: HrCPT.Node; VAR fpar: HrCPT.Object);
+	BEGIN
+		IF (x.obj # NIL) & (x.obj.mode IN {LProc, XProc, TProc, CProc}) THEN
+			fpar := x.obj.link;
+			IF x.obj.mode = TProc THEN
+				IF fpar.typ.form = Pointer THEN
+					IF x.left.class = Nderef THEN x.left := x.left.left (*undo DeRef*) ELSE err(71) END
+				END;
+				fpar := fpar.link
+			END
+		ELSIF (x.class # Ntype) & (x.typ # NIL) & (x.typ.form = ProcTyp) THEN
+			fpar := x.typ.link
+		ELSE err(121); fpar := NIL; x.typ := HrCPT.undftyp
+		END
+	END PrepCall;
+	
+	PROCEDURE (b: Builder) CheckParam* (e: T.Expression; f: T.Par): T.Expression, NEW, EXTENSIBLE;
+		VAR at, ft: T.Type; des: T.Designator; kind: SET; isMutable: BOOLEAN;
+	BEGIN 
+		ft := f.ptype; IF ft = NIL THEN ft := f.type END;
+		IF (e IS T.Nil) & (f.flags * T.kindMask # T.valK) & (f.flags * T.varparMask = T.nilPF) THEN (* don't deref *)
+		ELSIF (e IS T.Designator) & (e.type IS T.Pointer) & ~(ft IS T.Pointer) THEN e := b.Deref(e(T.Designator)) 
+		END;
+		at := e.type; 
+		kind := f.flags * T.kindMask;
+		IF (ft # NIL) & (ft # T.errtp) THEN
+			(*IF (e IS T.TypeDes) THEN Err(-126, 2)
+			ELSIF (e IS T.ProcDes) & ~(ft IS T.Procedure) THEN Err(-126, 3)	(*$107*)
+			ELSE*)
+				MarkUsed(e); 										(* this doesn't directly match the LR definition... REVISIT! *)
+				IF T.EqualTypes(ft, at) THEN 	(* ok *)
+				ELSIF kind # T.valK THEN
+					IF (f.flags * T.varparMask = T.nilPF) & (at.what = T.fNil) THEN (* ok *)	(*$*)
+					ELSIF (ft IS T.Record) & ~(T.untagged IN ft.flags) & (e IS T.Op) & (e(T.Op).what = T.thisrecfn) THEN 
+						(*ok*)	(*$*)
+					ELSIF (T.open IN ft.flags) & (ft IS T.Array) & ~(T.untagged IN ft.flags) & (ft(T.Array).len = 0)
+						& (e IS T.Op) & (e(T.Op).what = T.thisarrfn) THEN (* ok *)	(*$*)
+					ELSE isMutable := ~NotVar2(e);
+						IF kind = T.inK THEN
+							(* something COM-related *)
+							IF isMutable THEN MarkReferenced(e, FALSE) END
+						ELSE WITH e: T.Designator DO des := e ELSE END;
+							IF ~isMutable THEN err(-122)	(*$107*)
+							ELSIF (des # NIL) & (T.immutable IN des.flags) THEN err(-529)	(*$107*)
+							(*ELSIF some COM-related check THEN err(-167) *)
+							ELSE MarkUsed(e); MarkReferenced(e, FALSE)	(*$110*)
+							END
+						END;
+						IF (ft IS T.Array) & (T.open IN ft.flags) THEN OpenArrParCheck(ft(T.Array), e, kind = T.valK)
+						ELSIF T.newBit IN f.sysflags THEN IF ~T.Is(at, ft) THEN Err(-123, 1) END	(*$*)
+						ELSIF (ft IS T.SysPtr) & (at IS T.Pointer) THEN (* ok *)	(*$*)
+						ELSIF (kind # T.outK) & (ft IS T.Record) & T.Is(at, ft) THEN (* ok *)
+						ELSIF covarOut & (kind = T.outK) & (ft IS T.Pointer) & T.Is(ft, at) THEN (* ok *) 
+							(* unreachable because of covarOut = FALSE *)
+						ELSIF kind = T.inK THEN e := b.CheckAssign(ft, e)
+						ELSIF isMutable & ~T.EqualTypes(ft, at) THEN Err(-123, 0)
+						END
+					END
+				ELSIF (ft IS T.Array) & (T.open IN ft.flags) THEN OpenArrParCheck(ft(T.Array), e, TRUE)
+				ELSE e := b.CheckAssign(ft, e)
+				END
+			(*END*)
+		END;
+		ASSERT(e # NIL, 60); 
+		RETURN e
+	END CheckParam;
+
+	PROCEDURE Param* (VAR ap: HrCPT.Node; fp: HrCPT.Object);	(* checks parameter compatibilty *)
+		VAR at, ft: HrCPT.Struct;
+	BEGIN
+		at := ap.typ; ft := fp.typ;
+		IF fp.ptyp # NIL THEN ft := fp.ptyp END;	(* get original formal type *)	(* how can a formal's type change? *)
+		IF ft.form # Undef THEN
+			IF (ap.class = Ntype) OR (ap.class = Nproc) & (ft.form # ProcTyp) THEN err(126) END;
+			IF fp.mode = VarPar THEN
+				IF ODD(fp.sysflag DIV nilBit) & (at = HrCPT.niltyp) THEN (* ok *)
+				ELSIF (ft.comp = Record) & ~ft.untagged & (ap.class = Ndop) & (ap.subcl = thisrecfn) THEN (* ok *)
+				ELSIF (ft.comp = DynArr) & ~ft.untagged & (ft.n = 0) & (ap.class = Ndop) & (ap.subcl = thisarrfn) THEN
+					(* ok *)
+				ELSE
+					IF fp.vis = inPar THEN
+						IF (ft = HrCPT.guidtyp) & (ap.class = Nconst) & (at.form = String8) THEN
+							StringToGuid(ap); at := ap.typ
+						END;
+						IF ~NotVar(ap) THEN CheckLeaf(ap, FALSE) END
+					ELSE
+						IF NotVar(ap) THEN err(122)
+						ELSIF ap.readonly THEN err(76)
+						ELSIF (ap.obj # NIL) & ODD(ap.obj.sysflag DIV newBit) & ~ODD(fp.sysflag DIV newBit) THEN		
+							err(167)
+						ELSE MarkAsUsed(ap); CheckLeaf(ap, FALSE)
+						END
+					END;
+					IF ft.comp = DynArr THEN DynArrParCheck(ft, ap, fp.vis # inPar)
+					ELSIF ODD(fp.sysflag DIV newBit) THEN
+						IF ~HrCPT.Extends(at, ft) THEN err(123) END
+					ELSIF (ft = HrCPT.sysptrtyp) & (at.form = Pointer) THEN (* ok *)
+					ELSIF (fp.vis # outPar) & (ft.comp = Record) & HrCPT.Extends(at, ft) THEN (* ok *)
+					ELSIF covarOut & (fp.vis = outPar) & (ft.form = Pointer) & HrCPT.Extends(ft, at) THEN (* ok *)
+					ELSIF fp.vis = inPar THEN CheckAssign(ft, ap)
+					ELSIF ~HrCPT.EqualType(ft, at) THEN err(123)
+					END
+				END
+			ELSIF ft.comp = DynArr THEN DynArrParCheck(ft, ap, FALSE)
+			ELSE CheckAssign(ft, ap)
+			END
+		END
+	END Param;
+	
+	PROCEDURE StaticLink*(dlev: BYTE; var: BOOLEAN);
+		VAR scope: HrCPT.Object;
+	BEGIN
+		scope := HrCPT.topScope;
+		WHILE dlev > 0 DO DEC(dlev);
+			INCL(scope.link.conval.setval, slNeeded);
+			scope := scope.left
+		END;
+		IF var THEN INCL(scope.link.conval.setval, imVar) END	(* !!! *)
+	END StaticLink;
+	
+	
+
+	
+
+	PROCEDURE Call*(VAR x: HrCPT.Node; apar: HrCPT.Node; fp: HrCPT.Object);
+		VAR typ: HrCPT.Struct; p: HrCPT.Node; lev: BYTE;
+	BEGIN
+		IF x.class = Nproc THEN typ := x.typ;
+			lev := x.obj.mnolev;
+			IF lev > 0 THEN StaticLink(SHORT(SHORT(HrCPT.topScope.mnolev-lev)), FALSE) END ;	(* !!! *)
+			IF x.obj.mode = IProc THEN err(121) END
+		ELSIF (x.class = Nfield) & (x.obj.mode = TProc) THEN typ := x.typ;
+			x.class := Nproc; p := x.left; x.left := NIL; p.link := apar; apar := p; fp := x.obj.link
+		ELSE typ := x.typ.BaseTyp
+		END ;
+		BindNodes(Ncall, typ, x, apar); x.obj := fp
+	END Call;
+
+	PROCEDURE Enter*(VAR procdec: HrCPT.Node; stat: HrCPT.Node; proc: HrCPT.Object);
+		VAR x: HrCPT.Node;
+	BEGIN
+		x := HrCPT.NewNode(Nenter); x.typ := HrCPT.notyp; x.obj := proc;
+		x.left := procdec; x.right := stat; procdec := x
+	END Enter;
+	
+	PROCEDURE (b: Builder) Return* (e: T.Expression; proc: T.SCope): T.Stat, NEW, EXTENSIBLE;
+		VAR ret: T.Return;
+	BEGIN
+		WITH proc: T.Mod DO (* return from module *) IF e # NIL THEN err(-124) END
+		| proc: T.Proc DO
+			IF (e # NIL) & (proc.type = NIL) THEN Err(-124, 1) 
+			ELSIF (e # NIL) & (proc.type # NIL) THEN e := b.CheckAssign(proc.type, e) 
+			ELSIF proc.type # NIL THEN err(-124) 
+			END
+		ELSE HALT(126)
+		END;
+		ret := T.dir.Return(); ret.ex := e; ret.proc := proc;
+		RETURN ret
+	END Return;
+	
+	PROCEDURE Return*(VAR x: HrCPT.Node; proc: HrCPT.Object);
+		VAR node: HrCPT.Node;
+	BEGIN
+		IF proc = NIL THEN (* return from module *)
+			IF x # NIL THEN err(124) END
+		ELSE
+			IF x # NIL THEN CheckAssign(proc.typ, x)
+			ELSIF proc.typ # HrCPT.notyp THEN err(124)
+			END
+		END ;
+		node := HrCPT.NewNode(Nreturn); node.typ := HrCPT.notyp; node.obj := proc; node.left := x; x := node
+	END Return;
+	
+	PROCEDURE (b: Builder) AssignString* (des: T.Designator; str: T.StringLit): T.Assign, NEW, EXTENSIBLE;
+		VAR res: T.Assign;
+	BEGIN
+		IF str.len = 0 THEN res := b.Assign(b.Index(des, T.zero), T.null); res.des.pos := des.pos
+		ELSE res := T.dir.Assign(); res.kind := T.assignfn; res.des := des; res.expr := str
+		END;
+		RETURN res
+	END AssignString;
+	
+	PROCEDURE (b: Builder) Assign* (des: T.Designator; ex: T.Expression): T.Assign, NEW, EXTENSIBLE;
+		VAR as: T.Assign; obj: T.Object;
+	BEGIN as := T.dir.Assign();
+		IF (des IS T.Target) THEN ex := b.CheckAssign(des.type, ex);
+			WITH des: T.VarDes DO obj := des.var | des: T.FieldDes DO obj := des.field ELSE END;
+			IF (obj # NIL) & (T.readOnly IN obj.flags) THEN err(-76) END;
+			(*IF something about COM [new] params THEN err(167) *)
+			WITH ex: T.StringLit DO as := b.AssignString(des, ex)
+			ELSE as.kind := T.assignfn; as.des := des; as.expr := ex
+			END;
+			MarkUsed(des)
+		ELSE IF des # T.errdes THEN err(-56) END; as.kind := T.errorfn; as.des := des; as.expr := ex
+		END;
+		RETURN as
+	END Assign;
+	
+	PROCEDURE Assign*(VAR x: HrCPT.Node; y: HrCPT.Node);
+	BEGIN
+		IF (x.class >= Nconst) OR (x.typ.form IN {String8, String16}) THEN err(56) END ;
+		CheckAssign(x.typ, y);
+		IF x.readonly THEN err(76)
+		ELSIF (x.obj # NIL) & ODD(x.obj.sysflag DIV newBit) THEN err(167)
+		END ;
+		MarkAsUsed(x);
+		IF (y.class = Nconst) & (y.typ.form IN {String8, String16}) & (x.typ.form # Pointer) THEN AssignString(x, y)
+		ELSE BindNodes(Nassign, HrCPT.notyp, x, y); x.subcl := assign
+		END
+	END Assign;
+	
+	PROCEDURE (b: Builder) While* (ex: T.Expression; do: T.Stat): T.While, NEW, EXTENSIBLE;
+		VAR w: T.While;
+	BEGIN w := T.dir.While(); w.cond := ex; w.do := do; RETURN w
+	END While;	(* for some reason, the few checks needed for WHILE are done in P; should they be moved here? *) 
+	
+	PROCEDURE (b: Builder) Repeat* (do: T.Stat; until: T.Expression): T.Repeat, NEW, EXTENSIBLE;
+		VAR r: T.Repeat;
+	BEGIN r := T.dir.Repeat(); r.until := until; r.do := do; RETURN r
+	END Repeat;
+	
+	PROCEDURE (b: Builder) If* (cond: T.Expression; do: T.Stat): T.If, NEW, EXTENSIBLE;
+		VAR if: T.If;
+	BEGIN if := T.dir.If(); if.cond := cond; if.do := do; RETURN if
+	END If;
+	
+	PROCEDURE (f: For) Spell* (VAR log: TextMappers.Formatter);
+	BEGIN 
+		log.WriteString("FOR "); T.SpellDes(f.control); log.WriteString(" := "); T.SpellEx(f.from); log.WriteString(" TO ");
+		T.SpellEx(f.to); log.WriteString(" BY "); T.SpellEx(f.by); log.WriteString(" DO"); INC(T.logIndent); log.WriteLn;
+		T.SpellSeq(f.do);
+		DEC(T.logIndent); log.WriteLn; log.WriteString("END")
+	END Spell;
+	
+	PROCEDURE (f: For) Rebuild* (OUT as: T.Stat);
+		VAR by: T.Int; cond, to: T.Expression; des: T.Designator; s, ss, inc: T.Stat; op: INTEGER; _: T.Proc;
+	BEGIN
+		s := B.Assign(f.control, f.from); as := s;
+		IF ~(T.const IN f.to.flags) THEN 
+			ASSERT(f.bound # NIL); 
+			des := B.Qualident(f.bound, _); to := des;
+			s.link := B.Assign(des, f.to); s := s.link
+		ELSE to := f.to
+		END;
+		IF f.by IS T.Int THEN by := f.by(T.Int) ELSE by := T.ThisInt(EvalLong(f.by)) END;
+		IF by.long > 0 THEN op := T.leqfn ELSIF by.long < 0 THEN op := T.geqfn ELSE HALT(20) END;
+		cond := NewOpTyp(op, f.control, to, T.booltp);
+		inc := B.IncDec(T.incfn, f.control, by);
+		ss := f.do;
+		IF ss = NIL THEN f.do := inc
+		ELSE WHILE ss.link # NIL DO ss := ss.link END; ss.link := inc
+		END;
+		s.link := B.While(cond, f.do)
+	END Rebuild;
+		
+	
+	PROCEDURE (b: Builder) For* (control: T.Designator; from, to, by: T.Expression; bound: T.Var; do: T.Stat): T.Stat, NEW, EXTENSIBLE;
+		VAR if: T.If; f: For;
+	BEGIN 
+		IF ~(T.const IN to.flags) THEN ASSERT(bound # NIL, 20) END;
+		NEW(f); f.bound := bound;
+		IF ~(control IS T.VarDes) THEN Mark(-68, 5, control.pos); control := NIL 	(*$125*)
+		ELSIF ~(control.type.what IN T.integers) THEN Mark(-68, 0, control.pos); control := NIL 	(*$125*)
+		END;
+		IF control # NIL THEN 
+			from := b.CheckAssign(control.type, from);
+			to := b.CheckAssign(control.type, to)
+		END;
+		IF by = NIL THEN by := T.ThisInt(1)
+		ELSE (*IF ~by.immutable THEN Err(-68, 2) END;*) 
+			IF ~(by.type.what IN T.integers) THEN Mark(-68, 3, by.pos) END	(*$125*)
+		END;
+		(* IF b.value = 0 THEN Err(-68, 4) END*)
+		IF control # NIL THEN f.control := control ELSE f.control := T.errdes END;
+		f.from := from; f.to := to; f.by := by; f.do := do;
+		RETURN f
+	END For;
+	
+	PROCEDURE (b: Builder) Loop* (do: T.Stat): T.Stat, NEW, EXTENSIBLE;
+		VAR loop: T.Loop;
+	BEGIN loop := T.dir.Loop(); loop.do := do; RETURN loop
+	END Loop;
+	
+	PROCEDURE (b: Builder) Exit* (): T.Stat, NEW, EXTENSIBLE;
+	BEGIN RETURN T.dir.Exit()
+	END Exit;
+	
+	PROCEDURE (b: Builder) NewWith* (): T.With, NEW, EXTENSIBLE;
+	BEGIN RETURN T.dir.With()
+	END NewWith;
+	
+	PROCEDURE Inittd*(VAR inittd, last: HrCPT.Node; typ: HrCPT.Struct);
+		VAR node: HrCPT.Node;
+	BEGIN
+		node := HrCPT.NewNode(Ninittd); node.typ := typ;
+		node.conval := HrCPT.NewConst(); node.conval.intval := typ.txtpos;
+		IF inittd = NIL THEN inittd := node ELSE last.link := node END ;
+		last := node
+	END Inittd;
+	
+	(* handling of temporary variables for string operations *)
+	
+	PROCEDURE Overlap (left, right: HrCPT.Node): BOOLEAN;
+	BEGIN
+		IF right.class = Nconst THEN
+			RETURN FALSE
+		ELSIF (right.class = Ndop) & (right.subcl = plus) THEN
+			RETURN Overlap(left, right.left) OR Overlap(left, right.right)
+		ELSE
+			WHILE right.class = Nmop DO right := right.left END;
+			IF right.class = Nderef THEN right := right.left END;
+			IF left.typ.BaseTyp # right.typ.BaseTyp THEN RETURN FALSE END;
+			LOOP
+				IF left.class = Nvarpar THEN
+					WHILE (right.class = Nindex) OR (right.class = Nfield) OR (right.class = Nguard) DO
+						right := right.left
+					END;
+					RETURN (right.class # Nvar) OR (right.obj.mnolev < left.obj.mnolev)
+				ELSIF right.class = Nvarpar THEN
+					WHILE (left.class = Nindex) OR (left.class = Nfield) OR (left.class = Nguard) DO left := left.left END;
+					RETURN (left.class # Nvar) OR (left.obj.mnolev < right.obj.mnolev)
+				ELSIF (left.class = Nvar) & (right.class = Nvar) THEN
+					RETURN left.obj = right.obj
+				ELSIF (left.class = Nderef) & (right.class = Nderef) THEN
+					RETURN TRUE
+				ELSIF (left.class = Nindex) & (right.class = Nindex) THEN
+					IF (left.right.class = Nconst) & (right.right.class = Nconst)
+						& (left.right.conval.intval # right.right.conval.intval) THEN RETURN FALSE END;
+					left := left.left; right := right.left
+				ELSIF (left.class = Nfield) & (right.class = Nfield) THEN
+					IF left.obj # right.obj THEN RETURN FALSE END;
+					left := left.left; right := right.left;
+					WHILE left.class = Nguard DO left := left.left END;
+					WHILE right.class = Nguard DO right := right.left END
+				ELSE
+					RETURN FALSE
+				END
+			END
+		END
+	END Overlap;
+
+	PROCEDURE GetStaticLength (n: HrCPT.Node; OUT length: INTEGER);	(* -> VGetFormalLen *)
+		VAR x: INTEGER;
+	BEGIN
+		IF n.class = Nconst THEN
+			length := n.conval.intval2 - 1
+		ELSIF (n.class = Ndop) & (n.subcl = plus) THEN
+			GetStaticLength(n.left, length); GetStaticLength(n.right, x);
+			IF (length >= 0) & (x >= 0) THEN length := length + x ELSE length := -1 END
+		ELSE
+			WHILE (n.class = Nmop) & (n.subcl = conv) DO n := n.left END;
+			IF (n.class = Nderef) & (n.subcl = 1) THEN n := n.left END;
+			IF n.typ.comp = Array THEN
+				length := n.typ.n - 1
+			ELSIF n.typ.comp = DynArr THEN
+				length := -1
+			ELSE	(* error case *)
+				length := 4
+			END
+		END
+	END GetStaticLength;
+
+	PROCEDURE GetMaxLength (n: HrCPT.Node; VAR stat, last: HrCPT.Node; OUT length: HrCPT.Node);
+		VAR x: HrCPT.Node; d: INTEGER; obj: HrCPT.Object;											(* -> VGetActualLen *)
+	BEGIN
+		IF n.class = Nconst THEN
+			length := NewIntConst(n.conval.intval2 - 1)
+		ELSIF (n.class = Ndop) & (n.subcl = plus) THEN
+			GetMaxLength(n.left, stat, last, length); GetMaxLength(n.right, stat, last, x);
+			IF (length.class = Nconst) & (x.class = Nconst) THEN ConstOp(plus, length, x)
+			ELSE BindNodes(Ndop, length.typ, length, x); length.subcl := plus
+			END
+		ELSE
+			WHILE (n.class = Nmop) & (n.subcl = conv) DO n := n.left END;
+			IF (n.class = Nderef) & (n.subcl = 1) THEN n := n.left END;
+			IF n.typ.comp = Array THEN
+				length := NewIntConst(n.typ.n - 1)
+			ELSIF n.typ.comp = DynArr THEN
+				d := 0;
+				WHILE n.class = Nindex DO n := n.left; INC(d) END;
+				ASSERT((n.class = Nderef) OR (n.class = Nvar) OR (n.class = Nvarpar));
+				IF (n.class = Nderef) & (n.left.class # Nvar) & (n.left.class # Nvarpar) THEN
+					GetTempVar("@tmp", n.left.typ, obj);
+					x := NewLeaf(obj); Assign(x, n.left); Link(stat, last, x);
+					n.left := NewLeaf(obj);	(* tree is manipulated here *)
+					n := NewLeaf(obj); DeRef(n)
+				END;
+				IF n.typ.untagged & (n.typ.comp = DynArr) & (n.typ.BaseTyp.form IN {Char8, Char16}) THEN
+					StrDeref(n);
+					BindNodes(Ndop, HrCPT.int32typ, n, NewIntConst(d)); n.subcl := len;
+					BindNodes(Ndop, HrCPT.int32typ, n, NewIntConst(1)); n.subcl := plus
+				ELSE
+					BindNodes(Ndop, HrCPT.int32typ, n, NewIntConst(d)); n.subcl := len;
+				END;
+				length := n
+			ELSE	(* error case *)
+				length := NewIntConst(4)
+			END
+		END
+	END GetMaxLength;
+
+	PROCEDURE CheckBuffering* (
+		VAR n: HrCPT.Node; left: HrCPT.Node; par: HrCPT.Object; VAR stat, last: HrCPT.Node
+	);																				(* -> VPrep.PrepExpr *)
+		VAR length, x: HrCPT.Node; obj: HrCPT.Object; typ: HrCPT.Struct; len, xlen: INTEGER;
+	BEGIN
+		IF (n.typ.form IN {String8, String16}) & ~(HrM.java IN HrM.options)
+			& ((n.class = Ndop) & (n.subcl = plus) & ((left = NIL) OR Overlap(left, n.right))
+				OR (n.class = Nmop) & (n.subcl = conv) & (left = NIL)	(* LONG(string), SHORT(string) *)
+				OR (par # NIL) & (par.vis = inPar) & (par.typ.comp = Array)) THEN
+			IF (par # NIL) & (par.typ.comp = Array) THEN
+				len := par.typ.n - 1
+			ELSE
+				IF left # NIL THEN GetStaticLength(left, len) ELSE len := -1 END;
+				GetStaticLength(n, xlen);
+				IF (len = -1) OR (xlen # -1) & (xlen < len) THEN len := xlen END
+			END;
+			IF len # -1 THEN
+				typ := HrCPT.NewStr(Comp, Array); typ.n := len + 1; typ.BaseTyp := n.typ.BaseTyp;
+				GetTempVar("@str", typ, obj);
+				x := NewLeaf(obj); Assign(x, n); Link(stat, last, x);
+				n := NewLeaf(obj)
+			ELSE
+				IF left # NIL THEN GetMaxLength(left, stat, last, length)
+				ELSE GetMaxLength(n, stat, last, length)
+				END;
+				typ := HrCPT.NewStr(Pointer, Basic);
+				typ.BaseTyp := HrCPT.NewStr(Comp, DynArr); typ.BaseTyp.BaseTyp := n.typ.BaseTyp;
+				GetTempVar("@ptr", typ, obj);
+				x := NewLeaf(obj); Construct(Nassign, x, length); x.subcl := newfn; Link(stat, last, x);
+				x := NewLeaf(obj); DeRef(x); Assign(x, n); Link(stat, last, x);
+				n := NewLeaf(obj); DeRef(n)
+			END;
+			StrDeref(n)
+		ELSIF (n.typ.form = Pointer) & (n.typ.sysflag = interface) & (left = NIL)
+				& ((par # NIL) OR (n.class = Ncall))
+				& ((n.class # Nvar) OR (n.obj.mnolev <= 0)) THEN
+			GetTempVar("@cip", HrCPT.punktyp, obj);
+			x := NewLeaf(obj); Assign(x, n); Link(stat, last, x);
+			n := NewLeaf(obj)
+		END
+	END CheckBuffering;
+	
+	PROCEDURE CheckVarParBuffering* (VAR n: HrCPT.Node; VAR stat, last: HrCPT.Node);
+		VAR x: HrCPT.Node; obj: HrCPT.Object;
+	BEGIN
+		IF (n.class # Nvar) OR (n.obj.mnolev <= 0) THEN
+			GetTempVar("@ptr", n.typ, obj);
+			x := NewLeaf(obj); Assign(x, n); Link(stat, last, x);
+			n := NewLeaf(obj)
+		END
+	END CheckVarParBuffering;
+
+	
+	(* constructing case *)
+	
+	PROCEDURE (b: Builder) NewCase* (): T.Case, NEW, EXTENSIBLE;
+	BEGIN RETURN T.dir.Case()
+	END NewCase;
+	
+	PROCEDURE (b: Builder) AppendCaseLabel* (case: T.Case; from, to: INTEGER), NEW, EXTENSIBLE;
+	(** Append stmt to case *)
+		VAR r, cr: POINTER TO ARRAY OF T.Range; s, cs: POINTER TO ARRAY OF T.Stat; i, len: INTEGER;
+	BEGIN r := case.ranges;
+		IF case.ranges = NIL THEN len := 0 ELSE len := LEN(case.ranges) END;
+		IF case.labels = len THEN NEW(cr, len + capLabels); NEW(cs, len + capLabels); s := case.stmts;
+			i := 0; WHILE i < len DO cr[i] := r[i]; cs[i] := s[i]; INC(i) END; case.ranges := cr; case.stmts := cs; r := cr
+		END;
+		r[case.labels].from := from; r[case.labels].to := to;
+		INC(case.labels)
+	END AppendCaseLabel;
+	
+	PROCEDURE (b: Builder) OptimizeCase* (case: T.Case): T.Stat, NEW, EXTENSIBLE;
+		(** Provision to enable case stmts to be optimized in whatever way *)
+	BEGIN RETURN case
+	END OptimizeCase;
+	
+	(* case optimization *)
+
+	PROCEDURE Evaluate (n: HrCPT.Node; VAR min, max, num, dist: INTEGER; VAR head: HrCPT.Node);
+		VAR a: INTEGER;
+	BEGIN
+		IF n.left # NIL THEN
+			a := MIN(INTEGER); Evaluate(n.left, min, a, num, dist, head);
+			IF n.conval.intval - a > dist THEN dist := n.conval.intval - a; head := n END
+		ELSIF n.conval.intval < min THEN
+			min := n.conval.intval
+		END;
+		IF n.right # NIL THEN
+			a := MAX(INTEGER); Evaluate(n.right, a, max, num, dist, head);
+			IF a - n.conval.intval2 > dist THEN dist := a - n.conval.intval2; head := n END
+		ELSIF n.conval.intval2 > max THEN
+			max := n.conval.intval2
+		END;
+		INC(num);
+		IF n.conval.intval < n.conval.intval2 THEN
+			INC(num);
+			IF n.conval.intval2 - n.conval.intval > dist THEN dist := n.conval.intval2 - n.conval.intval; head := n END
+		END
+	END Evaluate;
+	
+	PROCEDURE Rebuild (VAR root: HrCPT.Node; head: HrCPT.Node);
+	BEGIN
+		IF root # head THEN
+			IF head.conval.intval2 < root.conval.intval THEN
+				Rebuild(root.left, head);
+				root.left := head.right; head.right := root; root := head
+			ELSE
+				Rebuild(root.right, head);
+				root.right := head.left; head.left := root; root := head
+			END
+		END
+	END Rebuild;
+	
+	PROCEDURE OptimizeCase* (VAR n: HrCPT.Node);
+		VAR min, max, num, dist, limit: INTEGER; head: HrCPT.Node;
+	BEGIN
+		IF n # NIL THEN
+			min := MAX(INTEGER); max := MIN(INTEGER); num := 0; dist := 0; head := n;
+			Evaluate(n, min, max, num, dist, head);
+			limit := 6 * num;
+			IF limit < 100 THEN limit := 100 END;
+			IF (num > 4) & ((min > MAX(INTEGER) - limit) OR (max < min + limit)) THEN
+				INCL(n.conval.setval, useTable)
+			ELSE
+				IF num > 4 THEN Rebuild(n, head) END;
+				INCL(n.conval.setval, useTree);
+				OptimizeCase(n.left);
+				OptimizeCase(n.right)
+			END
+		END
+	END OptimizeCase;
+(*	
+	PROCEDURE ShowTree (n: CpjsCPT.Node; opts: SET);
+	BEGIN
+		IF n # NIL THEN
+			IF opts = {} THEN opts := n.conval.setval END;
+			IF useTable IN opts THEN
+				IF n.left # NIL THEN ShowTree(n.left, opts); CpjsM.LogW(",") END;
+				CpjsM.LogWNum(n.conval.intval, 1);
+				IF n.conval.intval2 > n.conval.intval THEN CpjsM.LogW("-"); CpjsM.LogWNum(n.conval.intval2, 1)
+				END;
+				IF n.right # NIL THEN CpjsM.LogW(","); ShowTree(n.right, opts) END
+			ELSIF useTree IN opts THEN
+				CpjsM.LogW("("); ShowTree(n.left, {}); CpjsM.LogW("|"); CpjsM.LogWNum(n.conval.intval, 1);
+				IF n.conval.intval2 > n.conval.intval THEN CpjsM.LogW("-"); CpjsM.LogWNum(n.conval.intval2, 1)
+				END;
+				CpjsM.LogW("|"); ShowTree(n.right, {}); CpjsM.LogW(")")
+			ELSE
+				ShowTree(n.left, opts); CpjsM.LogW(" "); CpjsM.LogWNum(n.conval.intval, 1);
+				IF n.conval.intval2 > n.conval.intval THEN CpjsM.LogW("-"); CpjsM.LogWNum(n.conval.intval2, 1)
+				END;
+				CpjsM.LogW(" "); ShowTree(n.right, opts)
+			END
+		END
+	END ShowTree;
+*)
+BEGIN
+	zero := HrCPT.NewConst(); zero.intval := 0; zero.realval := 0;
+	one := HrCPT.NewConst(); one.intval := 1; one.realval := 0;
+	two := HrCPT.NewConst(); two.intval := 2; two.realval := 0;
+	dummy := HrCPT.NewConst();
+	quot := HrCPT.NewConst();
+	NEW(proceduretp);
+	InitApplicants; InitOperators(operators);
+	NEW(B);
+END HrB.

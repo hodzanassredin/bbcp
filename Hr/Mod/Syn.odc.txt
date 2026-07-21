@@ -1,0 +1,355 @@
+MODULE HrSyn;	(* Syn = synthesizer. Probably a temporary module to hold  *)
+	
+	IMPORT
+		T := HrT
+		;
+	
+	CONST symVer = 1;
+		hrCall* = 0; sysvCall* = 1; ms64Call* = 2;
+		RDI* = 7; RSI* = 6; RDX* = 2; RCX* = 1; R8* = 8; R9* = 9; 
+		XMM0* = 0; XMM1* = 1; XMM2* = 2; XMM3* = 3;
+		stk* = 31; 	(* push param on stack with default Hr alignmend, whatever that is *)
+		stk16* = 30;	(* push param on stack with 16-byte alignment. Crazy. *)
+		banned* = 29;	(** this parameter cannot be passed, or NIY *)
+		
+		unalloc* = -1;	(* this parameter hasn't been allocated to a register or the stack *)
+		stackArray* = 31;	(* temporary flag indicating array allocated on stack with StackAlloc *)
+		none* = -1;
+	
+	TYPE 
+		Dir = POINTER TO RECORD (T.Dir) END;
+
+		StringLit* = POINTER TO RECORD (T.StringLit)
+			link*: T.Literal;	(* used to build a list of all literals for externalization *)
+			adr*: INTEGER;	(* address of string after it has been allocated *)
+			bkmrk*: INTEGER;	(* head of bookmark list - locations in object file that need to be fixed up *)
+		END;
+		
+		Real* = POINTER TO RECORD (T.Real)
+			link*: T.Literal;	(* linked list of literals for externalization *)
+			adr*: INTEGER;	(* address of literal after it has been allocated *)
+			bkmrk*: INTEGER;	(* head of bookmark list - locations in object file that need to be fixed up *)
+		END;
+		
+		Int* = POINTER TO RECORD (T.Int)
+			link*: T.Literal;	(* linked list of literals for externalization *)
+			adr*: INTEGER;	(* address of literal after it has been allocated *)
+			bkmrk*: INTEGER;	(* head of bookmark list - locations in object file that need to be fixed up *)
+		END;
+		
+		TypeName* = POINTER TO RECORD (T.TypeName)
+			ffileOffs*: INTEGER;	(* offset of TypeName's descriptor in object file after it's been output *)
+			llink*: TypeName;	(* list of TypeNames whose descriptors are output into the Descriptor segment *)
+			bkmrk*: INTEGER;	(* head of bookmark chain *)
+			(* below are fields for RIP fixups *)
+			last*: INTEGER;	(* head of bookmark chain (last inserted bookmark); must be initialized to 0 *)
+			offs*: INTEGER;	(* .imno = 0: offset of type descriptor in Descriptor block; (.imno # 0) & .proxied: offset in proxy table *)
+			proxied*: BOOLEAN;	(* valid for imported types (.imno # 0); .proxied => proxy entry has been assigned *)
+		END;
+		
+		XProc* = POINTER TO RECORD (T.XProc)
+			last*: INTEGER;	(* head of bookmark chain (last inserted bookmark); must be initialized to 0 *)
+			used*: SET;	(* set of registers, possibly empty, used for parameter passing to this procedure *)
+			ppushed*: INTEGER;	(* number of bytes pushed on stack for parameter passing *)
+			fpu*: BOOLEAN	(* whether fpu is used in procedure body *)
+		END;
+		
+		Bkmrks* = ARRAY 4 OF RECORD 
+			offset*, last*: INTEGER 
+		END;
+		
+		BkmrksPtr* = POINTER TO RECORD 
+			bkmrks*: Bkmrks; 
+			more*: BkmrksPtr
+		END;
+		
+		GlobVar* = POINTER TO RECORD (T.GlobVar)
+			last*: INTEGER;	(* head of bookmark chain (last inserted bookmark); must be initialized to 0 *)
+			bkmrks*: Bkmrks;	(* must be initialized to 0 *)
+			moreBkmrks*: BkmrksPtr;
+		END;
+		
+		Par* = POINTER TO RECORD (T.Par)
+			pass*: INTEGER;	(** parameter passing mode: register number or stk. pass < 0 => XMMi, i = -pass-1 *)
+		END;
+		
+		CallingConvention* = RECORD
+			maxIntParReg*, maxRealParReg*: INTEGER;
+			intParRegs*, realRegs*: ARRAY 7 OF INTEGER;
+			array*: INTEGER;	(** value array parameter passing mode *)
+		END;
+		
+		Type* = RECORD
+			link*: T.Type;	(* list of proper or imported types in E *)
+			bkmrks*: INTEGER;	(* head of loader/linker fixup chain *)
+			rips*: INTEGER;	(* head of RIP bookmark chain (last inserted bookmark); must be initialized to 0 *)
+			desc*: INTEGER;	(* for proper types, offset of type descriptor in Descriptor block; for imported types, offset in proxy table; -1 => neither descriptor nor proxy have been allocated *)
+		END;
+		
+		Record* = POINTER TO RECORD (T.Record)
+			typ*: Type;
+			fieldsOffs*: INTEGER;	(* offset of field directory WRT Meta *)
+			(*link*: T.Type;	(* list of proper or imported types in E *)
+			bkmrks*: INTEGER;	(* head of loader/linker fixup chain *)
+			(* below are fields for RIP fixups *)
+			rips*: INTEGER;	(* head of RIP bookmark chain (last inserted bookmark); must be initialized to 0 *)
+			desc*: INTEGER;	(* for proper types, offset of type descriptor in Descriptor block; for imported types, offset in proxy table; -1 => neither descriptor nor proxy have been allocated *)*)
+		END;
+		
+		Array* = POINTER TO RECORD (T.Array)
+			typ*: Type;
+			(*link*: T.Type;	(* list of proper or imported types in E *)
+			bkmrks*: INTEGER;	(* head of loader/linker fixup chain *)
+			(* below are fields for RIP fixups *)
+			desc*: INTEGER;	(* for proper types, offset of type descriptor in Descriptor block; for imported types, offset in proxy table; -1 => neither descriptor nor proxy have been allocated *)*)
+		END;
+
+		RecPtr* = POINTER TO RECORD (T.RecPtr)
+			typ*: Type;
+			(*link*: T.Type;	(* list of proper or imported types in E *)
+			bkmrks*: INTEGER;	(* head of loader/linker fixup chain *)
+			(* below are fields for RIP fixups *)
+			rrips*: INTEGER;	(* head of RIP bookmark chain (last inserted bookmark); must be initialized to 0 *)
+			desc*: INTEGER;	(* for proper types, offset of type descriptor in Descriptor block; for imported types, offset in proxy table; -1 => neither descriptor nor proxy have been allocated *)*)
+		END;
+			
+		
+		Aux* = POINTER TO RECORD (T.Stat)
+			str*: T.VarDes;	(* designators for auxiliary variables *)
+			tmp*, ptr*: T.Deref;
+			tmpExpr*, strExpr*, ptrExpr*, len*: T.Expression
+		END;
+		(* Auxiliary vars and verbs explained *)
+		
+	
+	VAR dir-: Dir;
+		callingConventions-: ARRAY 3 OF CallingConvention;
+
+	PROCEDURE (d: Dir) Nil* (): T.Nil; VAR r: T.Nil; BEGIN NEW(r); RETURN r; END Nil;
+	PROCEDURE (d: Dir) Int* (): Int; VAR r: Int; BEGIN NEW(r); RETURN r END Int;
+	PROCEDURE (d: Dir) Char* (): T.Char; VAR r: T.Char; BEGIN NEW(r); RETURN r END Char;
+	PROCEDURE (d: Dir) Set* (): T.Set; VAR r: T.Set; BEGIN NEW(r); RETURN r END Set;
+	PROCEDURE (d: Dir) Bool* (): T.Bool; VAR r: T.Bool; BEGIN NEW(r); RETURN r END Bool;
+	PROCEDURE (d: Dir) Real* (): Real; VAR r: Real; BEGIN NEW(r); RETURN r END Real;
+	PROCEDURE (d: Dir) StringLit* (): StringLit; VAR r: StringLit; BEGIN NEW(r); RETURN r END StringLit;
+	PROCEDURE (d: Dir) GlobVar* (): GlobVar; VAR r: GlobVar; BEGIN NEW(r); RETURN r
+	END GlobVar;
+	PROCEDURE (d: Dir) LocVar* (): T.LocVar; VAR r: T.LocVar; BEGIN NEW(r); RETURN r END LocVar;
+	PROCEDURE (d: Dir) Par* (): Par; VAR r: Par; BEGIN NEW(r); r.pass := unalloc; RETURN r END Par;
+	PROCEDURE (d: Dir) Const* (): T.Const; VAR r: T.Const; BEGIN NEW(r); r.flags := { T.const }; RETURN r
+	END Const;
+	PROCEDURE (d: Dir) Field* (): T.Field; VAR r: T.Field; BEGIN NEW(r); RETURN r END Field;
+	PROCEDURE (d: Dir) TypeName* (): T.TypeName; 
+		VAR r: TypeName; 
+	BEGIN NEW(r); r.offs := none; RETURN r
+	END TypeName;
+	PROCEDURE (d: Dir) FProc* (): T.FProc; VAR r: T.FProc; BEGIN NEW(r); RETURN r END FProc;
+	PROCEDURE (d: Dir) LProc* (): T.LProc; VAR r: T.LProc; BEGIN NEW(r); RETURN r END LProc;
+	PROCEDURE (d: Dir) XProc* (): XProc; VAR r: XProc; 
+	BEGIN NEW(r); r.adr := 0; 
+		RETURN r 
+	END XProc;
+	PROCEDURE (d: Dir) SProc* (): T.SProc; VAR r: T.SProc; BEGIN NEW(r); RETURN r END SProc;
+	PROCEDURE (d: Dir) CProc* (): T.CProc; VAR r: T.CProc; BEGIN NEW(r); RETURN r END CProc;
+	PROCEDURE (d: Dir) IProc* (): T.IProc; VAR r: T.IProc; BEGIN NEW(r); RETURN r END IProc;
+	PROCEDURE (d: Dir) TProc* (): T.TProc; VAR r: T.TProc; BEGIN NEW(r); RETURN r END TProc;
+	PROCEDURE (d: Dir) Mod* (): T.Mod; VAR r: T.Mod; BEGIN NEW(r); RETURN r END Mod;
+	PROCEDURE (d: Dir) Segraph* (): T.Segraph; VAR r: T.Segraph; BEGIN NEW(r); RETURN r END Segraph;
+	PROCEDURE (d: Dir) AuxType* (): T.AuxType; 
+		VAR r: T.AuxType; 
+	BEGIN NEW(r); r.what := -1 (* this field to be filled out by clients, -1 signals it hasn't been filled out *);
+		RETURN r
+	END AuxType;
+	
+	PROCEDURE (d: Dir) Basic* (): T.Basic; VAR r: T.Basic; BEGIN NEW(r); RETURN r END Basic;
+	
+	PROCEDURE (d: Dir) Forward* (): T.Forward; 
+		VAR r: T.Forward; 
+	BEGIN NEW(r); r.what := T.fForward; RETURN r
+	END Forward;
+	
+	PROCEDURE (d: Dir) SysPtr* (): T.SysPtr; 
+		VAR r: T.SysPtr; 
+	BEGIN NEW(r); r.what := T.fSysPtr; RETURN r
+	END SysPtr;
+	
+	PROCEDURE (d: Dir) ArrayPtr* (): T.ArrayPtr; 
+		VAR r: T.ArrayPtr; 
+	BEGIN NEW(r); r.what := T.fArrayPtr; RETURN r
+	END ArrayPtr;
+	
+	PROCEDURE (d: Dir) RecPtr* (): T.RecPtr; 
+		VAR r: RecPtr; 
+	BEGIN NEW(r); r.what := T.fRecPtr; r.typ.desc := none; RETURN r
+	END RecPtr;
+	
+	PROCEDURE (d: Dir) Record* (): T.Record; 
+		VAR r: Record; 
+	BEGIN NEW(r); r.what := T.fRecord; r.fieldsOffs := none; r.typ.desc := none; RETURN r
+	END Record;
+	
+	PROCEDURE (d: Dir) Array* (): T.Array; 
+		VAR r: Array; 
+	BEGIN NEW(r); r.what := T.fArray; r.typ.desc := none; RETURN r
+	END Array;
+	
+	PROCEDURE (d: Dir) Procedure* (): T.Procedure; 
+		VAR r: T.Procedure; 
+	BEGIN NEW(r); r.what := T.fProcedure; RETURN r
+	END Procedure;
+	
+	PROCEDURE (d: Dir) ConDes* (): T.ConDes; VAR r: T.ConDes; BEGIN NEW(r); RETURN r
+	END ConDes;
+	PROCEDURE (d: Dir) GuardEx* (): T.GuardEx; VAR r: T.GuardEx; BEGIN NEW(r); RETURN r
+	END GuardEx;
+	PROCEDURE (d: Dir) Op* (): T.Op; VAR r: T.Op; BEGIN NEW(r); RETURN r
+	END Op;
+	PROCEDURE (d: Dir) IsOp* (): T.IsOp; VAR r: T.IsOp; BEGIN NEW(r); RETURN r
+	END IsOp;
+	PROCEDURE (d: Dir) VarDes* (): T.VarDes; VAR r: T.VarDes; BEGIN NEW(r); RETURN r
+	END VarDes;
+	PROCEDURE (d: Dir) FieldDes* (): T.FieldDes; VAR r: T.FieldDes; BEGIN NEW(r); RETURN r
+	END FieldDes;
+	PROCEDURE (d: Dir) Deref* (): T.Deref; VAR r: T.Deref; BEGIN NEW(r); RETURN r
+	END Deref;
+	PROCEDURE (d: Dir) StringSel* (): T.StringSel; VAR s: T.StringSel; BEGIN NEW(s); RETURN s
+	END StringSel;
+	PROCEDURE (d: Dir) Index* (): T.Index; VAR r: T.Index; BEGIN NEW(r); RETURN r
+	END Index;
+	PROCEDURE (d: Dir) GuardDes* (): T.GuardDes; VAR r: T.GuardDes; BEGIN NEW(r); RETURN r
+	END GuardDes;
+	PROCEDURE (d: Dir) TypeDes* (): T.TypeDes; VAR r: T.TypeDes; BEGIN NEW(r); RETURN r
+	END TypeDes;
+	PROCEDURE (d: Dir) ProcDes* (): T.ProcDes; VAR r: T.ProcDes; 
+	BEGIN NEW(r); r.type := T.procdestp; RETURN r
+	END ProcDes;
+	PROCEDURE (d: Dir) CallDes* (): T.CallDes; VAR r: T.CallDes; BEGIN NEW(r); RETURN r END CallDes;
+	PROCEDURE (d: Dir) Exit* (): T.Exit; VAR r: T.Exit; BEGIN NEW(r); RETURN r END Exit;
+	PROCEDURE (d: Dir) Trap* (): T.Trap; VAR r: T.Trap; BEGIN NEW(r); RETURN r END Trap;
+	PROCEDURE (d: Dir) If* (): T.If; VAR r: T.If; BEGIN NEW(r); RETURN r END If;
+	PROCEDURE (d: Dir) With* (): T.With; VAR r: T.With; BEGIN NEW(r); RETURN r END With;
+	PROCEDURE (d: Dir) WithClause* (): T.WithClause; VAR r: T.WithClause; BEGIN NEW(r); RETURN r
+	END WithClause;
+	PROCEDURE (d: Dir) Case* (): T.Case; VAR r: T.Case; BEGIN NEW(r); RETURN r END Case;
+	PROCEDURE (d: Dir) Call* (): T.Call; VAR r: T.Call; BEGIN NEW(r); RETURN r END Call;
+	PROCEDURE (d: Dir) Loop* (): T.Loop; VAR r: T.Loop; BEGIN NEW(r); RETURN r END Loop;
+	PROCEDURE (d: Dir) While* (): T.While; VAR r: T.While; BEGIN NEW(r); RETURN r END While;
+	PROCEDURE (d: Dir) Repeat* (): T.Repeat; VAR r: T.Repeat; BEGIN NEW(r); RETURN r END Repeat;
+	PROCEDURE (d: Dir) Return* (): T.Return; VAR r: T.Return; BEGIN NEW(r); RETURN r END Return;
+	PROCEDURE (d: Dir) Assign* (): T.Assign; VAR r: T.Assign; BEGIN NEW(r); RETURN r END Assign;
+	PROCEDURE (d: Dir) New* (): T.New; VAR r: T.New; BEGIN NEW(r); RETURN r END New;
+	PROCEDURE (d: Dir) Put* (): T.Put; VAR r: T.Put; BEGIN NEW(r); RETURN r END Put;
+	PROCEDURE (d: Dir) PutReg* (): T.PutReg; VAR r: T.PutReg; BEGIN NEW(r); RETURN r END PutReg;
+	PROCEDURE (d: Dir) Move* (): T.Move; VAR r: T.Move; BEGIN NEW(r); RETURN r END Move;
+	PROCEDURE (d: Dir) SymVer (): INTEGER; BEGIN RETURN symVer END SymVer;
+	
+	PROCEDURE (x: Real) Equals* (y: T.Literal): BOOLEAN, NEW;
+		VAR res: BOOLEAN;
+	BEGIN WITH y: T.Real DO res := x.real = y.real ELSE res := FALSE END; RETURN res
+	END Equals;
+	
+	PROCEDURE (x: Int) Equals* (y: T.Literal): BOOLEAN, NEW;
+		VAR res: BOOLEAN;
+	BEGIN WITH y: T.Int DO res := x.long = y.long ELSE res := FALSE END; RETURN res
+	END Equals;
+	
+	PROCEDURE (s: StringLit) Equals* (q: T.Literal): BOOLEAN, NEW;
+		VAR res: BOOLEAN;
+	BEGIN 
+		WITH q: T.StringLit DO res := (s.type.what = q.type.what) & (s.len = q.len) & (s.str^ = q.str^) 
+		ELSE res := FALSE 
+		END;
+		RETURN res
+	END Equals;
+	
+	PROCEDURE AllocSysV (p: Par; VAR intAvail, realAvail: INTEGER);
+		CONST maxReal = 0; maxInt = 6; 
+		VAR w, pass: INTEGER; kind: SET;
+	BEGIN
+		w := p.type.what; kind := p.flags * T.kindMask;
+		IF (w = T.fArray) & (kind = T.valK) THEN pass := banned
+		ELSE
+			IF w = T.fArray THEN w := T.fSysPtr END;
+			IF (w IN T.reals) & (kind = T.valK) THEN HALT(126); 	(* allocate floating point reg *)
+				pass := callingConventions[sysvCall].realRegs[realAvail]; 
+				IF realAvail < callingConventions[sysvCall].maxRealParReg THEN INC(realAvail) END
+			ELSIF w IN T.basics + T.pointers THEN	 (* allocate integer reg *)
+				pass := callingConventions[sysvCall].intParRegs[intAvail]; 
+				IF intAvail < callingConventions[sysvCall].maxIntParReg THEN INC(intAvail) END
+			ELSE HALT(126)
+			END
+		END;
+		p.pass := pass
+	END AllocSysV;
+	
+	PROCEDURE AllocMs (p: Par; VAR intAvail, realAvail: INTEGER);
+		CONST maxReal = 0; maxInt = 6; 
+		VAR w, pass: INTEGER; kind: SET;
+	BEGIN
+		w := p.type.what; kind := p.flags * T.kindMask;
+		IF (w = T.fArray) & (kind = T.valK) THEN pass := banned
+		ELSE
+			IF w = T.fArray THEN w := T.fSysPtr END;
+			IF (w IN T.reals) & (kind = T.valK) THEN  	(* allocate floating point reg *)
+				pass := callingConventions[ms64Call].realRegs[realAvail];
+				IF pass # stk THEN INC(realAvail) END
+			ELSIF w IN T.basics + T.pointers THEN	 (* allocate integer reg *)
+				pass := callingConventions[ms64Call].intParRegs[intAvail]; 
+				IF intAvail < callingConventions[ms64Call].maxIntParReg THEN INC(intAvail) END
+			ELSE HALT(126)
+			END
+		END;
+		p.pass := pass
+	END AllocMs;
+	
+	PROCEDURE AllocPar* (conv: INTEGER; p: Par; VAR intAvail, realAvail: INTEGER);
+	BEGIN
+		CASE conv OF
+		| sysvCall: AllocSysV(p, intAvail, realAvail)
+		| ms64Call: AllocMs(p, intAvail, realAvail)
+		| hrCall: p.pass := stk
+		ELSE HALT(126)
+		END
+	END AllocPar;
+	
+	(*PROCEDURE (p: Par) Internalize2* (VAR rd: T.SymbolReader);
+	BEGIN rd.Int(p.pass)
+	END Internalize2;
+	
+	PROCEDURE (p: Par) Externalize2* (VAR wr: T.SymbolWriter);
+	BEGIN wr.Int(p.pass)
+	END Externalize2;*)
+	
+
+
+BEGIN NEW(dir);
+	callingConventions[sysvCall].maxIntParReg := 7;
+	callingConventions[sysvCall].maxRealParReg := 9;
+	callingConventions[sysvCall].intParRegs[0] := RDI;
+	callingConventions[sysvCall].intParRegs[1] := RSI;
+	callingConventions[sysvCall].intParRegs[2] := RDX;
+	callingConventions[sysvCall].intParRegs[3] := RCX;
+	callingConventions[sysvCall].intParRegs[4] := R8;
+	callingConventions[sysvCall].intParRegs[5] := R9;
+	callingConventions[sysvCall].intParRegs[6] := stk16;
+	callingConventions[sysvCall].array := banned;
+	
+	callingConventions[ms64Call].maxIntParReg := 4;
+	callingConventions[ms64Call].maxRealParReg := 0;
+	callingConventions[ms64Call].intParRegs[0] := RCX;
+	callingConventions[ms64Call].intParRegs[1] := RDX;
+	callingConventions[ms64Call].intParRegs[2] := R8;
+	callingConventions[ms64Call].intParRegs[3] := R9;
+	callingConventions[ms64Call].intParRegs[4] := stk16;
+	callingConventions[ms64Call].realRegs[0] := XMM0;
+	callingConventions[ms64Call].realRegs[1] := XMM1;
+	callingConventions[ms64Call].realRegs[2] := XMM2;
+	callingConventions[ms64Call].realRegs[3] := XMM3;
+	callingConventions[ms64Call].realRegs[4] := stk;
+	callingConventions[ms64Call].array := banned;
+
+	callingConventions[hrCall].maxIntParReg := 0;
+	callingConventions[hrCall].maxRealParReg := -1;
+	callingConventions[hrCall].intParRegs[0] := stk;
+	callingConventions[hrCall].array := stk;
+END HrSyn.

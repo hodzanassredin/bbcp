@@ -1,0 +1,39 @@
+MODULE HrOcfTargets;	(** Simple target view for use in OCF explorer output. After intensive development of HrOcfExplorer is finished, this module could be reintegrated into it.  *)
+	
+	IMPORT Stores, Views, TextModels;
+	
+	CONST targetString = "!"; 
+
+	TYPE
+		Target* = POINTER TO RECORD (Views.View) 
+			tag*: INTEGER
+		END;
+		
+	PROCEDURE (v: Target) Restore* (f: Views.Frame; asc, dsc, x, y: INTEGER);
+		VAR a: TextModels.Attributes;
+	BEGIN 
+		a := v.context(TextModels.Context).Attr();
+		a.font.GetBounds(asc, dsc, x);
+		v.context.GetSize(x, y);
+		x := (x - a.font.StringWidth(targetString)) DIV 2;
+		y := (y - asc) DIV 2 + asc;
+		f.DrawString(x, y, a.color, targetString, a.font)
+	END Restore;
+	
+	PROCEDURE (v: Target) HandlePropMsg- (VAR msg: Views.PropMessage);
+	BEGIN
+		WITH msg: TextModels.Pref DO msg.opts := { TextModels.hideable } ELSE END
+	END HandlePropMsg;
+	
+	PROCEDURE (v: Target) CopyFromSimpleView- (src: Views.View);
+	BEGIN WITH src: Target DO v.tag := src.tag END
+	END CopyFromSimpleView;
+	
+	PROCEDURE (v: Target) ExternalizeAs- (VAR s: Stores.Store); BEGIN s := NIL END ExternalizeAs;
+	
+	PROCEDURE NewTarget* (tag: INTEGER): Target;
+		VAR v: Target;
+	BEGIN NEW(v); v.tag := tag; RETURN v
+	END NewTarget;
+	
+END HrOcfTargets.

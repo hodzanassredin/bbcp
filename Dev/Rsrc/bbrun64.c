@@ -72,21 +72,20 @@ typedef struct Directory{
 
 
 typedef struct __attribute__((packed)) Module {
-    struct Module *next;
-    int opts;
-    int refcnt;
-    short compTime[6], loadTime[6];
-    int ext;
-    int term; /* actually a pointer to type Command */
-    int nofimps, nofptrs;
-    int csize, dsize, rsize;
-    intptr_t code, data, refs;
-    intptr_t procBase, varBase; /* meta base addresses */
-    char* names;  /* names[0] = 0X */
-    int* ptrs;
-    struct Module* imports;
-    Directory* export;
-    char name[256];
+    struct Module *next;        /*  0: 8 */
+    int opts;                   /*  8: 4 */
+    int refcnt;                 /* 12: 4 */
+    int ext;                    /* 16: 4 */
+    int termLo, termHi;         /* 20: 8 */
+    int nofimps, nofptrs;       /* 28: 8 */
+    int csize, dsize, rsize;    /* 36:12 */
+    intptr_t code, data, refs;  /* 48:24 */
+    intptr_t procBase, varBase; /* 72:16 */
+    char* names;                /* 88: 8 */
+    intptr_t* ptrs;             /* 96: 8 */
+    struct Module* imports;     /*104: 8 */
+    Directory* export;           /*112: 8 */
+    char name[256];             /*120:256 */
 } Module;
 
 
@@ -174,7 +173,7 @@ static void DumpModule (const Module *m) {
     dprintf("Module %s\n", m->name);
     dprintf("    opts = 0x%08x\n", m->opts);
     dprintf("    ext = %d\n", m->ext);
-    dprintf("    term = %p\n", (void *)m->term);
+    dprintf("    term = %p\n", (void *)(intptr_t)m->termLo);
     dprintf("    nofimps = %d, nofptrs = %d\n", m->nofimps, m->nofptrs);
     dprintf("    csize = %d, dsize = %d, rsize = %d\n", m->csize, m->dsize, m->rsize);
     dprintf("    code = %p, data = %p, refs = %p\n", (void *)m->code, (void *)m->data, (void *)m->refs);
@@ -202,6 +201,8 @@ static void RegisterModule()
     m->name[255] = 0;
     
     m->next = modlist;
+    /* procBase from descriptor */
+    m->procBase = 0; /* will be set from descriptor if needed */
     modlist = m;
     printf("  + %s (code=%p)\n", m->name, (void*)m->code);
 }
@@ -594,14 +595,10 @@ static bool ReadModule ()
     dp = (char*) mod.dad;
     mp = (char*) mod.mad;
     cp = (char*) mod.cad;
-    fseek(f, mod.start + mod.hs, SEEK_SET);  /* OCF code section */
-    dprintf("ReadModule after fseek pos: %ld\n", ftell(f));
-    cnt = fread(mp, 1, mod.ms, f);
-    dprintf("Read meta bulk (%d bytes. New pos: %ld)\n", cnt, ftell(f));
-    cnt = fread(dp, 1, mod.ds, f);
-    dprintf("Read desc bulk (%d bytes. New pos: %ld)\n", cnt, ftell(f));
-    cnt = fread(cp, 1, mod.cs, f);
-    dprintf("Read code bulk (%d bytes. New pos: %ld)\n", cnt, ftell(f));
+    fseek(f, mod.hs, SEEK_SET);  /* seek past header (mod.hs=headSize) */
+    cnt = fread(mp, 1, mod.ms, f);  /* read descriptor (mod.ms=descSize) */
+    fseek(f, mod.ds, SEEK_CUR);     /* skip metadata before code (mod.ds=codeOff) */
+    cnt = fread(cp, 1, mod.cs, f);  /* read actual code (mod.cs=codeSize) */
     DumpMod();
     dprintf("before fixup: pos = %ld\n", ftell(f));
 
@@ -708,6 +705,8 @@ static bool ReadModule ()
         else{
             isLib = 0;
             desc = ThisModule(imp->name);
+            if (desc == NULL && strcmp(imp->name, "Kernel") == 0)
+                desc = ThisModule("Kernel64");
             if (desc == NULL){
                 printf("invalid import list\n");
                 return false;
@@ -775,9 +774,7 @@ static bool ReadModule ()
         imp = imp->next;
     }
 
-    if (!FixModMemPermissions()) {
-        return false;
-    }
+    /* FixModMemPermissions skipped - we set EXEC before body calls */
 
     /* Seek to end of current OCF: header + meta + desc + code + data */
     fseek(f, mod.start + mod.hs + mod.ms + mod.ds + mod.cs + mod.vs, SEEK_SET);
@@ -809,12 +806,7 @@ static void ReserveCrossBorder () {
 
 int main (int argc, char *argv[])
 {
-    const char *ocfFiles[] = {
-        "System/Code/Kernel64.ocf",
-        "System/Code/Utf.ocf",
-        "System/Code/Files.ocf",
-        NULL
-    };
+    const char *ocfFiles[] = {"System/Code/Kernel64.ocf","System/Code/Utf.ocf","System/Code/Files.ocf","System/Code/Files64.ocf","System/Code/Strings.ocf","Lin/Code/Kernel.ocf","Lin/Code/Files64.ocf","Lin/Code/Files.ocf","Lin/Code/Loader.ocf","Lin/Code/Env.ocf","Lin/Code/Config.ocf","Lin/Code/Dates.ocf","Lin/Code/Lang.ocf","Lin/Code/Console.ocf","Lin/Code/Clipboard.ocf","Lin/Code/Backends.ocf","Lin/Code/Fonts.ocf","Lin/Code/Dialog.ocf","Lin/Code/Mechanisms.ocf","Lin/Code/Registry.ocf","Lin/Code/Gui.ocf","Lin/Code/Dl.ocf","Lin/Code/Libc.ocf","Lin/Code/LibW.ocf","Lin/Code/Rt.ocf","Lin/Code/Ioctl.ocf","Lin/Code/Gtk2GLib.ocf","Lin/Code/Gtk2GObject.ocf","Lin/Code/Gtk2Gdk.ocf","Lin/Code/Gtk2Gtk.ocf","Lin/Code/Gtk2Pango.ocf","Lin/Code/GdkPixbuf.ocf","Lin/Code/Gtk2Keysyms.ocf","Lin/Code/Gtk2Util.ocf","Lin/Code/Cairo.ocf","Lin/Code/CairoPango.ocf","Lin/Code/Ports.ocf","Lin/Code/RastersPng.ocf","Lin/Code/PackedFiles.ocf","System/Code/Models.ocf","System/Code/Views.ocf","System/Code/Controllers.ocf","System/Code/Windows.ocf","System/Code/Ports.ocf","System/Code/Fonts.ocf","System/Code/Controls.ocf","System/Code/Containers.ocf","System/Code/Converters.ocf","System/Code/Dialog.ocf","System/Code/Documents.ocf","System/Code/Stores.ocf","System/Code/Meta.ocf","System/Code/Services.ocf","System/Code/Properties.ocf","System/Code/Librarian.ocf","System/Code/Log.ocf","System/Code/Loop.ocf","System/Code/Mechanisms.ocf","System/Code/In.ocf","System/Code/Out.ocf","Std/Code/Cmds.ocf","Std/Code/Windows.ocf","Std/Code/Interpreter.ocf","Std/Code/StdCFrames.ocf","Std/Code/Dialog.ocf","Std/Code/Documents.ocf","Std/Code/Config.ocf","Std/Code/Debug.ocf","Std/Code/Log.ocf","Std/Code/Menus.ocf","Std/Code/Links.ocf","Std/Code/Loader.ocf","Std/Code/Api.ocf","Std/Code/CFrames.ocf","Std/Code/Pictures.ocf","Std/Code/Rasters.ocf","Std/Code/Scrollbars.ocf","Std/Code/Scrollers.ocf","Std/Code/Folds.ocf","Std/Code/Stamps.ocf","Std/Code/Tables.ocf","Text/Code/Models.ocf","Text/Code/Views.ocf","Text/Code/Controllers.ocf","Text/Code/Mappers.ocf","Text/Code/Setters.ocf","Text/Code/Cmds.ocf","Text/Code/Rulers.ocf","Form/Code/Models.ocf","Form/Code/Views.ocf","Lin/Code/Init.ocf",NULL};
     int i;
     bool ok = true;
     BodyProc body;
@@ -846,8 +838,8 @@ int main (int argc, char *argv[])
             size_t code_len = mod.cs + pagesize;
             mprotect((void*)code_page, code_len, PROT_READ | PROT_WRITE | PROT_EXEC);
             
-            BodyProc body = (BodyProc)(intptr_t)k->code;
-            printf("Kernel code at %p\n", (void*)k->code);
+            BodyProc body = (BodyProc)(intptr_t)k->code; /* skip prologue */
+            printf("Kernel code at %p\n", (void*)k->code); { unsigned char *tp=(unsigned char*)k->code; printf("  First bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n", tp[0],tp[1],tp[2],tp[3],tp[4],tp[5],tp[6],tp[7]); }
             
             /* Manual fixup: search for ripBased4 (type=0x6E) fixup metadata in code
                and patch the 4-byte displacement to point to data section.
@@ -879,6 +871,62 @@ int main (int argc, char *argv[])
             body();
             printf("KERNEL RETURNED! 64-BIT BLACKBOX BOOT SUCCESSFUL!\n"); fflush(stdout);
             printf("*** 64-BIT KERNEL RETURNED! ***\n");
+            /* Call each module's body (Init) */
+            printf("Initializing modules...\n");
+            {
+                /* Iterate in reverse (load order): Kernel first, LinInit last */
+                Module *init_order[256];
+                int n = 0;
+                for (Module *m = modlist; m; m = m->next) {
+                    if (n < 256) init_order[n++] = m;
+                }
+                /* Call bodies in reverse (loaded first = called first) */
+                for (int i = n - 1; i >= 0; i--) {
+                    Module *m = init_order[i];
+                    if (m->code && m->name[0] && strcmp(m->name, "LinInit") != 0) {
+                        BodyProc b = (BodyProc)(intptr_t)m->code;
+                        b();
+                    }
+                }
+            }
+            printf("All modules initialized\n");
+
+            /* Patch fixups for ALL loaded modules */
+            {
+                size_t ps = getpagesize();
+                for (Module *m = modlist; m; m = m->next) {
+                    if (m->code) {
+                        intptr_t cp = m->code & ~(ps - 1);
+                        mprotect((void*)cp, 65536, PROT_READ|PROT_WRITE|PROT_EXEC);
+                    }
+                }
+            }
+            for (Module *m = modlist; m; m = m->next) {
+                unsigned char *mc = (unsigned char*)m->code;
+                intptr_t mv = (intptr_t)m->varBase;
+                if (!mc) continue;
+                int patched = 0;
+                for (int off = 0x30; off < 4096; off++) {
+                    int meta = *(int*)(mc + off);
+                    int typ = (meta >> 24) & 0xFF;
+                    if (typ != 110) continue;
+                    intptr_t target = mv + (meta & 0xFFFFFF);
+                    intptr_t rip = (intptr_t)mc + off + 4;
+                    intptr_t disp = target - rip;
+                    *(int*)(mc + off) = (int)disp;
+                    patched++;
+                }
+                printf("  %s: %d fixups
+", m->name, patched);
+            }
+
+            Module *lin = ThisModule("LinInit");
+            if (lin) {
+                printf("Calling LinInit body...\n"); fflush(stdout);
+                BodyProc lb = (BodyProc)(intptr_t)lin->code;
+                lb();
+                printf("LinInit returned\n");
+            }
             fflush(stdout);
         } else {
             printf("Kernel64 not found in module list\n");

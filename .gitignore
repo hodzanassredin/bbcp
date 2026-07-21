@@ -42,3 +42,4 @@ packaging/Arch/*.zst
 */Xtras/Net/Net.txt
 */Xtras/Termios/Termios.odc
 */Xtras/Termios/Termios.txt
+*.odc.txt

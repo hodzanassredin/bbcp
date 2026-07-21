@@ -33,7 +33,7 @@ MODULE Kernel64;
 	VAR
 		modList: Module; root: Cluster;
 		free: ARRAY N OF FreeBlk;
-		sentinel: FreeBlk; sentinelBlock: FreeBlk;
+		sentinel: FreeBlk; sRec: RECORD tag: Type; size: INTEGER; next: FreeBlk END;
 		allocated-: LONGINT;
 
 	PROCEDURE NewBlock* (size: INTEGER): Block;
@@ -67,9 +67,8 @@ MODULE Kernel64;
 		VAR i: INTEGER;
 	BEGIN
 		modList := NIL; root := NIL; allocated := 0;
-		NEW(sentinelBlock);
-		sentinelBlock.size := MAX(INTEGER);
-		sentinel := sentinelBlock;
+		sRec.tag := NIL; sRec.size := MAX(INTEGER); sRec.next := S.VAL(FreeBlk, S.ADR(sRec));
+		sentinel := S.VAL(FreeBlk, S.ADR(sRec));
 		FOR i := 0 TO N - 1 DO free[i] := sentinel END
 	END Init;
 

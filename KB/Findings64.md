@@ -42,6 +42,15 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
 Урок: pvfp рекорда включает typ.size, typ.align, typ.n и адреса полей →
 любое смешение 32/64 osf в одном дереве фатально.
 
+## Calling convention amd64 v2 (реализовано, KERNEL OK)
+- ParOff=16 ([rbp]=saved rbp, [rbp+8]=ret, params @rbp+16); слоты параметров 8 байт;
+  VarPar record = 16 ([tag][adr]); DynArr = [adr8][len4...] (ArrDOffs=8).
+- Enter/Exit: imVar slot 8 (BX), isCallback 16 (DI,SI — у всех XProc), guarded 48
+  (ОТЛОЖЕНО: exception frame fs:0 32-битный, нужен amd64 redesign TLS).
+- ret N = padr - 16. Push Int64 = один qword. heap tag at obj-8.
+- RIP-relative disp32: immLen = typ-106 (trailing bytes после disp: lea/mov/call=0,
+  imm8=1, imm16=2, imm32=4) — CPLamd64.ripTrail.
+
 ## Что подтверждено работать
 
 - Формат OCF v2 эмитируется правильно (Kernel64.ocf: ModDesc 8-байтные слоты,

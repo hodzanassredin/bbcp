@@ -1,7 +1,14 @@
-#include <errno.h>
-/* C-startup and loader for BlackBox
-* Implemented as the StdLoader.
-*/
+/* 64-bit C-startup and loader for BlackBox (OCF amd64 v2 format)
+ * Principles inherited from 32-bit bbrun.c:
+ *  - module descriptor from file IS the runtime Module (dad)
+ *  - 6 fixup groups: newRec, newArr, meta, desc, code, data
+ *  - import resolution via UseBlk chains, Fixup(target)
+ *  - import table filled with Module pointers
+ * Differences (native 64-bit):
+ *  - pointer slots are 8 bytes (absolute/copy/table/tableend write 8 bytes)
+ *  - ripBased fixups: disp32 = target - (ladr + 4 + immLen), immLen = typ - 106
+ *  - all module blocks sub-allocated from one arena (keeps disp32 in range)
+ */
 
 #include <dlfcn.h>
 #include <stdio.h>
@@ -13,21 +20,14 @@
 #include <stdbool.h>
 #include <assert.h>
 
-/* #define BB_FILE "bb.boot" */
-#define BB_FILE argv[0]
-/* #define BB_FILE argv[1] */
-/* the exact size (in bytes) of the executable part of the file. */
-/* this constant needs to be updated everytime a change is made to this file */
-#define exeSize  EXESIZE /* = size of exe.img */
-
 /* fixup types */
 #define absolute 100
 #define relative 101
 #define copy 102
 #define table 103
 #define tableend 104
-#define deref 105
-#define halfword 106
+#define short_ 105
+#define ripBased 106	/* + immLen: 106=0, 107=1, 108=2, 110=4, 114=8 bytes follow disp32 */
 
 /* import types */
 #define mConst 0x1
@@ -39,192 +39,108 @@
 #define any 1000000
 #define init 0x10000
 
-/* set to printf to debug and donothing to avoid debugging */
-
-#define dprintf donothing
-
 typedef void (*BodyProc)();
 
 typedef char String[256];
 
 typedef struct Type {
-    int size;
-    struct Module* mod;
-    int id;
-    int base[16]; /* should be ARRAY 16 OF TYPE */
-    int fields;   /* should be Directory* */
-    int ptroffs[any];
+    int size;               /* @0 */
+    int pad0;               /* @4 */
+    struct Module* mod;     /* @8 */
+    int id;                 /* @16 */
+    int pad1;               /* @20 */
+    intptr_t base[16];      /* @24 */
+    intptr_t fields;        /* @152 */
+    int ptroffs[any];       /* @160 */
 } Type;
 
-
-typedef struct Object{
-    int fprint;
-    int offs;
-    int id;
-    Type* ostruct;
+typedef struct __attribute__((packed)) Object {     /* 24 bytes */
+    int fprint;             /* @0 */
+    int offs;               /* @4 */
+    int id;                 /* @8 */
+    int pad;                /* @12 */
+    intptr_t ostruct;       /* @16 */
 } Object;
 
-
-typedef struct Directory{
+typedef struct __attribute__((packed)) Directory {
     int num;
     Object obj[any];
 } Directory;
 
-
-typedef struct __attribute__((packed)) Module {
-    struct Module *next;        /*  0: 8 */
-    int opts;                   /*  8: 4 */
-    int refcnt;                 /* 12: 4 */
-    int ext;                    /* 16: 4 */
-    int termLo, termHi;         /* 20: 8 */
-    int nofimps, nofptrs;       /* 28: 8 */
-    int csize, dsize, rsize;    /* 36:12 */
-    intptr_t code, data, refs;  /* 48:24 */
-    intptr_t procBase, varBase; /* 72:16 */
-    char* names;                /* 88: 8 */
-    intptr_t* ptrs;             /* 96: 8 */
-    struct Module* imports;     /*104: 8 */
-    Directory* export;           /*112: 8 */
-    char name[256];             /*120:256 */
+/* Must match Kernel64.Module exactly (OCF amd64 v2 ModDesc) */
+typedef struct Module {
+    struct Module *next;        /* @0 */
+    int opts;                   /* @8 */
+    int refcnt;                 /* @12 */
+    char compTime[12];          /* @16 */
+    char loadTime[12];          /* @28 */
+    int ext;                    /* @40 */
+    int pad0;                   /* @44 */
+    intptr_t term;              /* @48 */
+    int nofimps, nofptrs;       /* @56, @60 */
+    int csize, dsize, rsize;    /* @64, @68, @72 */
+    int pad1;                   /* @76 */
+    intptr_t code, data, refs;  /* @80, @88, @96 */
+    intptr_t procBase, varBase; /* @104, @112 */
+    char* names;                /* @120 */
+    intptr_t* ptrs;             /* @128 */
+    struct Module** imports;    /* @136 */
+    Directory* export;          /* @144 */
+    char name[256];             /* @152 */
 } Module;
-
 
 typedef struct ImpList {
     struct ImpList* next;
     String name;
 } ImpList;
 
-
 typedef struct ModSpec {
     ImpList* imp;
     String name;
     int start, hs, ds, ms, cs, vs;
     intptr_t dad, mad, cad, vad;
+    bool loaded;
+    char path[512];
 } ModSpec;
 
-typedef struct BootInfo {
-    Module* modList;
-    int argc;
-    char** argv;
-} BootInfo;
-
-
-
 FILE* f;
-int nofMods;
 String kernel, mainmod;
 ModSpec mod;
 Module *modlist;
-BootInfo* bootInfo;
 intptr_t newRecAdr, newArrAdr;
-int newRecFP, newArrFP;
 
-static void donothing(char* fmt, ...) {}
+/* ---- arena: all module blocks in one region, keeps RIP-relative disp32 valid ---- */
+#define ARENA_SIZE (512UL*1024*1024)
+static char* arena;
+static size_t arenaPos;
 
-static void *AllocMem (size_t size, bool for_exec) {
+static void ArenaInit() {
+    arena = mmap(NULL, ARENA_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC,
+                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    if (arena == MAP_FAILED) { perror("arena mmap"); exit(1); }
+    arenaPos = 0;
+}
+
+static void* AllocMem (size_t size) {
     size_t pagesize = getpagesize();
-
     size_t len = (size + pagesize - 1) & ~(pagesize - 1);
-
-    int prot = PROT_READ | PROT_WRITE;
-    if (for_exec) {
-#if defined(__NetBSD__)
-        prot |= PROT_MPROTECT(PROT_EXEC);
-#endif
-    }
-
-    void *mem = mmap(NULL, len, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (mem == MAP_FAILED) {
-        perror("mmap");
-        return NULL;
-    }
-
-    // NOTE:
-    // Memory returned is page-aligned (guaranteed by mmap)
-    // Memory is zero-filled (guaranteed for MAP_ANONYMOUS)
-    // To free this memory, use: munmap(mem, len)
-
+    if (arenaPos + len > ARENA_SIZE) { fprintf(stderr, "arena overflow\n"); exit(1); }
+    void* mem = arena + arenaPos;
+    arenaPos += len;
+    memset(mem, 0, len);
     return mem;
 }
 
-static bool FreeMem (void *mem, size_t size) {
-    if (mem != NULL) {
-        size_t pagesize = getpagesize();
-        if (!munmap(mem, (size + pagesize - 1) & ~(pagesize - 1))) {
-            perror("munmap");
-            return false;
-        }
-    }
-    return true;
-}
-
-static void DumpMod()
-{
-    dprintf("\n\n---- Mod info:\n");
-    dprintf("        hs = %d\n", mod.hs);
-    dprintf("        dad = %p, ds = %d\n", (void *)mod.dad, mod.ds);
-    dprintf("        mad = %p, ms = %d\n", (void *)mod.mad, mod.ms);
-    dprintf("        cad = %p, cs = %d\n", (void *)mod.cad, mod.cs);
-    dprintf("        vad = %p, vs = %d\n\n", (void *)mod.vad, mod.vs);
-}
-
-static void DumpModule (const Module *m) {
-
-    dprintf("Module %s\n", m->name);
-    dprintf("    opts = 0x%08x\n", m->opts);
-    dprintf("    ext = %d\n", m->ext);
-    dprintf("    term = %p\n", (void *)(intptr_t)m->termLo);
-    dprintf("    nofimps = %d, nofptrs = %d\n", m->nofimps, m->nofptrs);
-    dprintf("    csize = %d, dsize = %d, rsize = %d\n", m->csize, m->dsize, m->rsize);
-    dprintf("    code = %p, data = %p, refs = %p\n", (void *)m->code, (void *)m->data, (void *)m->refs);
-    dprintf("    procBase = %p, varBase = %p\n", (void *)m->procBase, (void *)m->varBase);
-}
-
-static void RegisterModule()
-{
-    Module* m;
-    unsigned char *desc = (unsigned char*)mod.dad;
-    
-    m = (Module*) AllocMem(sizeof(Module), false);
-    if (!m) { printf("OOM\n"); return; }
-    memset(m, 0, sizeof(Module));
-    
-    /* Use the boot loader's allocated addresses - these are the real 64-bit values */
-    m->code = (intptr_t)mod.cad;
-    m->data = (intptr_t)mod.dad;
-    m->refs = (intptr_t)mod.mad;
-    m->procBase = (intptr_t)mod.cad;  /* proc entries are at start of code */
-    m->varBase = mod.vad ? (intptr_t)mod.vad : (intptr_t)mod.dad;
-    
-    /* Copy module name from header */
-    strncpy(m->name, mod.name, 255);
-    m->name[255] = 0;
-    
-    m->next = modlist;
-    /* procBase from descriptor */
-    m->procBase = 0; /* will be set from descriptor if needed */
-    modlist = m;
-    printf("  + %s (code=%p)\n", m->name, (void*)m->code);
-}
-
-static void PrintMods()
-{
-    Module* ml;
-    ml = modlist;
-    printf("Loaded Modules\n");
-    while (ml != NULL){
-        printf("mod name: %s\n", ml->name);
-        ml = ml->next;
-    }
-    printf("end of list\n");
-}
-
-
 static Module* ThisModule(char* name)
 {
-    Module* ml;
-    ml = modlist;
-    while ((ml != NULL) && (strcmp(ml->name, name) != 0)){ml = ml->next;}
+    Module* ml = modlist;
+    while ((ml != NULL) && (strcmp(ml->name, name) != 0)) ml = ml->next;
+    if (ml) {
+        /* sanity: name should be printable */
+        if (ml->name[0] < 32 || ml->name[0] > 126) {
+            printf("ThisModule(%s): corrupt entry at %p\n", name, (void*)ml);
+        }
+    }
     return ml;
 }
 
@@ -232,6 +148,7 @@ static Object* ThisObject(Module* mod, char* name)
 {
     int l, r, m;
     char* p;
+    if (!mod || !mod->export) return NULL;
     l = 0; r = mod->export->num;
     while (l < r) {
         m = (l + r) / 2;
@@ -249,6 +166,7 @@ static Object* ThisObject(Module* mod, char* name)
 static Object* ThisDesc(Module* mod, int fprint)
 {
     int i, n;
+    if (!mod || !mod->export) return NULL;
     i = 0; n = mod->export->num;
     while ((i < n) && (mod->export->obj[i].id / 256 == 0))  {
         if (mod->export->obj[i].offs == fprint)
@@ -261,20 +179,18 @@ static Object* ThisDesc(Module* mod, int fprint)
 static int LoadDll (char* name)
 {
     void *handle;
-    printf("loading: %s\n", name);
     if ((handle = dlopen(name, RTLD_LAZY + RTLD_GLOBAL)) == NULL) {
         printf("LoadDll: failed to load lib %s\n", name);
         printf(" - dlerror: %s\n", dlerror());
-        exit(-1);
+        return 0;
     }
-    return handle != NULL;
+    return 1;
 }
 
-
-static int ThisDllObj (int mode, int fprint, char* dll, char* name)
+static intptr_t ThisDllObj (int mode, int fprint, char* dll, char* name)
 {
     void *handle;
-    int ad = 0;
+    intptr_t ad = 0;
     if (strcmp(name, "dlopen") == 0) return (intptr_t)&dlopen;
     if (strcmp(name, "dlsym") == 0) return (intptr_t)&dlsym;
     if ((mode == mVar) || (mode == mProc)){
@@ -284,10 +200,8 @@ static int ThisDllObj (int mode, int fprint, char* dll, char* name)
             exit(-1);
         } else {
             ad = (intptr_t)dlsym((void *) handle, name);
-            if (ad == 0) {
+            if (ad == 0)
                 printf("ThisDllObj: symbol %s not found\n", name);
-                /*        exit(-1); */
-            }
         }
     }
     return ad;
@@ -296,7 +210,7 @@ static int ThisDllObj (int mode, int fprint, char* dll, char* name)
 static int Read4 ()
 {
     unsigned char b;
-    int   w;
+    int w;
     b = fgetc(f); w = b % 256;
     b = fgetc(f); w = w + 0x100 * (b % 256);
     b = fgetc(f); w = w + 0x10000 * (b % 256);
@@ -310,175 +224,97 @@ static intptr_t RNum()
     intptr_t s, y;
     s = 0; y = 0;
     b = fgetc(f);
-    while (b >= 128) {    /* high bit set = more bytes follow */
-        y = y + ((intptr_t)((b & 0x7F)) << s);
+    while (b >= 128) {
+        y = y + ((intptr_t)(b - 128) << s);
         s = s + 7;
         b = fgetc(f);
     }
-    /* b is the final byte (high bit clear), decode its signed value */
-    if (b & 0x40)  /* negative: b in 64..127, value = b - 128 */
-        return (((intptr_t)(b - 128)) << s) + y;
-    else  /* positive: b in 0..63 */
-        return (((intptr_t)b) << s) + y;
+    return (((intptr_t)((b + 64) % 128 - 64)) << s) + y;
 }
 
 static void ReadName (char* str)
 {
     unsigned char b;
     int i;
-
     i = 0; b = fgetc(f);
-    while (b != 0)  {
-        str[i] = b; i++; b = fgetc(f);
-    }
+    while (b != 0) { str[i] = b; i++; b = fgetc(f); }
     str[i] = 0;
 }
 
-/* Process one fixup chain. adr = base address for value calculation.
-   For meta/data links (negative), section base is determined by abs(link) < ms. */
-static void Fixup0 (intptr_t adr)
-{
-    intptr_t link, offset, ladr, base;
-    int chainPatches = 0;
-    
-    link = RNum();
-    while (link != 0) {
-        offset = RNum();
-        while (link != 0) {
-            int abslink = (link > 0) ? link : -link;
-            if (link > 0) {
-                ladr = (intptr_t)mod.cad + abslink;
-                base = (intptr_t)mod.cad;
-            } else if (abslink < mod.ms) {
-                ladr = (intptr_t)mod.mad + abslink;
-                base = (intptr_t)mod.mad;
-            } else {
-                ladr = (intptr_t)mod.dad + abslink - mod.ms;
-                base = (intptr_t)mod.dad;
-            }
-            
-            /* Read fixup metadata */
-            int meta = *(int*)(intptr_t)ladr;
-            int typ = (meta >> 24) & 0xFF;
-            int nxt = meta & 0xFFFFFF;
-            if (nxt & 0x800000) nxt -= 0x1000000;
-            
-            if (typ >= 100 && typ <= 114) {
-                intptr_t target = adr + offset;
-                if (typ == absolute || typ == deref) {
-                    *(intptr_t*)ladr = target;
-                    chainPatches++;
-                } else if (typ >= 106 && typ <= 114) {
-                    int immLen = typ - 106;
-                    *(int*)ladr = (int)(target - (ladr + 4 + immLen));
-                    chainPatches++;
-                } else if (typ == relative) {
-                    *(int*)ladr = (int)(target - ladr - 4);
-                    chainPatches++;
-                }
-            }
-            
-            link = nxt;
-            if (chainPatches > 10000) { printf(" FIXUP LOOP\n"); return; }
-        }
-        link = RNum();
-    }
-    if (chainPatches > 0) printf("  chain: %d patches\n", chainPatches);
-}
-
+/* Process one fixup group from the file.
+   adr = base address (wrt) of the referenced block; 0 for newRec/newArr skip
+   when kernel procs are not known yet. */
 static void Fixup (intptr_t adr)
 {
-    intptr_t link, offset, linkadr, nextLink;
-    int typ;
+    intptr_t link, offset, linkadr, n;
+    int t, immLen, guard;
 
     link = RNum();
     while (link != 0) {
         offset = RNum();
-        nextLink = 0;
-        while (link != 0)
-        {
-            if (link > 0)
-                linkadr = mod.cad + link;
-            else {
-                link = -link;
-                if (link < mod.ms)
-                    linkadr = mod.mad + link;
-                else
-                    linkadr = mod.dad + link - mod.ms;
-            }
-
-            /* Read 4-byte metadata at link address (32-bit fixup format) */
-            {
-                int meta = *(int*)linkadr;
-                typ = (meta >> 24) & 0xFF;
-                nextLink = meta & 0xFFFFFF;
-                if (nextLink & 0x800000) nextLink = nextLink - 0x1000000;
-            }
-
-            if (typ == absolute || typ == deref) {
-                /* Store 8-byte absolute address */
-                *(intptr_t*)linkadr = adr + offset;
-            } else if (typ == relative) {
-                *(int*)linkadr = (int)(adr + offset - linkadr - 4);
-            } else if (typ >= 106 && typ <= 114) {
-                /* ripBased+N: N = typ - 106 bytes of immediate follow the displacement */
-                int immLen = typ - 106;
-                intptr_t target = adr + offset;
-                intptr_t disp = target - (linkadr + 4 + immLen);
-                *(int*)linkadr = (int)disp;
-            } else if (typ == copy) {
-                /* copy: bytes from source to dest. offset is byte count in low 16 bits */
-                int nbytes = (int)(offset & 0xFFFF);
-                int srcOff = (int)((offset >> 16) & 0xFFFF);
-                intptr_t src = adr + srcOff;
-                memcpy((void*)linkadr, (void*)src, nbytes);
-            } else if (typ == table) {
-                *(intptr_t*)linkadr = adr + nextLink;
-                nextLink = link + 4;
-            } else if (typ == tableend) {
-                *(intptr_t*)linkadr = adr + nextLink;
-                nextLink = 0;
+        guard = 0;
+        while (link != 0) {
+            if (++guard > 100000) { printf("fixup: chain loop\n"); exit(1); }
+            int is_code = (link > 0);
+            intptr_t abslink = is_code ? link : -link;
+            int off, max_sz;
+            if (is_code) {
+                off = (int)link; max_sz = mod.cs; linkadr = mod.cad + link;
+            } else if (abslink < mod.ms) {
+                off = (int)abslink; max_sz = mod.ms; linkadr = mod.mad + abslink;
             } else {
-                printf("fixup: unknown type %d at %lx\n", typ, (long)linkadr);
-                return;
+                off = (int)(abslink - mod.ms); max_sz = mod.ds; linkadr = mod.dad + abslink - mod.ms;
             }
-            link = nextLink;
+            if ((off < 0) || (off > max_sz - 4)) {
+                printf("fixup: link out of range (off=%d, max=%d)\n", off, max_sz);
+                exit(1);
+            }
+            int x = *(int*)linkadr;
+            t = (x >> 24) & 0xFF;
+            n = x & 0xFFFFFF;
+            if (n & 0x800000) n -= 0x1000000;
+
+            switch (t) {
+            case absolute:
+                *(intptr_t*)linkadr = adr + offset;
+                break;
+            case relative:
+                *(int*)linkadr = (int)(adr + offset - linkadr - 4);
+                break;
+            case copy:
+                *(intptr_t*)linkadr = *(intptr_t*)(adr + offset);
+                break;
+            case table:
+                *(intptr_t*)linkadr = adr + n;
+                n = link + 8;
+                break;
+            case tableend:
+                *(intptr_t*)linkadr = adr + n;
+                n = 0;
+                break;
+            default:
+                if ((t >= ripBased) && (t <= ripBased + 8)) {
+                    immLen = t - ripBased;
+                    *(int*)linkadr = (int)(adr + offset - (linkadr + 4 + immLen));
+                } else {
+                    printf("fixup: unknown type %d at link=%ld\n", t, link);
+                    exit(1);
+                }
+            }
+            link = n;
         }
         link = RNum();
     }
-}
-static int ReadBootHeader()
-{
-    int tag, version;
-    fseek(f, exeSize, SEEK_SET);
-    tag = Read4();
-    version = Read4();
-    if ((tag != 0x3A4B5C6D) || (version != 0))  { return 0; }
-    nofMods = Read4();
-    printf("Linked modules: %d\n", nofMods);
-    ReadName(kernel);
-    printf("kernel: %s\n", kernel);
-    ReadName(mainmod);
-    printf("main: %s\n", mainmod);
-    newRecFP = Read4(); newRecAdr = 0;
-    newArrFP = Read4(); newArrAdr = 0;
-    /* Seek to end of current OCF: header + meta + desc + code + data */
-    fseek(f, mod.start + mod.hs + mod.ms + mod.ds + mod.cs + mod.vs, SEEK_SET);
-skip_exports_64:
-    mod.start = ftell(f);
-    return 1;
 }
 
 static bool ReadHeader ()
 {
     int ofTag, i, nofImps, processor;
-    // char str[80];
     ImpList *imp, *last;
     char* n;
 
     ofTag = Read4();
-    if (ofTag != 0x6F4F4346)
-    {
+    if (ofTag != 0x6F4F4346) {
         printf("wrong object file version\n");
         return false;
     }
@@ -488,18 +324,15 @@ static bool ReadHeader ()
     mod.ds = Read4();
     mod.cs = Read4();
     mod.vs = Read4();
-    dprintf("File tag: %d ", ofTag); dprintf("Processor: %d\n", processor);
-    dprintf("Header size: %d ", mod.hs);
-    dprintf("Meta size: %d ", mod.ms);
-    dprintf("Desc size: %d ", mod.ds );
-    dprintf("Code size: %d ", mod.cs);
-    dprintf("Data size: %d\n", mod.vs);
-    nofImps = RNum(); dprintf("Nof imports: %d\n", nofImps);
-    ReadName(mod.name); dprintf("Module name: %s\n", mod.name);
+    if (processor != 12) {
+        printf("wrong processor %d (expected 12)\n", processor);
+        return false;
+    }
+    nofImps = RNum();
+    ReadName(mod.name);
     mod.imp = NULL;
-    for (i = 0; i < nofImps; i++)
-    {
-        imp = (ImpList*)AllocMem(sizeof(ImpList), false); assert(imp != NULL);
+    for (i = 0; i < nofImps; i++) {
+        imp = (ImpList*)AllocMem(sizeof(ImpList));
         ReadName(imp->name);
         if (mod.imp == NULL)
             mod.imp = imp;
@@ -507,70 +340,43 @@ static bool ReadHeader ()
             last->next = imp;
         last = imp;
         last->next = NULL;
-        dprintf("Import %d: %s\n", i, imp->name);
         if ((imp->name[0] == '$') && (imp->name[1] == '$'))
-            strlcpy(imp->name, "Kernel", sizeof(imp->name));
-        if (imp->name[0] == '$'){
+            strncpy(imp->name, kernel, sizeof(imp->name) - 1); imp->name[sizeof(imp->name)-1] = 0;
+        if (imp->name[0] == '$') {
             n = imp->name;
             n++;
-            if (!LoadDll(n)){
+            if (!LoadDll(n)) {
                 printf("Could not load lib: %s\n", imp->name);
                 return false;
             }
         }
     }
-    dprintf("Pos: %ld\n", ftell(f));
     return true;
 }
 
 static bool AllocModMem () {
-    assert(mod.ds != 0);
-    assert(mod.ms != 0);
-    assert(mod.cs != 0);
     int ms = sizeof(int) + mod.ms;
-    mod.dad = (intptr_t) AllocMem(mod.ds, false);
-    mod.mad = (intptr_t) AllocMem(ms, false);
-    mod.cad = (intptr_t) AllocMem(mod.cs, true);
-    if (mod.vs != 0) {
-        mod.vad = (intptr_t) AllocMem(mod.vs, false);
-    } else {
+    mod.dad = (intptr_t) AllocMem(mod.ds);
+    mod.mad = (intptr_t) AllocMem(ms);
+    mod.cad = (intptr_t) AllocMem(mod.cs);
+    if (mod.vs != 0)
+        mod.vad = (intptr_t) AllocMem(mod.vs);
+    else
         mod.vad = 0;
-    }
-    if ((mod.dad == 0) || (mod.mad == 0) || (mod.cad == 0) || ((mod.vad == 0) && (mod.vs != 0)))
-    {
-        bool ok;
-        ok = FreeMem((void *)mod.dad, mod.ds); assert(ok); mod.dad = 0;
-        ok = FreeMem((void *)mod.mad, ms); assert(ok); mod.mad = 0;
-        ok = FreeMem((void *)mod.cad, mod.cs); assert(ok); mod.cad = 0;
-        ok = FreeMem((void *)mod.vad, mod.vs); assert(ok); mod.vad = 0;
-        return false;
-    }
     *((int*)mod.mad) = ms;
     mod.mad += sizeof(int);
     return true;
 }
 
-static bool FixModMemPermissions () {
-    assert(mod.ms != 0);
-    assert(mod.cs != 0);
-    size_t size;
-
-    size_t pagesize = getpagesize();
-
-    size = sizeof(int) + mod.ms;
-    size = (size + pagesize - 1) & ~(pagesize - 1);
-    if (mprotect((void *)(mod.mad - sizeof(int)), size, PROT_READ) != 0) {
-        perror("mprotect (meta)");
-        return false;
+/* can all non-dll imports be resolved now? */
+static bool ImportsReady () {
+    ImpList* imp = mod.imp;
+    while (imp != NULL) {
+        if (imp->name[0] != '$') {
+            if (ThisModule(imp->name) == NULL) return false;
+        }
+        imp = imp->next;
     }
-
-    size = mod.cs;
-    size = (size + pagesize - 1) & ~(pagesize - 1);
-    if (mprotect((void *)mod.cad, size, PROT_READ | PROT_EXEC) != 0) {
-        perror("mprotect (code)");
-        return false;
-    }
-
     return true;
 }
 
@@ -581,134 +387,49 @@ static bool ReadModule ()
     ImpList* imp;
     intptr_t x, fp, imptab, a;
     int opt, ofp;
-    // int link;
     Module *desc, *k;
     String name;
     Object* obj;
     int isLib;
     char* im;
 
-    if (!AllocModMem()) {
-        printf("BootLoader: Couldn't initalize heap\n");
-        return false;
-    }
+    if (!AllocModMem()) return false;
     dp = (char*) mod.dad;
     mp = (char*) mod.mad;
     cp = (char*) mod.cad;
-    fseek(f, mod.hs, SEEK_SET);  /* seek past header (mod.hs=headSize) */
-    cnt = fread(mp, 1, mod.ms, f);  /* read descriptor (mod.ms=descSize) */
-    fseek(f, mod.ds, SEEK_CUR);     /* skip metadata before code (mod.ds=codeOff) */
-    cnt = fread(cp, 1, mod.cs, f);  /* read actual code (mod.cs=codeSize) */
-    DumpMod();
-    dprintf("before fixup: pos = %ld\n", ftell(f));
+    fseek(f, mod.start + mod.hs, SEEK_SET);
+    cnt = fread(mp, 1, mod.ms, f);   /* MetaBlk */
+    cnt = fread(dp, 1, mod.ds, f);   /* DescBlk */
+    cnt = fread(cp, 1, mod.cs, f);   /* CodeBlk */
+    /* FixBlk follows immediately; VarBlk is not stored */
 
-    /* SKIP export/import resolution for now - just load code */
-    newRecAdr = 1;  /* prevent lookup */
-    newArrAdr = 1;
-    /* Process all fixup chains in sequence.
-       The fixup table starts at current file position (after code+data sections). */
-    /* Skip past variable section to reach fixup table */
-    fseek(f, mod.vs, SEEK_CUR);
-    printf("  Fixups at file pos %ld (after %d var bytes)\n", ftell(f), mod.vs);
-    fflush(stdout);
-    {
-        intptr_t link, offset, ladr;
-        int chainNum = 0;
-        int codePatches = 0;
-        
-        int chain_limit = 0;
-        link = RNum();
-        while (link != 0 && chain_limit++ < 50) {
-            offset = RNum();
-            chainNum++;
-            while (link != 0) {
-                /* Determine section from link sign */
-                intptr_t base;
-                int abslink;
-                if (link > 0) {
-                    ladr = (intptr_t)mod.cad + link;
-                    base = (intptr_t)mod.cad;
-                    abslink = link;
-                } else {
-                    abslink = -link;
-                    if (abslink < mod.ms) {
-                        ladr = (intptr_t)mod.mad + abslink;
-                        base = (intptr_t)mod.mad;
-                    } else {
-                        ladr = (intptr_t)mod.dad + abslink - mod.ms;
-                        base = (intptr_t)mod.dad;
-                    }
-                }
-                
-                /* Safety: check ladr is within allocated memory */
-                if (ladr < (intptr_t)mod.cad || ladr > (intptr_t)mod.cad + mod.cs + mod.ds + mod.ms) {
-                    printf("    WARN: ladr 0x%lx out of bounds, breaking chain\n", (long)ladr);
-                    break;
-                }
-                /* Read fixup metadata (4 bytes at ladr) */
-                int meta = *(int*)(intptr_t)ladr;
-                int typ = (meta >> 24) & 0xFF;
-                int nxt = meta & 0xFFFFFF;
-                if (nxt & 0x800000) nxt -= 0x1000000;
-                /* Limit sub-link iterations */
-                static int sub_iters = 0;
-                if (++sub_iters > 1000) { printf("    WARN: too many sub-links, breaking\n"); break; }
-                
-                if (typ >= 100 && typ <= 114) {
-                    /* Valid fixup type - patch it */
-                    intptr_t base = (link > 0) ? (intptr_t)mod.cad : 
-                                    ((link < mod.ms) ? (intptr_t)mod.mad : (intptr_t)mod.dad);
-                    
-                    if (typ == absolute || typ == deref || (typ >= 106 && typ <= 114)) {
-                        *(intptr_t*)ladr = base + offset;
-                        codePatches++;
-                    } else if (typ == relative) {
-                        *(int*)ladr = (int)(base + offset - ladr - 4);
-                        codePatches++;
-                    }
-                }
-                
-                link = nxt;
-            }
-            link = RNum();
-        }
-        printf("  Processed %d chains, %d patches\n", chainNum, codePatches);
-        fflush(stdout);
-    }
-    goto skip_exports_64;
-    
-    if ((!newRecAdr) || (!newArrAdr)){
+    if ((!newRecAdr) || (!newArrAdr)) {
         k = ThisModule(kernel);
-        if (k != NULL){
-            /*      obj = ThisDesc(k, newRecFP);*/
+        if (k != NULL) {
             obj = ThisObject(k, "NewRec");
-            if (obj != NULL)
-                newRecAdr = k->procBase + obj->offs;
-            /*      obj = ThisDesc(k, newArrFP);*/
+            if (obj != NULL) newRecAdr = k->procBase + obj->offs;
             obj = ThisObject(k, "NewArr");
-            if (obj != NULL)
-                newArrAdr = k->procBase + obj->offs;
-            dprintf("newRecFP: %X  newArrFP: %X\n", newRecFP, newArrFP);
-            dprintf("newRecAdr: %X  newArrAdr: %X\n", newRecAdr, newArrAdr);
-        } else {
-            dprintf("no kernel before %s.\n", mod.name);
+            if (obj != NULL) newArrAdr = k->procBase + obj->offs;
         }
     }
-    /* Apply fixups to all sections */
-    dprintf("after fixup: pos = %ld\n", ftell(f));
+    Fixup(newRecAdr);
+    Fixup(newArrAdr);
+    Fixup(mod.mad);
+    Fixup(mod.dad);
+    Fixup(mod.cad);
+    Fixup(mod.vad);
+
+    /* UseBlk: import resolution */
     imp = mod.imp;
     imptab = (intptr_t)((Module*)(mod.dad))->imports;
-    while (imp != NULL){
+    while (imp != NULL) {
         x = RNum();
-        if ((imp->name[0] == '$') && (imp->name[1] == '$'))        printf("should be Kernel\n");
-        if (imp->name[0] == '$')        isLib = 1;
-        else{
+        if (imp->name[0] == '$') isLib = 1;
+        else {
             isLib = 0;
             desc = ThisModule(imp->name);
-            if (desc == NULL && strcmp(imp->name, "Kernel") == 0)
-                desc = ThisModule("Kernel64");
-            if (desc == NULL){
-                printf("invalid import list\n");
+            if (desc == NULL) {
+                printf("%s: invalid import list (%s not loaded)\n", mod.name, imp->name);
                 return false;
             }
         }
@@ -720,16 +441,16 @@ static bool ReadModule ()
                 else
                     obj = ThisObject(desc, name);
 
-                if ((obj != NULL) && (obj->id % 16 == x)){
+                if ((obj != NULL) && (obj->id % 16 == x)) {
                     ofp = obj->fprint;
-                    switch (x){
+                    switch (x) {
                     case mTyp: opt = RNum();
                         if (opt % 2 == 1) ofp = obj->offs;
-                        if ((opt > 1) && ((obj->id / 16) % 16 != mExported)){
-                            printf("object not found (%s)\n", imp->name);
+                        if ((opt > 1) && ((obj->id / 16) % 16 != mExported)) {
+                            printf("%s: object not found (%s)\n", mod.name, imp->name);
                             return false;
                         }
-                        Fixup((intptr_t)obj->ostruct);
+                        Fixup(obj->ostruct);
                         break;
                     case mVar:
                         Fixup(desc->varBase + obj->offs);
@@ -738,22 +459,25 @@ static bool ReadModule ()
                         Fixup(desc->procBase + obj->offs);
                     }
 
-                    if (ofp != fp){
-                        printf("illigal foot print (%s)\n", imp->name);
+                    if (ofp != fp) {
+                        printf("%s: illegal footprint (%s.%s)\n", mod.name, imp->name, name);
                         return false;
                     }
                 } else {
-                    if (obj == NULL) printf("obj == NULL\n");
-                    printf("descriptor not found (%s, x: %d, id: %d)\n", name, x, obj->id);
+                    printf("%s: descriptor not found (%s.%s, x=%d) obj=%p desc=%s export=%p num=%d names=%p\n",
+                        mod.name, imp->name, name, (int)x, (void*)obj,
+                        desc ? desc->name : "?", desc ? (void*)desc->export : 0,
+                        desc && desc->export ? desc->export->num : -1,
+                        desc ? (void*)desc->names : 0);
                     return false;
                 }
-            }else{
-                if ((x == mVar)  || (x == mProc)){
+            } else {
+                if ((x == mVar) || (x == mProc)) {
                     im = imp->name;
                     im++;
                     a = ThisDllObj(x, fp, im, name);
                     if (a != 0) Fixup(a);
-                    else{
+                    else {
                         printf("ReadModule: Object not found: %s\n", name);
                         return false;
                     }
@@ -774,169 +498,149 @@ static bool ReadModule ()
         imp = imp->next;
     }
 
-    /* FixModMemPermissions skipped - we set EXEC before body calls */
-
-    /* Seek to end of current OCF: header + meta + desc + code + data */
-    fseek(f, mod.start + mod.hs + mod.ms + mod.ds + mod.cs + mod.vs, SEEK_SET);
-skip_exports_64:
-    mod.start = ftell(f);
     return true;
 }
 
-/*
-    Reserve space for 0x80000000 cross border
-    This space must not be accessed by GC
-
-    ref.: https://forum.oberoncore.ru/viewtopic.php?f=134&t=6959#p118177
-*/
-static void ReserveCrossBorder () {
-    size_t pagesize = (size_t)getpagesize();
-    void *addr_0 = (void *)(0x80000000UL - pagesize);
-    void *addr_1 = (void *)0x80000000UL;
-    void *p;
-    p = mmap(addr_0, pagesize, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if ((p != MAP_FAILED) && (p != addr_0)) {
-        munmap(p, pagesize);
-    }
-    p = mmap(addr_1, pagesize, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if ((p != MAP_FAILED) && (p != addr_1)) {
-        munmap(p, pagesize);
-    }
+static void RegisterModule()
+{
+    Module* m = (Module*) mod.dad;
+    printf("  + %-16s dad=%p ms=%d ds=%d cs=%d\n", mod.name, (void*)mod.dad, mod.ms, mod.ds, mod.cs);
+    m->next = modlist;
+    modlist = m;
 }
+
+/* scan subsystem Code dirs for .ocf files; Kernel64 goes first */
+#include <dirent.h>
+
+static const char *subsystems[] = {"System", "Std", "Text", "Form", "Lin", NULL};
+
+#define MAXMODS 128
+static ModSpec specs[MAXMODS];
+static int nSpecs;
 
 int main (int argc, char *argv[])
 {
-    const char *ocfFiles[] = {"System/Code/Kernel64.ocf","System/Code/Utf.ocf","System/Code/Files.ocf","System/Code/Files64.ocf","System/Code/Strings.ocf","Lin/Code/Kernel.ocf","Lin/Code/Files64.ocf","Lin/Code/Files.ocf","Lin/Code/Loader.ocf","Lin/Code/Env.ocf","Lin/Code/Config.ocf","Lin/Code/Dates.ocf","Lin/Code/Lang.ocf","Lin/Code/Console.ocf","Lin/Code/Clipboard.ocf","Lin/Code/Backends.ocf","Lin/Code/Fonts.ocf","Lin/Code/Dialog.ocf","Lin/Code/Mechanisms.ocf","Lin/Code/Registry.ocf","Lin/Code/Gui.ocf","Lin/Code/Dl.ocf","Lin/Code/Libc.ocf","Lin/Code/LibW.ocf","Lin/Code/Rt.ocf","Lin/Code/Ioctl.ocf","Lin/Code/Gtk2GLib.ocf","Lin/Code/Gtk2GObject.ocf","Lin/Code/Gtk2Gdk.ocf","Lin/Code/Gtk2Gtk.ocf","Lin/Code/Gtk2Pango.ocf","Lin/Code/GdkPixbuf.ocf","Lin/Code/Gtk2Keysyms.ocf","Lin/Code/Gtk2Util.ocf","Lin/Code/Cairo.ocf","Lin/Code/CairoPango.ocf","Lin/Code/Ports.ocf","Lin/Code/RastersPng.ocf","Lin/Code/PackedFiles.ocf","System/Code/Models.ocf","System/Code/Views.ocf","System/Code/Controllers.ocf","System/Code/Windows.ocf","System/Code/Ports.ocf","System/Code/Fonts.ocf","System/Code/Controls.ocf","System/Code/Containers.ocf","System/Code/Converters.ocf","System/Code/Dialog.ocf","System/Code/Documents.ocf","System/Code/Stores.ocf","System/Code/Meta.ocf","System/Code/Services.ocf","System/Code/Properties.ocf","System/Code/Librarian.ocf","System/Code/Log.ocf","System/Code/Loop.ocf","System/Code/Mechanisms.ocf","System/Code/In.ocf","System/Code/Out.ocf","Std/Code/Cmds.ocf","Std/Code/Windows.ocf","Std/Code/Interpreter.ocf","Std/Code/StdCFrames.ocf","Std/Code/Dialog.ocf","Std/Code/Documents.ocf","Std/Code/Config.ocf","Std/Code/Debug.ocf","Std/Code/Log.ocf","Std/Code/Menus.ocf","Std/Code/Links.ocf","Std/Code/Loader.ocf","Std/Code/Api.ocf","Std/Code/CFrames.ocf","Std/Code/Pictures.ocf","Std/Code/Rasters.ocf","Std/Code/Scrollbars.ocf","Std/Code/Scrollers.ocf","Std/Code/Folds.ocf","Std/Code/Stamps.ocf","Std/Code/Tables.ocf","Text/Code/Models.ocf","Text/Code/Views.ocf","Text/Code/Controllers.ocf","Text/Code/Mappers.ocf","Text/Code/Setters.ocf","Text/Code/Cmds.ocf","Text/Code/Rulers.ocf","Form/Code/Models.ocf","Form/Code/Views.ocf","Lin/Code/Init.ocf",NULL};
-    int i;
-    bool ok = true;
-    BodyProc body;
+    int i, pass, loaded;
     Module *k;
 
-    printf("64-bit BlackBox boot loader\n"); fflush(stdout);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    printf("64-bit BlackBox boot loader (OCF v2)\n");
+    ArenaInit();
     modlist = NULL;
-    
-    for (i = 0; ocfFiles[i] != NULL && ok; i++) {
-        f = fopen(ocfFiles[i], "rb");
-        if (f == NULL) { printf("Cannot open %s\n", ocfFiles[i]); ok = false; break; }
-        printf("Loading %s...\n", ocfFiles[i]);
-        mod.start = 0;
-        ok = ReadHeader();
-        if (ok) { ok = ReadModule(); if (ok) RegisterModule(); }
-        fclose(f);
-        if (!ok) printf("FAILED: %s\n", ocfFiles[i]);
-    }
-    
-    if (ok) {
-        k = ThisModule("Kernel64");
-        if (k) {
-            printf("Kernel found: code=%p varBase=%p\n", (void*)k->code, (void*)k->varBase);
-            printf("Calling kernel body...\n"); fflush(stdout);
-            
-            /* Make code executable */
-            size_t pagesize = getpagesize();
-            intptr_t code_page = k->code & ~(pagesize - 1);
-            size_t code_len = mod.cs + pagesize;
-            mprotect((void*)code_page, code_len, PROT_READ | PROT_WRITE | PROT_EXEC);
-            
-            BodyProc body = (BodyProc)(intptr_t)k->code; /* skip prologue */
-            printf("Kernel code at %p\n", (void*)k->code); { unsigned char *tp=(unsigned char*)k->code; printf("  First bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n", tp[0],tp[1],tp[2],tp[3],tp[4],tp[5],tp[6],tp[7]); }
-            
-            /* Manual fixup: search for ripBased4 (type=0x6E) fixup metadata in code
-               and patch the 4-byte displacement to point to data section.
-               The metadata is at positions where *(int*)code[pos] has byte3=0x6E (type=110) */
-            {
-                unsigned char *cp = (unsigned char*)k->code;
-                int patched = 0;
-                for (int off = 0; off < mod.cs - 4; off++) {
-                    int meta = *(int*)(cp + off);
-                    int typ = (meta >> 24) & 0xFF;
-                    if (typ == 110) {  /* ripBased4 */
-                        /* Calculate RIP-relative displacement */
-                        intptr_t target = (intptr_t)k->varBase + (meta & 0xFFFFFF);
-                        /* RIP-relative: displacement = target - (code + offset + imm_size + 4) 
-                           For MOV r/m32, imm32: the instruction is C7 /0 [disp32] [imm32] = 10 bytes
-                           disp32 is at offset 2, imm32 at offset 6, RIP after instr = offset + 10 */
-                        intptr_t rip = (intptr_t)cp + off + 8;  /* instr=off-2, len=10, RIP=(off-2)+10=off+8 */
-                        intptr_t disp = target - rip;
-                        *(int*)(cp + off) = (int)disp;
-                        patched++;
-                        printf("  Patched offset 0x%x: %d -> %d (type %d)\n", off, meta, (int)disp, typ);
-                    }
-                }
-                printf("  Patched %d fixups\n", patched);
-                fflush(stdout);
-            }
-            
-            printf("Calling kernel body...\n"); fflush(stdout);
-            body();
-            printf("KERNEL RETURNED! 64-BIT BLACKBOX BOOT SUCCESSFUL!\n"); fflush(stdout);
-            printf("*** 64-BIT KERNEL RETURNED! ***\n");
-            /* Call each module's body (Init) */
-            printf("Initializing modules...\n");
-            {
-                /* Iterate in reverse (load order): Kernel first, LinInit last */
-                Module *init_order[256];
-                int n = 0;
-                for (Module *m = modlist; m; m = m->next) {
-                    if (n < 256) init_order[n++] = m;
-                }
-                /* Call bodies in reverse (loaded first = called first) */
-                for (int i = n - 1; i >= 0; i--) {
-                    Module *m = init_order[i];
-                    if (m->code && m->name[0] && strcmp(m->name, "LinInit") != 0) {
-                        BodyProc b = (BodyProc)(intptr_t)m->code;
-                        b();
-                    }
-                }
-            }
-            printf("All modules initialized\n");
+    strcpy(kernel, "Kernel64");
+    strcpy(mainmod, "LinInit");
 
-            /* Patch fixups for ALL loaded modules */
-            {
-                size_t ps = getpagesize();
-                for (Module *m = modlist; m; m = m->next) {
-                    if (m->code) {
-                        intptr_t cp = m->code & ~(ps - 1);
-                        mprotect((void*)cp, 65536, PROT_READ|PROT_WRITE|PROT_EXEC);
-                    }
+    /* read headers of all .ocf in subsystem Code dirs; kernel first */
+    nSpecs = 0;
+    for (int k64 = 1; k64 >= 0; k64--) {
+        for (int si = 0; subsystems[si] != NULL; si++) {
+            char dirpath[128];
+            snprintf(dirpath, sizeof(dirpath), "%s/Code", subsystems[si]);
+            DIR* dir = opendir(dirpath);
+            if (dir == NULL) continue;
+            struct dirent* de;
+            while ((de = readdir(dir)) != NULL && nSpecs < MAXMODS) {
+                int len = strlen(de->d_name);
+                if (len < 5 || strcmp(de->d_name + len - 4, ".ocf") != 0) continue;
+                if (k64 && strcmp(de->d_name, "Kernel64.ocf") != 0) continue;
+                if (!k64 && strcmp(de->d_name, "Kernel64.ocf") == 0) continue;
+                char path[512];
+                snprintf(path, sizeof(path), "%s/%s", dirpath, de->d_name);
+                f = fopen(path, "rb");
+                if (f == NULL) continue;
+                mod.start = 0;
+                if (!ReadHeader()) {
+                    printf("  ! %s (bad header, skipped)\n", path);
+                    fclose(f);
+                    continue;
                 }
+                specs[nSpecs] = mod;
+                strcpy(specs[nSpecs].path, path);
+                specs[nSpecs].loaded = false;
+                nSpecs++;
+                fclose(f);
             }
-            for (Module *m = modlist; m; m = m->next) {
-                unsigned char *mc = (unsigned char*)m->code;
-                intptr_t mv = (intptr_t)m->varBase;
-                if (!mc) continue;
-                int patched = 0;
-                for (int off = 0x30; off < 4096; off++) {
-                    int meta = *(int*)(mc + off);
-                    int typ = (meta >> 24) & 0xFF;
-                    if (typ != 110) continue;
-                    intptr_t target = mv + (meta & 0xFFFFFF);
-                    intptr_t rip = (intptr_t)mc + off + 4;
-                    intptr_t disp = target - rip;
-                    *(int*)(mc + off) = (int)disp;
-                    patched++;
-                }
-                printf("  %s: %d fixups
-", m->name, patched);
-            }
-
-            Module *lin = ThisModule("LinInit");
-            if (lin) {
-                printf("Calling LinInit body...\n"); fflush(stdout);
-                BodyProc lb = (BodyProc)(intptr_t)lin->code;
-                lb();
-                printf("LinInit returned\n");
-            }
-            fflush(stdout);
-        } else {
-            printf("Kernel64 not found in module list\n");
+            closedir(dir);
         }
     }
-    
-    printf("Loaded Modules:\n");
-    Module *p;
-    printf("Module list:\n");
-    for (p = modlist; p; p = p->next) printf("  %p: \"%s\"\n", (void*)p, p->name);
+    printf("%d modules found\n", nSpecs);
+
+    /* multi-pass loading: load modules whose imports are ready */
+    for (pass = 0; pass < 16; pass++) {
+        loaded = 0;
+        for (i = 0; i < nSpecs; i++) {
+            if (specs[i].loaded) continue;
+            mod = specs[i];
+            if (!ImportsReady()) continue;
+            f = fopen(specs[i].path, "rb");
+            if (f == NULL) continue;
+            if (!ReadModule()) {
+                printf("FAILED: %s\n", specs[i].path);
+                fclose(f);
+                goto out;
+            }
+            fclose(f);
+            RegisterModule();
+            specs[i] = mod;
+            specs[i].loaded = true;
+            loaded++;
+        }
+        if (loaded == 0) break;
+    }
+    {
+        int remaining = 0;
+        for (i = 0; i < nSpecs; i++)
+            if (!specs[i].loaded) {
+                printf("  not loaded: %-28s needs:", specs[i].path);
+                for (ImpList* t = specs[i].imp; t; t = t->next)
+                    if (t->name[0] != '$' && ThisModule(t->name) == NULL)
+                        printf(" %s", t->name);
+                printf("\n");
+                remaining++;
+            }
+        printf("%d modules loaded, %d pending\n", nSpecs - remaining, remaining);
+    }
+
+out:
+    k = ThisModule(kernel);
+    if (k == NULL) {
+        printf("no kernel\n");
+        return 1;
+    }
+    printf("kernel %s: code=%p varBase=%p\n", k->name, (void*)k->code, (void*)k->varBase);
+
+    /* call kernel body */
+    {
+        BodyProc body = (BodyProc) k->code;
+        k->opts = k->opts | init;
+        body();
+        printf("KERNEL OK\n");
+    }
+
+    /* inject module list into kernel's first global variable (modList) */
+    if (k->varBase != 0)
+        *(intptr_t*)k->varBase = (intptr_t)modlist;
+
+    /* call main module body if present */
+    {
+        Module *m = ThisModule(mainmod);
+        if (m != NULL) {
+            BodyProc body = (BodyProc) m->code;
+            printf("calling %s body...\n", mainmod);
+            body();
+            printf("MAIN OK\n");
+        } else {
+            printf("no main module %s\n", mainmod);
+        }
+    }
+
+    printf("module list:\n");
+    {
+        Module *p = modlist;
+        while (p != NULL) {
+            printf("  %s\n", p->name);
+            p = p->next;
+        }
+    }
     return 0;
 }
-

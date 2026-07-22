@@ -8,16 +8,21 @@ MODULE Kernel64;
 
 	TYPE
 		Module* = POINTER TO RECORD
-			next: Module; opts: SET; refcnt: INTEGER;
-			ext: INTEGER; termLo, termHi: INTEGER;
-			nofimps, nofptrs: INTEGER; csize, dsize, rsize: INTEGER;
-			code, data, refs: LONGINT;
-			procBase, varBase: LONGINT;
-			names: POINTER TO ARRAY OF SHORTCHAR;
-			ptrs: POINTER TO ARRAY OF LONGINT;
-			imports: POINTER TO ARRAY OF Module;
-			export: LONGINT;
-			name: ARRAY 256 OF SHORTCHAR
+			next: Module;	(* @0 *)
+			opts: SET;	(* @8 *)
+			refcnt: INTEGER;	(* @12 *)
+			compTime, loadTime: ARRAY 12 OF SHORTINT;	(* @16, @28 *)
+			ext: INTEGER;	(* @40 *)
+			term: PROCEDURE;	(* @48 *)
+			nofimps, nofptrs: INTEGER;	(* @56, @60 *)
+			csize, dsize, rsize: INTEGER;	(* @64, @68, @72 *)
+			code, data, refs: LONGINT;	(* @80, @88, @96 *)
+			procBase, varBase: LONGINT;	(* @104, @112 *)
+			names: POINTER TO ARRAY OF SHORTCHAR;	(* @120 *)
+			ptrs: POINTER TO ARRAY OF LONGINT;	(* @128 *)
+			imports: POINTER TO ARRAY OF Module;	(* @136 *)
+			export: LONGINT;	(* @144 *)
+			name: ARRAY 256 OF SHORTCHAR	(* @152 *)
 		END;
 
 		Type* = POINTER TO RECORD

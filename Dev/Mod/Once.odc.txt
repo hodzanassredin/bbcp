@@ -1,0 +1,58 @@
+MODULE DevOnce;
+(** Single-module compile driver for console dev0.
+	Reads module names (one per line) from /tmp/compile1.txt and compiles each:
+	Go32 with DevCompiler (32-bit), Go64 with DevCompiler64 (amd64). *)
+
+	IMPORT Files, Views, TextModels, TextViews, Converters, Librarian, StdLog,
+		DevCompiler, DevCompiler64;
+
+	PROCEDURE CompileOne (IN name: ARRAY OF CHAR; c64: BOOLEAN);
+		VAR loc: Files.Locator; fname: Files.Name; conv: Converters.Converter;
+			v: Views.View; t: TextModels.Model; error: BOOLEAN;
+	BEGIN
+		Librarian.lib.GetSpec(name, "Mod", loc, fname);
+		IF loc = NIL THEN
+			StdLog.String("not found: "); StdLog.String(name); StdLog.Ln; RETURN
+		END;
+		v := Views.Old(Views.dontAsk, loc, fname, conv);
+		IF (v # NIL) & (v IS TextViews.View) THEN
+			t := v(TextViews.View).ThisModel();
+			IF c64 THEN DevCompiler64.CompileText(t, 0, error)
+			ELSE DevCompiler.CompileText(t, 0, error)
+			END;
+			StdLog.String("== "); StdLog.String(name);
+			IF error THEN StdLog.String(" ERROR") ELSE StdLog.String(" ok") END;
+			StdLog.Ln
+		ELSE
+			StdLog.String("cannot open: "); StdLog.String(name); StdLog.Ln
+		END
+	END CompileOne;
+
+	PROCEDURE Go (c64: BOOLEAN);
+		VAR f: Files.File; r: Files.Reader; b: BYTE; name: ARRAY 128 OF CHAR; i: INTEGER;
+	BEGIN
+		f := Files.dir.Old(Files.dir.This("/tmp"), "compile1.txt", Files.shared);
+		IF f = NIL THEN StdLog.String("no /tmp/compile1.txt"); StdLog.Ln; RETURN END;
+		r := f.NewReader(NIL); r.SetPos(0); i := 0;
+		WHILE ~r.eof DO
+			r.ReadByte(b);
+			IF ~r.eof THEN
+				IF (b = 0AH) OR (b = 0DH) THEN
+					IF i > 0 THEN name[i] := 0X; CompileOne(name, c64); i := 0 END
+				ELSIF (b # 20H) OR (i > 0) THEN
+					name[i] := CHR(b); INC(i)
+				END
+			END
+		END;
+		IF i > 0 THEN name[i] := 0X; CompileOne(name, c64) END
+	END Go;
+
+	PROCEDURE Go32*;
+	BEGIN Go(FALSE)
+	END Go32;
+
+	PROCEDURE Go64*;
+	BEGIN Go(TRUE)
+	END Go64;
+
+END DevOnce.

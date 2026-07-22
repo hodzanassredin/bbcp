@@ -103,6 +103,7 @@ MODULE DevCPLamd64;
 	VAR
 		Size: ARRAY 32 OF INTEGER;	(* Size[typ.form] == +/- typ.size *)
 		a1, a2: Item;
+		ripTrail: INTEGER;	(* bytes following a RIP-relative disp32 (imm after disp) *)
 
 
 	PROCEDURE MakeReg* (VAR x: Item; reg: INTEGER; form: BYTE);
@@ -182,12 +183,12 @@ MODULE DevCPLamd64;
 	PROCEDURE CaseEntry* (tab, from, to: INTEGER);
 		VAR a, e: INTEGER;
 	BEGIN
-		a := tab + 4 * from; e := tab + 4 * to;
+		a := tab + 8 * from; e := tab + 8 * to;
 		WHILE a <= e DO
 			DevCPE.PutByte(a, DevCPE.pc);
 			DevCPE.PutByte(a + 1, DevCPE.pc DIV 256);
 			DevCPE.PutByte(a + 2, DevCPE.pc DIV 65536);
-			INC(a, 4)
+			INC(a, 8)
 		END;
 		a1.mode := 0; a2.mode := 0
 	END CaseEntry;
@@ -197,7 +198,7 @@ MODULE DevCPLamd64;
 	BEGIN
 		IF x.obj = NIL THEN GenDbl(x.offset)
 		ELSE
-			IF type = absolute THEN fixType := ripBased4 ELSE fixType := type END;
+			IF type = absolute THEN fixType := ripBased + ripTrail ELSE fixType := type END;
 			link := DevCPE.OffsetLink(x.obj, x.offset);
 			IF link # NIL THEN
 				GenDbl(fixType * 1000000H + link.linkadr MOD 1000000H);
@@ -206,6 +207,23 @@ MODULE DevCPLamd64;
 			END
 		END
 	END GenLinked;
+
+	PROCEDURE GenLinked8 (VAR x: Item; type: BYTE);
+		(* 8-byte slot in code: full 64-bit address/immediate, fixed with 8-byte write *)
+		VAR link: DevCPT.LinkList;
+	BEGIN
+		IF x.obj = NIL THEN
+			GenDbl(x.offset); GenDbl(ASH(x.offset, -31))	(* sign-extended imm64 *)
+		ELSE
+			link := DevCPE.OffsetLink(x.obj, x.offset);
+			IF link # NIL THEN
+				GenDbl(type * 1000000H + link.linkadr MOD 1000000H);
+				GenDbl(0);
+				link.linkadr := DevCPE.pc - 8
+			ELSE GenDbl(0); GenDbl(0)
+			END
+		END
+	END GenLinked8;
 	
 	PROCEDURE CheckSize (form: BYTE; VAR w: INTEGER);
 	BEGIN
@@ -233,10 +251,14 @@ MODULE DevCPLamd64;
 	
 	PROCEDURE GenConst (VAR x: Item; short: BOOLEAN);
 	BEGIN
-		IF x.obj # NIL THEN GenLinked(x, absolute)
+		IF x.obj # NIL THEN
+			IF x.form IN {Int64, Pointer, ProcTyp} THEN GenLinked8(x, absolute)
+			ELSE GenLinked(x, absolute)
+			END
 		ELSIF x.form <= Int8 THEN DevCPE.GenByte(x.offset)
 		ELSIF short & (x.offset >= -128) & (x.offset < 128) THEN DevCPE.GenByte(x.offset)
 		ELSIF x.form IN {Int16, Char16} THEN GenWord(x.offset)
+		ELSIF x.form IN {Int64, Pointer, ProcTyp} THEN GenDbl(x.offset); GenDbl(ASH(x.offset, -31))
 		ELSE GenDbl(x.offset)
 		END
 	END GenConst;
@@ -254,6 +276,7 @@ MODULE DevCPLamd64;
 				(* 64-bit RIP-relative: ModRM = 00 reg 101 *)
 				DevCPE.GenByte(code + 5);
 				GenLinked(x, absolute);
+				ripTrail := 0;
 				RETURN
 			ELSIF scale = 1 THEN base := x.index; mod := 80H; scale := 0
 			ELSE base := BP; mod := 0
@@ -308,6 +331,8 @@ MODULE DevCPLamd64;
 				CheckSize(from.form, w);
 				IF (from.offset = 0) & (from.obj = NIL) THEN
 					DevCPE.GenByte(30H + w); DevCPE.GenByte(0C0H + 9 * to.reg) (* XOR r,r *)
+				ELSIF from.form IN {Int64, Pointer, ProcTyp} THEN
+					DevCPE.GenByte(REXW); DevCPE.GenByte(0B8H + to.reg); GenConst(from, FALSE)	(* MOV r64, imm64 *)
 				ELSE
 					DevCPE.GenByte(0B0H + w * 8 + to.reg); GenConst(from, FALSE)
 				END;
@@ -318,9 +343,13 @@ MODULE DevCPLamd64;
 					RETURN
 				END;
 
-				a1 := from; a2.mode := 0;
-				CheckSize(from.form, w);
-				IF from.obj # NIL THEN DevCPE.GenByte(REXW); DevCPE.GenByte(8BH); GenCExt(to.reg * 8, from) ELSE DevCPE.GenByte(0A0H + w); GenLinked(from, absolute) END;
+			a1 := from; a2.mode := 0;
+			CheckSize(from.form, w);
+			IF from.obj # NIL THEN DevCPE.GenByte(REXW); DevCPE.GenByte(8BH); GenCExt(to.reg * 8, from)
+			ELSE
+				IF from.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
+				DevCPE.GenByte(0A0H + w); GenLinked8(from, absolute)	(* MOV rax, [moffs64] *)
+			END;
 			ELSIF (from.mode # Reg) OR (from.reg # to.reg) THEN
 				IF to.reg = AX THEN
 					IF (from.mode = Ind) & (from.scale = 0) & ((from.reg = BP) OR (from.reg = BX)) THEN
@@ -342,10 +371,22 @@ MODULE DevCPLamd64;
 		ELSE
 			CheckSize(from.form, w);
 			IF from.mode = Con THEN
-				DevCPE.GenByte(0C6H + w); GenCExt(0, to); GenConst(from, FALSE);
+				IF from.form IN {Int64, Pointer, ProcTyp} THEN
+					(* no MOV [mem], imm64: go via scratch r11 *)
+					DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(from, FALSE);	(* mov r11, imm64 *)
+					DevCPE.GenByte(4CH); DevCPE.GenByte(89H); GenCExt(3 * 8, to)	(* mov [to], r11 *)
+				ELSE
+					IF from.form <= Int8 THEN ripTrail := 1
+					ELSIF from.form IN {Int16, Char16} THEN ripTrail := 2
+					ELSE ripTrail := 4
+					END;
+					DevCPE.GenByte(0C6H + w); GenCExt(0, to); GenConst(from, FALSE);
+					ripTrail := 0
+				END;
 				a1.mode := 0; a2.mode := 0
-			ELSIF (from.reg = AX) & (to.mode = Abs) & (to.scale = 0) THEN
-				DevCPE.GenByte(0A2H + w); GenLinked(to, absolute);
+			ELSIF (from.reg = AX) & (to.mode = Abs) & (to.scale = 0) & (to.obj = NIL) THEN
+				IF from.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
+				DevCPE.GenByte(0A2H + w); GenLinked8(to, absolute);	(* MOV [moffs64], rax *)
 				a2 := to
 			ELSE
 				IF Size[from.form] >= 8 THEN DevCPE.GenByte(REXW) END;
@@ -387,8 +428,10 @@ MODULE DevCPLamd64;
 		IF (from.mode = Abs) & (from.scale = 0) THEN
 			IF from.obj # NIL THEN
 				DevCPE.GenByte(REXW); DevCPE.GenByte(8DH); GenCExt(to.reg * 8, from)
-			ELSE
+			ELSIF to.form = Int32 THEN
 				DevCPE.GenByte(0B8H + to.reg); GenLinked(from, absolute)
+			ELSE
+				DevCPE.GenByte(REXW); DevCPE.GenByte(0B8H + to.reg); GenLinked8(from, absolute)
 			END
 		ELSIF from.mode = Stk THEN
 			IF Size[to.form] >= 8 THEN DevCPE.GenByte(REXW) END;
@@ -442,9 +485,13 @@ MODULE DevCPLamd64;
 		CheckSize(src.form, w);
 		CheckConst(src, s);
 		IF (dst.mode = Reg) & (dst.reg = AX) & (s = 0) THEN
+			IF src.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
 			DevCPE.GenByte(op + 4 + w); GenConst(src, FALSE)
 		ELSE
-			DevCPE.GenByte(80H + s + w); GenCExt(op, dst); GenConst(src, TRUE)
+			IF s = 2 THEN ripTrail := 1 ELSIF dst.form IN {Int16, Char16} THEN ripTrail := 2 ELSE ripTrail := 4 END;
+			IF src.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
+			DevCPE.GenByte(80H + s + w); GenCExt(op, dst); GenConst(src, TRUE);
+			ripTrail := 0
 		END
 	END GenConOp;
 	
@@ -457,6 +504,7 @@ MODULE DevCPLamd64;
 			END
 		END;
 		CheckSize(src.form, w);
+		IF src.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
 		IF dst.mode = Reg THEN
 			DevCPE.GenByte(op + 2 + w); GenDExt(dst, src)
 		ELSE
@@ -475,11 +523,15 @@ MODULE DevCPLamd64;
 		IF src.mode = Con THEN
 			IF src.obj = NIL THEN
 				IF src.offset = 1 THEN
-					IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(40H + dst.reg) (* inc *)
+					IF (dst.mode = Reg) & (dst.form >= Int32) THEN
+						IF dst.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
+						DevCPE.GenByte(0FFH); DevCPE.GenByte(0C0H + dst.reg) (* inc *)
 					ELSE CheckSize(dst.form, w); DevCPE.GenByte(0FEH + w); GenCExt(0, dst)
 					END
 				ELSIF src.offset = -1 THEN
-					IF (dst.mode = Reg) & (dst.form >= Int32) THEN DevCPE.GenByte(48H + dst.reg) (* dec *)
+					IF (dst.mode = Reg) & (dst.form >= Int32) THEN
+						IF dst.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
+						DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H + dst.reg) (* dec *)
 					ELSE CheckSize(dst.form, w); DevCPE.GenByte(0FEH + w); GenCExt(8, dst)
 					END
 				ELSIF src.offset # 0 THEN
@@ -613,7 +665,12 @@ MODULE DevCPLamd64;
 			IF (x.mode = Reg) & (x.reg = AX) THEN
 				DevCPE.GenByte(0A8H + w); GenConst(x, FALSE)
 			ELSE
-				DevCPE.GenByte(0F6H + w); GenCExt(0, y); GenConst(x, FALSE)
+				IF x.form <= Int8 THEN ripTrail := 1
+				ELSIF x.form IN {Int16, Char16} THEN ripTrail := 2
+				ELSE ripTrail := 4
+				END;
+				DevCPE.GenByte(0F6H + w); GenCExt(0, y); GenConst(x, FALSE);
+				ripTrail := 0
 			END
 		ELSE
 			DevCPE.GenByte(84H + w);
@@ -749,7 +806,9 @@ MODULE DevCPLamd64;
 					DevCPE.GenByte(0D0H + w); GenCExt(op, dst)
 				END
 			ELSIF cnt.offset > 1 THEN
-				DevCPE.GenByte(0C0H + w); GenCExt(op, dst); DevCPE.GenByte(cnt.offset)
+				ripTrail := 1;
+				DevCPE.GenByte(0C0H + w); GenCExt(op, dst); DevCPE.GenByte(cnt.offset);
+				ripTrail := 0
 			END
 		ELSE
 			ASSERT((cnt.mode = Reg) & (cnt.reg = CX));
@@ -862,34 +921,23 @@ MODULE DevCPLamd64;
 		VAR link: DevCPT.LinkList; tab: INTEGER;
 	BEGIN
 		ASSERT((src.form = Int32) & (src.mode = Reg));
-		DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(85H + 8 * src.reg);
-		tab := (DevCPE.pc + 7) DIV 4 * 4;
+		(* mov r11, imm64(tab); jmp [r11 + src*8]; entries: 8-byte absolute64 *)
+		DevCPE.GenByte(49H); DevCPE.GenByte(0BBH);	(* mov r11, imm64 *)
+		tab := (DevCPE.pc + 8 + 4 + 7) DIV 8 * 8;
 		NEW(link); link.offset := tab; link.linkadr := DevCPE.pc;
 		link.next := DevCPE.CaseLinks; DevCPE.CaseLinks := link;
-		GenDbl(absolute * 1000000H + tab);
-		WHILE DevCPE.pc < tab DO DevCPE.GenByte(90H) END;
+		GenDbl(absolute * 1000000H + tab); GenDbl(0);
+		DevCPE.GenByte(42H); DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(0C3H + 8 * src.reg);	(* jmp [r11 + src*8] *)
+		WHILE DevCPE.pc < tab DO DevCPE.GenByte(90H) END
 	END GenCaseJump;
-(*	
-	PROCEDURE GenCaseJump* (VAR src: Item; num: LONGINT; VAR tab: LONGINT);
-		VAR link: DevCPT.LinkList; else, last: LONGINT;
-	BEGIN
-		ASSERT((src.form = Int32) & (src.mode = Reg));
-		DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(85H + 8 * src.reg);
-		tab := (DevCPE.pc + 7) DIV 4 * 4;
-		else := tab + num * 4; last := else - 4;
-		NEW(link); link.offset := tab; link.linkadr := DevCPE.pc;
-		link.next := CaseLinks; CaseLinks := link;
-		GenDbl(absolute * 1000000H + tab);
-		WHILE DevCPE.pc < tab DO DevCPE.GenByte(90H) END;
-		WHILE DevCPE.pc < last DO GenDbl(table * 1000000H + else) END;
-		GenDbl(tableend * 1000000H + else)
-	END GenCaseJump;
-*)	
+
 	PROCEDURE GenCaseEntry* (VAR L: Label; last: BOOLEAN);
 		VAR typ: INTEGER;
 	BEGIN
 		IF last THEN typ := tableend * 1000000H ELSE typ := table * 1000000H END;
-		IF L > 0 THEN GenDbl(L + typ) ELSE GenDbl(-L); L := -(DevCPE.pc - 4 + typ) END
+		IF L > 0 THEN GenDbl(L + typ) ELSE GenDbl(-L) END;
+		GenDbl(0);
+		L := -(DevCPE.pc - 8 + typ)
 	END GenCaseEntry;
 	
 	PROCEDURE GenCall* (VAR dst: Item);

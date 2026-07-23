@@ -11,6 +11,7 @@
  */
 
 #include <dlfcn.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -90,6 +91,16 @@ typedef struct Module {
     Directory* export;          /* @144 */
     char name[256];             /* @152 */
 } Module;
+
+/* ABI-инварианты OCF v2: сломаются — значит, раскладка разъехалась с
+   компилированным Kernel.Module (compiler выравнивает поля max на 4,
+   поэтому в Kernel.odc.txt стоят явные pad-поля). */
+_Static_assert(offsetof(Module, refcnt) == 12, "Module.refcnt @12");
+_Static_assert(offsetof(Module, term) == 48, "Module.term @48");
+_Static_assert(offsetof(Module, code) == 80, "Module.code @80");
+_Static_assert(offsetof(Module, names) == 120, "Module.names @120");
+_Static_assert(offsetof(Module, export) == 144, "Module.export @144");
+_Static_assert(offsetof(Module, name) == 152, "Module.name @152");
 
 typedef struct ImpList {
     struct ImpList* next;
@@ -680,6 +691,21 @@ out:
         printf("no kernel\n");
         return 1;
     }
+
+    /* modlist sanity: раскладка Module сломана — лучше упасть здесь, чем в scasb */
+    {
+        Module* p = modlist; int n = 0;
+        while (p != NULL && n < 4096) {
+            if (p->name[0] < 32 || p->name[0] > 126) {
+                printf("FATAL: corrupt Module in modlist at %p (name[0]=%d) — layout mismatch?\n",
+                       (void*)p, p->name[0]);
+                return 1;
+            }
+            p = p->next; n++;
+        }
+        if (p != NULL) { printf("FATAL: modlist cycle\n"); return 1; }
+    }
+
     printf("kernel %s: code=%p varBase=%p\n", k->name, (void*)k->code, (void*)k->varBase);
 
     /* call kernel body */

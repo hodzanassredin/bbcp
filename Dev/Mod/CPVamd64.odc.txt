@@ -1116,8 +1116,7 @@ MODULE DevCPVamd64;
 					condition(n.right, x, false, true)
 			| eql..geq:
 					f := n.left.typ.form;
-					IF f = Int64 THEN DevCPM.err(260)
-					ELSIF f IN {String8, String16, Comp} THEN
+					IF f IN {String8, String16, Comp} THEN
 						IF (n.left.class = Nmop) & (n.left.subcl = conv) THEN	(* converted must be source *)
 							StringOp(n.right, n.left, x, y, FALSE); DevCPCamd64.CmpString(x, y, n.subcl, TRUE)
 						ELSE
@@ -1231,7 +1230,7 @@ MODULE DevCPVamd64;
 							DevCPCamd64.Load(x, hint + stop, {})
 					| minus, abs, cap:
 							expr(n.left, x, hint + stop, {mem, stk});
-							IF f = Int64 THEN DevCPM.err(260)
+							IF (f = Int64) & (n.subcl # minus) THEN DevCPM.err(260)
 							ELSIF f IN realSet THEN DevCPCamd64.FloatMOp(x, n.subcl)
 							ELSE DevCPCamd64.IntMOp(x, n.subcl)
 							END
@@ -1246,7 +1245,7 @@ MODULE DevCPVamd64;
 							DevCPCamd64.FloatDOp(x, y, times, FALSE)
 						ELSE FloatDOp(n, x)
 						END
-					ELSIF (f = Int64) OR (n.typ = DevCPT.intrealtyp) THEN DevCPM.err(260); expr(n.left, x, {}, {})
+					ELSIF n.typ = DevCPT.intrealtyp THEN DevCPM.err(260); expr(n.left, x, {}, {})
 					ELSE
 						CASE n.subcl OF
 						   times:

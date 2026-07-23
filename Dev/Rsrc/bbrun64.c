@@ -580,7 +580,7 @@ static void RegisterModule()
 /* scan subsystem Code dirs for .ocf files; Kernel64 goes first */
 #include <dirent.h>
 
-static const char *subsystems[] = {"System", "Std", "Text", "Form", "Lin", NULL};
+static const char *subsystems[] = {"System", "Std", "Text", "Form", "Lin", "Cons", "Dev", NULL};
 
 #define MAXMODS 128
 static ModSpec specs[MAXMODS];

@@ -231,7 +231,7 @@ MODULE LinKernel;
 			Utf.StringToUtf8(dll, s, res); ASSERT(res = 0);
 			h := Dl.dlopen(s, Dl.RTLD_LAZY + Dl.RTLD_GLOBAL);
 			IF h # Dl.NULL THEN Utf.StringToUtf8(name, s, res); ASSERT(res = 0);
-				ad := Dl.dlsym(h, s)
+				ad := SHORT(Dl.dlsym(h, s))	(* TODO64: ThisDllObj пока INTEGER-кап *)
 			END
 		END;
 		RETURN ad

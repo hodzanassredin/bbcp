@@ -29,7 +29,14 @@
   log содержит мусор. OCF v2 НЕ имеет VarBlk — компиляторная инициализация
   глобалов (interface-таблицы ErrLog) не применяется. Надо: явная инициализация
   interface-глобалов (TDinit/VarBlk-эквивалент) или обход interface-диспетча.
-- Дальше по плану: (1) log/assert → MAIN OK; (2) StdLoader.Fixup 64-бит
+- РЕШЕНО: MAXMODS=128 обрезал скан (131 модуль) — ConsFonts/ConsLog/
+  DevCommanders терялись → 0 pending, KERNEL OK (коммит 43f73bd5).
+- РЕШЕНО: ErrLog/BufLog de-virtualization (plain-процедуры; OCF v2 без VarBlk
+  не инициализирует interface-глобалы) — коммит a4237caf.
+- ТЕКУЩИЙ блокер: таблица методов LinKernel.Platform сдвинута на слот
+  (слот k = метод k+1, первый = 0, последний = мусор) — краш при вызове
+  платформенного метода в LinPackedFiles init. В работе (агент).
+- Дальше по плану: (1) method table → MAIN OK; (2) StdLoader.Fixup 64-бит
   (ленивая загрузка внутри BB64); (3) Dev/ConsCompiler → HelloWorld из консоли;
   (4) exceptions/callbacks (SysV Enter, isGuarded); (5) GTK 64-бит → LinGui.
 

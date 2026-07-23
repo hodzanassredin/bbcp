@@ -1,0 +1,10 @@
+MODULE ObxHello;
+
+	IMPORT StdLog;
+
+	PROCEDURE Do*;
+	BEGIN
+		StdLog.String("Hello, World! (64-bit BlackBox)"); StdLog.Ln
+	END Do;
+
+END ObxHello.

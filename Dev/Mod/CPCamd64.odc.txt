@@ -337,6 +337,7 @@ MODULE DevCPCamd64;
 		VAR r: DevCPLamd64.Item; f: BYTE;
 	BEGIN
 		f := x.typ.form;
+		IF x.typ.comp = DynArr THEN f := Pointer END;	(* 64-бит: база open array = адрес *)
 		IF x.mode = Con THEN
 			IF (short IN stop) & (x.form IN {Int8, Int16, Bool, Char8, Char16}) THEN f := Int32; x.form := Int32 END;
 			IF con IN stop THEN
@@ -1425,7 +1426,8 @@ MODULE DevCPCamd64;
 	PROCEDURE Mem* (VAR x: DevCPLamd64.Item; offset: INTEGER; typ: DevCPT.Struct);	(* x := Mem[x+offset] *)
 	BEGIN
 		IF x.mode = Con THEN x.mode := Abs; x.obj := NIL; INC(x.offset, offset)
-		ELSE ASSERT(x.mode = Reg); x.mode := Ind; x.offset := offset
+		ELSIF x.mode = Reg THEN x.mode := Ind; x.offset := offset
+		ELSE DevCPM.err(220); x.mode := Ind; x.offset := offset	(* DIAG: was ASSERT(x.mode = Reg) *)
 		END;
 		x.scale := 0; x.typ := typ; x.form := typ.form
 	END Mem;
@@ -2158,7 +2160,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 	BEGIN
 		IF typ.untagged THEN DevCPM.err(-137) END;
 		ptr.mode := Ind; ptr.reg := BP; ptr.offset := adr+8; ptr.scale := 0; ptr.form := Pointer;
-		DevCPLamd64.MakeReg(len, CX, Int32); DevCPLamd64.MakeReg(sp, SP, Int32);
+		DevCPLamd64.MakeReg(len, CX, Int32); DevCPLamd64.MakeReg(sp, SP, Pointer);	(* sp 64-бит *)
 		DevCPLamd64.MakeReg(src, SI, Int32); DevCPLamd64.MakeReg(dst, DI, Int32);
 		DevCPLamd64.GenMove(ptr, len); bt := typ.BaseTyp;
 		WHILE bt.comp = DynArr DO

@@ -690,9 +690,33 @@ out:
         printf("KERNEL OK\n");
     }
 
-    /* inject module list into kernel's first global variable (modList) */
+    /* inject module list: bump-ядро Kernel64 (varBase+0 = modList по дизайну)
+       и System Kernel (его CP-код ходит по своему modList: ThisLoadedMod, GC) */
     if (k->varBase != 0)
         *(intptr_t*)k->varBase = (intptr_t)modlist;
+    {
+        Module* sk = ThisModule("Kernel");
+        if (sk != NULL) {
+            Object* ml = ThisObject(sk, "modList");
+            if (ml != NULL) *(intptr_t*)(sk->varBase + ml->offs) = (intptr_t)modlist;
+        }
+    }
+
+    /* инфраструктура загрузчика — первой, в порядке 32-битного dev0 link:
+       тела этих модулей устанавливают хуки (Files.dir, SetLoader...),
+       без которых тела остальных модулей падают (Librarian нужен Files.dir) */
+    {
+        static const char* infra[] = {"Utf", "LinKernel", "Files", "LinEnv",
+            "LinFiles", "LinPackedFiles", "StdLoader", "LinLoader", "LinIntLoader", NULL};
+        for (int j = 0; infra[j] != NULL; j++) {
+            Module* m = ThisModule((char*)infra[j]);
+            if (m == NULL || (m->opts & init)) continue;
+            m->opts = m->opts | init;
+            BodyProc body = (BodyProc) m->code;
+            printf("init %s (infra)...\n", m->name);
+            body();
+        }
+    }
 
     /* run all module bodies in load order (like Kernel.InitModule) */
     for (i = 0; i < nLoaded; i++) {

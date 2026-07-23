@@ -41,7 +41,7 @@ MODULE LinKernel;
 		trapReturn = 1; (* Return value for sigsetjmp given from siglongjmp *)
 
 	TYPE
-		ADDRESS = INTEGER;
+		ADDRESS = LONGINT;
 		Platform = RECORD (Kernel.Platform) END;
 
 		ErrLog = RECORD
@@ -184,11 +184,13 @@ MODULE LinKernel;
 		(* IF platform.p.Debug() THEN log.String(' '); log.Int(size); log.Ln END *)
 	END AllocateClusterMem;
 
-	PROCEDURE [code] Erase (adr, words: INTEGER)	
-		089H, 0C7H,	(* MOV EDI, EAX *)
-		031H, 0C0H,	(* XOR EAX, EAX *)
-		059H,			(* POP ECX *)
-		0F2H, 0ABH;	(* REP STOS *)
+	PROCEDURE Erase (adr: ADDRESS; words: INTEGER);
+		TYPE IntArr = POINTER TO ARRAY [untagged] OF INTEGER;
+		VAR p: IntArr; i: INTEGER;
+	BEGIN
+		p := S.VAL(IntArr, adr);
+		FOR i := 0 TO words - 1 DO p[i] := 0 END
+	END Erase;
 
 	PROCEDURE (VAR p: Platform) DeallocateModMem (adr: ADDRESS; size: INTEGER; release: BOOLEAN);
 		VAR res: INTEGER;
@@ -485,7 +487,7 @@ MODULE LinKernel;
 	BEGIN _ := Libc.fflush(0); Libc.exit(exitCode)
 	END Terminate;
 	
-	PROCEDURE (VAR p: Platform) Commit (base, committed, capacity, request: INTEGER; OUT granted: INTEGER);
+	PROCEDURE (VAR p: Platform) Commit (base, committed, capacity, request: ADDRESS; OUT granted: ADDRESS);
 	BEGIN HALT(20 (* should never be called*))
 	END Commit;
 	

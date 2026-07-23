@@ -386,7 +386,7 @@ MODULE DevCPLamd64;
 				IF from.form IN {Int64, Pointer, ProcTyp} THEN
 					(* no MOV [mem], imm64: go via scratch r11 *)
 					DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(from, FALSE);	(* mov r11, imm64 *)
-					DevCPE.GenByte(4CH); DevCPE.GenByte(89H); GenCExt(3 * 8, to)	(* mov [to], r11 *)
+					IF to.reg >= 8 THEN DevCPE.GenByte(4DH) ELSE DevCPE.GenByte(4CH) END; DevCPE.GenByte(89H); GenCExt(3 * 8, to)	(* mov [to], r11 *)
 				ELSE
 					IF from.form <= Int8 THEN ripTrail := 1
 					ELSIF from.form IN {Int16, Char16} THEN ripTrail := 2
@@ -509,7 +509,8 @@ MODULE DevCPLamd64;
 			IF dst.mode = Reg THEN
 				DevCPE.GenByte(49H); DevCPE.GenByte(op + 3); DevCPE.GenByte(0C0H + dst.reg * 8 + 3)	(* op dst, r11 *)
 			ELSE
-				DevCPE.GenByte(49H); DevCPE.GenByte(op + 1); GenCExt(3 * 8, dst)	(* op [dst], r11 *)
+				IF dst.reg >= 8 THEN DevCPE.GenByte(4DH) ELSE DevCPE.GenByte(4CH) END;	(* REX.W+R(=r11) [+B если база r8+] *)
+				DevCPE.GenByte(op + 1); GenCExt(3 * 8, dst)	(* op [dst], r11 *)
 			END;
 			RETURN
 		END;

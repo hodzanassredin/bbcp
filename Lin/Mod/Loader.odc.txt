@@ -1,0 +1,39 @@
+MODULE LinLoader;
+
+	IMPORT Kernel, LinFiles;	(* LinFiles: тело ставит Files.dir до загрузки модулей *)
+
+	CONST init = "LinInit";
+
+	PROCEDURE Load (IN name: ARRAY OF CHAR);
+		VAR importing, imported, err, object: ARRAY 256 OF CHAR;
+			m: Kernel.Module; res: INTEGER;
+	BEGIN
+		m := Kernel.ThisLoadedMod(SHORT(name));
+		IF m = NIL THEN
+			Kernel.LoadMod(name);
+			Kernel.GetLoaderResult(res, importing, imported, object);
+			IF res # 0 THEN
+				CASE res OF Kernel.done: err := ": no error"
+				| Kernel.fileNotFound: err := ": file not found!"
+				| Kernel.syntaxError: err := ": syntax error"
+				| Kernel.objNotFound: err := ": object not found"
+				| Kernel.illegalFPrint: err := ": illegal foot print"
+				| Kernel.cyclicImport: err := ": cyclic import"
+				| Kernel.noMem: err := ": no memory"
+				| Kernel.commNotFound: err := ": comm not found"
+				| Kernel.commSyntaxError: err := ": comm syntax error"
+				| Kernel.moduleNotFound: err := ": module not found"
+				ELSE
+					err := ": host loader error"
+				END;
+				err := "["+name+"] MODULE " + importing + " IMPORT " + imported + err;
+				Kernel.FatalError(res, err)
+			END
+		ELSE
+			Kernel.FatalError(1, err)
+		END
+	END Load;
+
+BEGIN
+	Load(init)
+END LinLoader.

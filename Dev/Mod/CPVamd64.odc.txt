@@ -1476,7 +1476,7 @@ MODULE DevCPVamd64;
 				ASSERT(typ.comp = DynArr);
 				ASSERT(n.right.link = NIL);
 				expr(n.right, y, {}, wreg - {CX} + {mem, stk});
-				DevCPLamd64.MakeReg(sp, SP, Int32);
+				DevCPLamd64.MakeReg(sp, SP, Pointer);	(* 64-бит: sp целиком, иначе pop rsp усечёт стек *)
 				DevCPCamd64.CopyReg(sp, old, {}, {CX});
 				DevCPCamd64.CopyReg(y, len, {}, {CX});
 				IF typ.BaseTyp.form = Char16 THEN
@@ -1513,7 +1513,7 @@ MODULE DevCPVamd64;
 				n.left.obj.used := FALSE
 			END
 		ELSE ASSERT(n.subcl = newfn);
-			DevCPLamd64.MakeReg(sp, SP, Int32); DevCPLamd64.GenPop(sp);
+			DevCPLamd64.MakeReg(sp, SP, Pointer); DevCPLamd64.GenPop(sp);
 			DevCPLamd64.MakeConst(y, 0, Pointer);
 			expr(n.left, x, {}, {}); DevCPCamd64.Assign(x, y)
 		END

@@ -32,7 +32,7 @@ MODULE Kernel;
 		
 	*)
 
-	IMPORT S := SYSTEM, COM;
+	IMPORT S := SYSTEM;
 
 	CONST
 		strictStackSweep = TRUE;
@@ -96,23 +96,27 @@ MODULE Kernel;
 			refcnt-: INTEGER;	(* <0: module invalidated *)
 			compTime-, loadTime-: ARRAY 6 OF SHORTINT;
 			ext-: INTEGER;	(* currently not used *)
+			pad0-: INTEGER;	(* выравнивание под OCF v2 (компилятор выравнивает максимум на 4) *)
 			term-: Command;	(* terminator *)
 			nofimps-, nofptrs-: INTEGER;
 			csize-, dsize-, rsize-: INTEGER;
-			code-, data-, refs-: INTEGER;
-			procBase-, varBase-: INTEGER;	(* meta base addresses *)
+			pad1-: INTEGER;
+			code-, data-, refs-: LONGINT;
+			procBase-, varBase-: LONGINT;	(* meta base addresses *)
 			names-: POINTER TO ARRAY [untagged] OF SHORTCHAR;	(* names[0] = 0X *)
-			ptrs-: POINTER TO ARRAY [untagged] OF INTEGER;
+			ptrs-: POINTER TO ARRAY [untagged] OF LONGINT;
 			imports-: POINTER TO ARRAY [untagged] OF Module;
 			export-: Directory;	(* exported objects (name sorted) *)
 			name-: Utf8Name
 		END;
 
 		Type* = POINTER TO RECORD [untagged]
-			(* record: ptr to method n at offset - 4 * (n+1) *)
+			(* record: ptr to method n at offset - 8 * (n+1) *)
 			size-: INTEGER;	(* record: size, array: #elem, dyn array: 0, proc: sigfp *)
+			tpad0-: INTEGER;
 			mod-: Module;
 			id-: INTEGER;	(* name idx * 256 + lev * 16 + attr * 4 + form *)
+			tpad1-: INTEGER;
 			base-: ARRAY 16 OF Type;	(* signature if form = ProcTyp *)
 			fields-: Directory;	(* new fields (declaration order) *)
 			ptroffs-: ARRAY any OF INTEGER	(* array of any length *)
@@ -124,6 +128,7 @@ MODULE Kernel;
 			fprint-: INTEGER;
 			offs-: INTEGER;	(* pvfprint for record types *)
 			id-: INTEGER;	(* name idx * 256 + vis * 16 + mode *)
+			opad-: INTEGER;
 			struct-: Type	(* id of basic type or pointer to typedesc/signature *)
 		END;
 
@@ -171,7 +176,7 @@ MODULE Kernel;
 			ext*: ItemExt
 		END;
 
-		ADDRESS = INTEGER;
+		ADDRESS = LONGINT;
 		FrameDesc = RECORD 	(** Record for iterating over call stack, cf. GetRefFrame *)
 			sentry: Sentry;	(* FrameDesc may be created in the stack, thus .sentinel = NIL is the only way to detect that FrameDesc hasn't been initialized (because a pointer field is the only one that the Language Report guarantees a preset value). *)
 			lo: ADDRESS;	(* the lower boundary of the scanned stack *)
@@ -193,9 +198,9 @@ MODULE Kernel;
 
 		Block = POINTER TO RECORD [untagged]
 			tag: Type;
-			last: INTEGER;		(* arrays: last element *)
-			actual: INTEGER;	(* arrays: used during mark phase *)
-			first: INTEGER		(* arrays: first element *)
+			last: LONGINT;		(* arrays: last element *)
+			actual: LONGINT;	(* arrays: used during mark phase *)
+			first: LONGINT		(* arrays: first element *)
 		END;
 
 		FreeBlock = POINTER TO FreeDesc;
@@ -209,7 +214,7 @@ MODULE Kernel;
 		Cluster = POINTER TO RECORD [untagged]
 			size: INTEGER;	(* total size *)
 			next: Cluster;
-			max: INTEGER	(* exe: reserved size, dll: original address *)
+			max: LONGINT	(* exe: reserved size, dll: original address *)
 			(* start of first block *)
 		END;
 
@@ -239,16 +244,21 @@ MODULE Kernel;
 		Real64Type = RECORD v: REAL END;
 		ProcType = RECORD v: PROCEDURE END;
 		UPtrType = RECORD v: INTEGER END;
-		IntPtrType = RECORD p: COM.IUnknown END;	(* used for array of interface pointer *)
+		IntPtrType = RECORD p: ANYPTR END;	(* used for array of interface pointer *)
 
 		StrPtr = POINTER TO ARRAY [untagged] OF SHORTCHAR;
 
-		IntPtr = POINTER TO RECORD [untagged] p: COM.IUnknown END;
+		TagRef = POINTER TO RECORD [untagged] tag: Type END;	(* доступ к тегу без S.GET (LONGINT-local не едет в Mem) *)
+		IntRef = POINTER TO RECORD [untagged] i: INTEGER END;
+		AnyRef = POINTER TO RECORD [untagged] p: ANYPTR END;
+		AdrRef = POINTER TO RECORD [untagged] a: ADDRESS END;
+
+		IntPtr = POINTER TO RECORD [untagged] p: ANYPTR END;
 
 		Interface = POINTER TO RECORD	(* COMPILER DEPENDENT *)
 			vtab: INTEGER;
 			ref: INTEGER;	(* must correspond to Block.actual *)
-			unk: COM.IUnknown
+			unk: ANYPTR
 		END;
 
 		Eoln* = ARRAY 3 OF CHAR;
@@ -324,7 +334,7 @@ MODULE Kernel;
 		free: ARRAY N OF FreeBlock;	(* free list *)
 		sentinelBlock: FreeDesc;
 		sentinel: FreeBlock;
-		candidates: ARRAY 1024 OF INTEGER;
+		candidates: ARRAY 1024 OF LONGINT;
 		nofcand: INTEGER;
 		allocated: INTEGER;	(* bytes allocated on BlackBox heap *)
 		ttotal: INTEGER;	(* current total size of BlackBox heap *)	(* committed heap size *)
@@ -427,13 +437,15 @@ MODULE Kernel;
 	PROCEDURE [code] FLDCW 0D9H, 06DH, 0FCH;	(* -4, FP *)
 	PROCEDURE [code] FSTCW 0D9H, 07DH, 0FCH;	(* -4, FP *)
 
-	(* code procedure for memory erase *)
+	(* procedure for memory erase *)
 
-	PROCEDURE [code] Erase (adr, words: INTEGER)	
-		089H, 0C7H,	(* MOV EDI, EAX *)
-		031H, 0C0H,	(* XOR EAX, EAX *)
-		059H,			(* POP ECX *)
-		0F2H, 0ABH;	(* REP STOS *)
+	PROCEDURE Erase (adr: ADDRESS; words: INTEGER);
+		TYPE IntArr = POINTER TO ARRAY [untagged] OF INTEGER;
+		VAR p: IntArr; i: INTEGER;
+	BEGIN
+		p := S.VAL(IntArr, adr);
+		FOR i := 0 TO words - 1 DO p[i] := 0 END
+	END Erase;
 
 	(* code procedure for stack allocate *)
 
@@ -628,14 +640,14 @@ MODULE Kernel;
 	PROCEDURE ^ NewArr* (eltyp, nofelem, nofdim: INTEGER): INTEGER;	(* impl. of NEW(ptr, dim0, dim1, ...) *)
 
 	PROCEDURE GrowBuf (by: INTEGER);
-		VAR a: ADDRESS; copy: POINTER TO ARRAY OF CHAR; max, u, len: INTEGER;
+		VAR a: ADDRESS; copy: POINTER TO ARRAY OF CHAR; max, u, len: INTEGER; hb: Block;
 	BEGIN
 		u := unit; dontCollect := unit = defLogger; unit := gc; 
 		IF blog.buf = NIL THEN max := 0 ELSE max := LEN(blog.buf) END;
 		IF max <= blog.pos + by THEN
 			(* allocate copy *)
 			len := (blog.pos + by) + (logInc - 1) DIV logInc * logInc;
-			a := NewArr(9 (* CHAR *), len, 1); S.PUT(a + 12, len); S.PUT(S.ADR(copy), a);
+			a := NewArr(9 (* CHAR *), len, 1); hb := S.VAL(Block, a); hb.first := len; S.PUT(S.ADR(copy), a);
 			(* copy := blog.buf$ *)
 			IF blog.buf # NIL THEN S.MOVE(S.ADR(blog.buf[0]), S.ADR(copy[0]), 2 * max) END;
 			blog.buf := copy
@@ -747,7 +759,7 @@ MODULE Kernel;
 		IF var # 0 THEN
 			m := modList;
 			WHILE (m # NIL) & ((var < m.code) OR (var >= m.code + m.csize)) DO m := m.next END;
-			IF m # NIL THEN DEC(adr, m.code) END
+			IF m # NIL THEN DEC(adr, SHORT(m.code)) END
 		END
 	END SearchProcVar;
 
@@ -758,25 +770,25 @@ MODULE Kernel;
 
 	PROCEDURE AllocateCluster (size: INTEGER; VAR c: Cluster); 
 	(** Allocate cluster c of at least size bytes in either mono- or multi-cluster heap layout *)
-		VAR a, base, capacity: ADDRESS;
+		VAR a, base, capacity, sz: ADDRESS;
 	BEGIN
 		ASSERT(platform.initialized, 99);
-		platform.AllocateClusterMem(size, base, capacity);
+		sz := size; platform.AllocateClusterMem(sz, base, capacity);
 		IF base = 0 THEN c := NIL
 		ELSE
 			IF monoClusterMem THEN 
 				ASSERT(base MOD 16 = 0, 60);
-				c := S.VAL(Cluster, base); c.size := size; c.max := capacity
+				c := S.VAL(Cluster, base); c.size := SHORT(sz); c.max := capacity
 				(*INC(total, <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6QAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABjAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAIAAAA@2NhcGFjaXR5"/>size<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>)*)
 				(* ;IF debug THEN log.String("monoClusterMem: c.max = "); log.Hex(c.max); log.Ln END; *)
 			ELSE 
 				a := (base + 15) DIV 16 * 16; c := S.VAL(Cluster, a); 
 				c.max := base; 
-				c.size := capacity - (a - base);
+				c.size := SHORT(capacity - (a - base));
 				(*INC(total, size)*) 
 				(* ;IF debug THEN log.String("~monoClusterMem: c.max = "); log.Hex(c.max); log.Ln END; *)
 			END;
-			INC(used, size); 
+			INC(used, SHORT(sz)); 
 		END
 		(* post: (c = NIL) OR (c MOD 16 = 0) & (c.size >= size) *)
 	END AllocateCluster;
@@ -795,7 +807,7 @@ MODULE Kernel;
 		DEC(used, c.size); (*DEC(total, c.size);*)
 		(* FreeHeapMem is only called in multicluster mode; in multicluster mode, total is not used *)
 		base := c.max;
-		platform.DeallocateClusterMem(base, (S.VAL(INTEGER, c) - base) + c.size)
+		platform.DeallocateClusterMem(base, SHORT(S.VAL(LONGINT, c) - base + c.size))
 	END DeallocateCluster;
 	
 	(*PROCEDURE HeapFull (size: INTEGER): BOOLEAN;
@@ -810,37 +822,38 @@ MODULE Kernel;
 
 	PROCEDURE AllocModMem* (descSize, metaSize, codeSize, varSize: INTEGER;
 			VAR descAdr, metaAdr, codeAdr, varAdr: INTEGER): BOOLEAN;
-		VAR pageSize: INTEGER; res: BOOLEAN;
+		VAR pageSize: INTEGER; res: BOOLEAN; dAdr, mAdr, cAdr, vAdr: ADDRESS; ir: IntRef;
 	BEGIN pageSize := platform.PageSize();
 		descSize := ((descSize - 1) DIV pageSize + 1) * pageSize;
 		metaSize := ((SIZE(INTEGER) + metaSize - 1) DIV pageSize + 1) * pageSize;
 		codeSize := ((codeSize - 1) DIV pageSize + 1) * pageSize;
 		varSize := ((varSize - 1) DIV pageSize + 1) * pageSize;
 
-		res := FALSE;
-		platform.AllocateModMem(descSize, descAdr, FALSE);
-		IF descAdr # 0 THEN
-			platform.AllocateModMem(metaSize, metaAdr, FALSE);
-			IF metaAdr # 0 THEN
-				platform.AllocateModMem(codeSize, codeAdr, TRUE);
-				IF codeAdr # 0 THEN
+		res := FALSE; dAdr := 0; mAdr := 0; cAdr := 0; vAdr := 0;
+		platform.AllocateModMem(descSize, dAdr, FALSE);
+		IF dAdr # 0 THEN
+			platform.AllocateModMem(metaSize, mAdr, FALSE);
+			IF mAdr # 0 THEN
+				platform.AllocateModMem(codeSize, cAdr, TRUE);
+				IF cAdr # 0 THEN
 					IF varSize # 0 THEN
-						platform.AllocateModMem(varSize, varAdr, FALSE);
-						res := varAdr # 0
-					ELSE varAdr := 0; res := TRUE
+						platform.AllocateModMem(varSize, vAdr, FALSE);
+						res := vAdr # 0
+					ELSE vAdr := 0; res := TRUE
 					END;
 					IF res THEN INC(used, descSize + metaSize + codeSize + varSize)
-					ELSE platform.DeallocateModMem(codeAdr, codeSize, TRUE); codeAdr := 0
+					ELSE platform.DeallocateModMem(cAdr, codeSize, TRUE); cAdr := 0
 					END
 				END;
-				IF ~res THEN platform.DeallocateModMem(metaAdr, metaSize, TRUE); metaAdr := 0 END
+				IF ~res THEN platform.DeallocateModMem(mAdr, metaSize, TRUE); mAdr := 0 END
 			END;
-			IF ~res THEN platform.DeallocateModMem(descAdr, descSize, TRUE); descAdr := 0 END
+			IF ~res THEN platform.DeallocateModMem(dAdr, descSize, TRUE); dAdr := 0 END
 		END;
 		IF res THEN
-			S.PUT(metaAdr, metaSize);
-			INC(metaAdr, SIZE(INTEGER))
+			ir := S.VAL(IntRef, mAdr); ir.i := metaSize;
+			INC(mAdr, SIZE(INTEGER))
 		END;
+		descAdr := SHORT(dAdr); metaAdr := SHORT(mAdr); codeAdr := SHORT(cAdr); varAdr := SHORT(vAdr);
 		RETURN res
 	END AllocModMem;
 
@@ -870,7 +883,7 @@ MODULE Kernel;
 		IF varSize # 0 THEN platform.DeallocateModMem(varAdr, varSize, TRUE) END
 	END DeallocModMem;
 
-	PROCEDURE InvalModMem (modSize, modAdr: INTEGER);
+	PROCEDURE InvalModMem (modSize: INTEGER; modAdr: ADDRESS);
 		VAR pageSize: INTEGER;
 	BEGIN pageSize := platform.PageSize();
 		modSize := ((modSize - 1) DIV pageSize + 1) * pageSize;
@@ -920,25 +933,26 @@ MODULE Kernel;
 	END Release2;
 
 	PROCEDURE RecFinalizer (obj: ANYPTR);
-		VAR i: INTEGER; type: Type; p: IntPtr;
+		VAR i: INTEGER; type: Type; p: IntPtr; tr: TagRef;
 	BEGIN
-		S.GET(S.VAL(INTEGER, obj) - 4, type);
+		tr := S.VAL(TagRef, S.VAL(LONGINT, obj) - 8); type := tr.tag;
 		i := 0;
 		WHILE type.ptroffs[i] >= 0 DO INC(i) END;
 		INC(i);
 		WHILE type.ptroffs[i] >= 0 DO
-			p := S.VAL(IntPtr, S.VAL(INTEGER, obj) + type.ptroffs[i]); INC(i);
+			p := S.VAL(IntPtr, S.VAL(LONGINT, obj) + type.ptroffs[i]); INC(i);
 			p.p := NIL	(* calls p.p.Release *)
 		END
 	END RecFinalizer;
 
 	PROCEDURE ArrFinalizer (obj: S.PTR);
-		VAR last, adr, i, j: INTEGER; type: Type; p: IntPtr;
+		VAR last, adr: LONGINT; i, j: INTEGER; type: Type; p: IntPtr; blk: Block;
 	BEGIN
-		S.GET(S.VAL(INTEGER, obj) - 4, type);
-		type := S.VAL(Type, S.VAL(INTEGER, type) - 2);	(* remove array flag *)
-		S.GET(S.VAL(INTEGER, obj), last);
-		S.GET(S.VAL(INTEGER, obj) + 8, adr);
+		blk := S.VAL(Block, S.VAL(LONGINT, obj) - 8);
+		type := blk.tag;
+		type := S.VAL(Type, S.VAL(LONGINT, type) - 2);	(* remove array flag *)
+		last := blk.last;
+		adr := blk.first;
 		j := 0;
 		WHILE type.ptroffs[j] >= 0 DO INC(j) END;
 		INC(j);
@@ -986,7 +1000,7 @@ MODULE Kernel;
 			tag := S.VAL(Type, typ);
 			b := NewBlock(tag.size);
 			IF b = NIL THEN RETURN 0 END;
-			b.tag := tag; S.GET(typ - 4, size);
+			b.tag := tag; S.GET(typ - 8, size);
 			IF size # 0 THEN	(* record uses a finalizer *)
 				l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
 				l := S.VAL(FList, NewRec(SHORT(S.TYP(FList))));	(* NEW(l) *)
@@ -999,8 +1013,8 @@ MODULE Kernel;
 	PROCEDURE NewArr* (eltyp, nofelem, nofdim: INTEGER): INTEGER;	(* impl. of NEW(ptr, dim0, dim1, ...) *)
 		VAR b: Block; size, headSize: INTEGER; t: Type; fin: BOOLEAN; l: FList;
 	BEGIN
-		IF (nofdim < 0) OR (nofdim > (MAX(INTEGER) - 12) DIV 4) THEN RETURN 0 END;
-		headSize := 4 * nofdim + 12; 
+		IF (nofdim < 0) OR (nofdim > (MAX(INTEGER) - 24) DIV 8) THEN RETURN 0 END;
+		headSize := 8 * nofdim + 24; 
 		fin := FALSE;
 		CASE eltyp OF
 		| -1: eltyp := SHORT(S.ADR(IntPtrType)); fin := TRUE
@@ -1027,8 +1041,8 @@ MODULE Kernel;
 		b := NewBlock(size);
 		IF b = NIL THEN RETURN 0 END;
 		b.tag := S.VAL(Type, eltyp + 2);	(* tag + array mark *)
-		b.last := SHORT(S.ADR(b.last) + size - t.size);	(* pointer to last elem *)
-		b.first := SHORT(S.ADR(b.last) + headSize);	(* pointer to first elem *)
+		b.last := S.ADR(b.last) + size - t.size;	(* pointer to last elem *)
+		b.first := S.ADR(b.last) + headSize;	(* pointer to first elem *)
 		IF fin THEN
 			l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
 			l := S.VAL(FList, NewRec(SHORT(S.TYP(FList))));	(* NEW(l) *)
@@ -1239,7 +1253,7 @@ MODULE Kernel;
 		WHILE n > 0 DO
 			p := S.VAL(StrPtr, S.ADR(m.names[obj.id DIV 256]));
 			IF p^ = nn THEN RETURN obj END;
-			DEC(n); INC(S.VAL(INTEGER, obj), 16)
+			DEC(n); INC(S.VAL(INTEGER, obj), 24)
 		END;
 		RETURN NIL
 	END ThisField;
@@ -1328,14 +1342,14 @@ MODULE Kernel;
 	PROCEDURE^ Collect*;
 
 	PROCEDURE UnloadMod* (mod: Module);
-		VAR i: INTEGER; t: Command;
+		VAR i: INTEGER; t: Command; ap: AnyRef; ir: IntRef;
 	BEGIN
 		IF mod.refcnt = 0 THEN
 			t := mod.term; mod.term := NIL;
 			IF t # NIL THEN t() END;	(* terminate module *)
 			i := 0;
 			WHILE i < mod.nofptrs DO	(* release global pointers *)
-				S.PUT(mod.varBase + mod.ptrs[i], 0); INC(i)
+				ap := S.VAL(AnyRef, mod.varBase + mod.ptrs[i]); ap.p := NIL; INC(i)
 			END;
 			ReleaseIPtrs(mod);	(* release global interface pointers *)
 			Collect;	(* call finalizers *)
@@ -1349,7 +1363,7 @@ MODULE Kernel;
 				(* var *)
 					IF mod.dsize # 0 THEN InvalModMem(mod.dsize, mod.data) END;
 				(* meta *)
-					S.GET(mod.refs - SIZE(INTEGER), i); InvalModMem(i, mod.refs - SIZE(INTEGER));
+					ir := S.VAL(IntRef, mod.refs - SIZE(INTEGER)); i := ir.i; InvalModMem(i, mod.refs - SIZE(INTEGER));
 				(* code *)
 					InvalModMem(((mod.csize - 1) DIV 4 + 1) * 4, mod.code)
 			END;
@@ -1536,7 +1550,7 @@ MODULE Kernel;
 		VAR ref, pos, ad, d: INTEGER; ch: SHORTCHAR; name: Utf8Name;
 	BEGIN
 		IF mod # NIL THEN	(* mf, 12.02.04 *)
-			ref := mod.refs; pos := 0; ad := 0; S.GET(ref, ch);
+			ref := SHORT(mod.refs); pos := 0; ad := 0; S.GET(ref, ch);
 			WHILE ch # 0X DO
 				WHILE (ch > 0X) & (ch < 0FCX) DO	(* srcref: {dAdr,dPos} *)
 					INC(ad, ORD(ch)); INC(ref); RefNum(ref, d);
@@ -1569,9 +1583,9 @@ MODULE Kernel;
 			WHILE (m # NIL) & ((fr.modpc < m.code) OR (fr.modpc >= m.code + m.csize)) DO m := m.next END;
 			IF m # NIL THEN
 				DEC(fr.modpc, m.code);
-				IF m.refcnt >= 0 THEN refs := m.refs;
+				IF m.refcnt >= 0 THEN refs := SHORT(m.refs);
 					REPEAT GetRefProc(refs, end, name) UNTIL (end = 0) OR (fr.modpc < end);
-					IF fr.modpc < end THEN Utf8ToString(name, fr.p, res); fr.pos := SourcePos(m, fr.modpc)
+					IF fr.modpc < end THEN Utf8ToString(name, fr.p, res); fr.pos := SourcePos(m, SHORT(fr.modpc))
 					END 
 				ELSE fr.pos := unloaded; fr.p := '<unloaded>'
 				END;
@@ -1600,14 +1614,20 @@ MODULE Kernel;
 
 	(** Used to iterate call stack frames. If P calls Q, and fr holds frame data for Q's activation, then after GetRefFrame(fr) fr will hold data for P's activation frame. If fr is uninitialized, and P calls GetRefFrame(fr), then fr will hold data for P's activation frame. Use GetThisRefFrame to initialize fr with an arbitrary frame. *)
 	
-	PROCEDURE GetRefFrame (VAR fr: FrameDesc); 	
+	PROCEDURE GetRefFrame (VAR fr: FrameDesc);
+		PROCEDURE Step;	(* fr.pc := [fr.fp + 8]; fr.fp := [fr.fp] *)
+			VAR ar: AdrRef;
+		BEGIN
+			ar := S.VAL(AdrRef, fr.fp + SIZE(ADDRESS)); fr.pc := ar.a; DEC(fr.pc);
+			ar := S.VAL(AdrRef, fr.fp); fr.fp := ar.a
+		END Step;
 	BEGIN 
 		IF fr.sentry = NIL THEN 
 			fr.sentry := sentry; fr.depth := -1; fr.pos := undefined; fr.eos := FALSE;
 			S.GETREG(FP, fr.fp); fr.lo := fr.fp;
-			S.GET(fr.fp + SIZE(ADDRESS), fr.pc); DEC(fr.pc); S.GET(fr.fp, fr.fp)
+			Step
 		ELSIF ~fr.eos THEN
-			S.GET(fr.fp + SIZE(ADDRESS), fr.pc); DEC(fr.pc); S.GET(fr.fp, fr.fp)
+			Step
 		END;
 		GetRefFrameDo(fr)
 	END GetRefFrame;
@@ -1628,7 +1648,7 @@ MODULE Kernel;
 	(* -------------------- garbage collector (portable) --------------------- *)
 
 	PROCEDURE Mark (this: Block);
-		VAR father, son: Block; tag: Type; flag, offset, actual: INTEGER;
+		VAR father, son: Block; tag: Type; flag, offset: INTEGER; actual: LONGINT; ap: AnyRef;
 	BEGIN
 		IF ~ODD(S.VAL(INTEGER, this.tag)) THEN
 			father := NIL;
@@ -1637,7 +1657,7 @@ MODULE Kernel;
 				flag := S.VAL(INTEGER, this.tag) MOD 4;
 				tag := S.VAL(Type, S.VAL(INTEGER, this.tag) - flag);
 				IF flag >= 2 THEN actual := this.first; this.actual := actual
-				ELSE actual := SHORT(S.ADR(this.last))
+				ELSE actual := S.ADR(this.last)
 				END;
 				LOOP
 					offset := tag.ptroffs[0];
@@ -1652,17 +1672,17 @@ MODULE Kernel;
 							flag := S.VAL(INTEGER, this.tag) MOD 4;
 							tag := S.VAL(Type, S.VAL(INTEGER, this.tag) - flag);
 							offset := tag.ptroffs[0];
-							IF flag >= 2 THEN actual := this.actual ELSE actual := SHORT(S.ADR(this.last)) END;
-							S.GET(actual + offset, father); S.PUT(actual + offset, S.ADR(son.last));
+							IF flag >= 2 THEN actual := this.actual ELSE actual := S.ADR(this.last) END;
+							ap := S.VAL(AnyRef, actual + offset); father := S.VAL(Block, ap.p); ap.p := S.VAL(ANYPTR, S.ADR(son.last));
 							INC(S.VAL(INTEGER, tag), 4)
 						END
 					ELSE
-						S.GET(actual + offset, son);
+						ap := S.VAL(AnyRef, actual + offset); son := S.VAL(Block, ap.p);
 						IF son # NIL THEN
-							DEC(S.VAL(INTEGER, son), 4);
+							DEC(S.VAL(LONGINT, son), 8);
 							IF ~ODD(S.VAL(INTEGER, son.tag)) THEN	(* down *)
 								this.tag := S.VAL(Type, S.VAL(INTEGER, tag) + flag);
-								S.PUT(actual + offset, father); father := this; this := son;
+								ap.p := S.VAL(ANYPTR, father); father := this; this := son;
 								EXIT
 							END
 						END;
@@ -1674,15 +1694,15 @@ MODULE Kernel;
 	END Mark;
 
 	PROCEDURE MarkGlobals;
-		VAR m: Module; i, p: INTEGER;
+		VAR m: Module; i: INTEGER; p: LONGINT; ap: AnyRef;
 	BEGIN
 		m := modList;
 		WHILE m # NIL DO
 			IF m.refcnt >= 0 THEN
 				i := 0;
 				WHILE i < m.nofptrs DO
-					S.GET(m.varBase + m.ptrs[i], p); INC(i);
-					IF p # 0 THEN Mark(S.VAL(Block, p - 4)) END
+					ap := S.VAL(AnyRef, m.varBase + m.ptrs[i]); p := S.VAL(LONGINT, ap.p); INC(i);
+					IF p # 0 THEN Mark(S.VAL(Block, p - 8)) END
 				END
 			END;
 			m := m.next
@@ -1694,9 +1714,9 @@ MODULE Kernel;
 	PROCEDURE Next (b: Block): Block;	(* next block in same cluster *)
 		VAR size: INTEGER;
 	BEGIN
-		S.GET(S.VAL(INTEGER, b.tag) DIV 4 * 4, size);
-		IF ODD(S.VAL(INTEGER, b.tag) DIV 2) THEN INC(size, b.last - S.ADR(b.last)) END;
-		RETURN S.VAL(Block, S.VAL(INTEGER, b) + (size + 19) DIV 16 * 16)
+		S.GET(S.VAL(LONGINT, b.tag) DIV 4 * 4, size);
+		IF ODD(S.VAL(LONGINT, b.tag) DIV 2) THEN INC(size, b.last - S.ADR(b.last)) END;
+		RETURN S.VAL(Block, S.VAL(LONGINT, b) + (size + 19) DIV 16 * 16)
 	END Next;
 
 *)
@@ -1707,9 +1727,9 @@ MODULE Kernel;
 		MOV	ECX,[ECX]	size
 		TESTB	[EAX],02H	ODD(b.tag DIV 2)
 		JE	L1
-		ADD	ECX,[EAX,4]	size + b.last
+		ADD	ECX,[EAX,8]	size + b.last
 		SUB	ECX,EAX
-		SUB	ECX,4	size + b.last - ADR(b.last)
+		SUB	ECX,8	size + b.last - ADR(b.last)
 		L1:
 		ADD	ECX,19	size + 19
 		AND	CL,0F0H	(size + 19) DIV 16 * 16
@@ -1720,16 +1740,16 @@ MODULE Kernel;
 	08BH, 009H,
 	0F6H, 000H, 002H,
 	074H, 008H,
-	003H, 048H, 004H,
+	003H, 048H, 008H,
 	029H, 0C1H,
-	083H, 0E9H, 004H,
+	083H, 0E9H, 008H,
 	083H, 0C1H, 013H,
 	080H, 0E1H, 0F0H,
 	001H, 0C8H;
 
 	PROCEDURE CheckCandidates;
 	(* pre: nofcand > 0 *)
-		VAR i, j, h, p, end: INTEGER; c: Cluster; blk, next: Block;
+		VAR i, j, h: INTEGER; p, end: LONGINT; c: Cluster; blk, next: Block;
 	BEGIN
 		(* sort candidates (shellsort) *)
 		h := 1; REPEAT h := h*3 + 1 UNTIL h > nofcand;
@@ -1744,25 +1764,25 @@ MODULE Kernel;
 		(* sweep *)
 		c := root; i := 0;
 		WHILE c # NIL DO
-			blk := S.VAL(Block, S.VAL(INTEGER, c) + 12);
-			end := S.VAL(INTEGER, blk) + (c.size - 12) DIV 16 * 16;
-			WHILE candidates[i] < S.VAL(INTEGER, blk) DO
+			blk := S.VAL(Block, S.VAL(LONGINT, c) + 24);
+			end := S.VAL(LONGINT, blk) + (c.size - 24) DIV 16 * 16;
+			WHILE candidates[i] < S.VAL(LONGINT, blk) DO
 				INC(i);
 				IF i = nofcand THEN RETURN END
 			END;
-			WHILE S.VAL(INTEGER, blk) < end DO
+			WHILE S.VAL(LONGINT, blk) < end DO
 				next := Next(blk);
-				IF candidates[i] < S.VAL(INTEGER, next) THEN
-					IF (S.VAL(INTEGER, blk.tag) # S.ADR(blk.last))	(* not a free block *)
+				IF candidates[i] < S.VAL(LONGINT, next) THEN
+					IF (S.VAL(LONGINT, blk.tag) # S.ADR(blk.last))	(* not a free block *)
 							& (~strictStackSweep OR (candidates[i] = S.ADR(blk.last))) THEN
 						Mark(blk)
 					END;
 					REPEAT
 						INC(i);
 						IF i = nofcand THEN RETURN END
-					UNTIL candidates[i] >= S.VAL(INTEGER, next)
+					UNTIL candidates[i] >= S.VAL(LONGINT, next)
 				END;
-				IF (S.VAL(INTEGER, blk.tag) MOD 4 = 0) & (S.VAL(INTEGER, blk.tag) # S.ADR(blk.last))
+				IF (S.VAL(LONGINT, blk.tag) MOD 4 = 0) & (S.VAL(LONGINT, blk.tag) # S.ADR(blk.last))
 						& (blk.tag.base[0] = NIL) & (blk.actual > 0) THEN	(* referenced interface record *)
 					Mark(blk)
 				END;
@@ -1773,18 +1793,18 @@ MODULE Kernel;
 	END CheckCandidates;
 
 	PROCEDURE MarkLocals;
-		VAR sp, p, min, max: INTEGER; c: Cluster;
+		VAR sp, p, min, max: LONGINT; c: Cluster; ar: AdrRef;
 	BEGIN
 		S.GETREG(FP, sp); nofcand := 0; c := root;
 		WHILE c.next # NIL DO c := c.next END;
-		min := S.VAL(INTEGER, root); max := S.VAL(INTEGER, c) + c.size;
+		min := S.VAL(LONGINT, root); max := S.VAL(LONGINT, c) + c.size;
 		WHILE sp < baseStack DO
-			S.GET(sp, p);
+			ar := S.VAL(AdrRef, sp); p := ar.a;
 			IF (p > min) & (p < max) & (~strictStackSweep OR (p MOD 16 = 0)) THEN
 				candidates[nofcand] := p; INC(nofcand);
 				IF nofcand = LEN(candidates) - 1 THEN CheckCandidates; nofcand := 0 END
 			END;
-			INC(sp, 4)
+			INC(sp, 8)
 		END;
 		candidates[nofcand] := max; INC(nofcand);	(* ensure complete scan for interface mark*)
 		IF nofcand > 0 THEN CheckCandidates END
@@ -1830,12 +1850,12 @@ MODULE Kernel;
 	END CheckFinalizers;
 
 	PROCEDURE ExecFinalizer (a, _, __: INTEGER);
-		VAR f: FList; fin: PROCEDURE(this: ANYPTR);
+		VAR f: FList; fin: PROCEDURE(this: ANYPTR); ar: AdrRef;
 	BEGIN
 		f := S.VAL(FList, a);
 		IF f.aiptr THEN ArrFinalizer(S.VAL(ANYPTR, S.ADR(f.blk.last)))
 		ELSE
-			S.GET(S.VAL(INTEGER, f.blk.tag) - 4, fin);	(* method 0 *)
+			ar := S.VAL(AdrRef, S.VAL(LONGINT, f.blk.tag) - 8); S.GET(ar.a, fin);	(* method 0 *)
 			IF (fin # NIL) & (f.blk.tag.mod.refcnt >= 0) THEN
 				fin(S.VAL(ANYPTR, S.ADR(f.blk.last)))
 			END;
@@ -1862,16 +1882,16 @@ MODULE Kernel;
 	END Insert;
 
 	PROCEDURE Sweep (dealloc: BOOLEAN);
-		VAR cluster, last, c: Cluster; blk, next: Block; fblk, b, t: FreeBlock; end, i: INTEGER;
+		VAR cluster, last, c: Cluster; blk, next: Block; fblk, b, t: FreeBlock; i: INTEGER; end: LONGINT;
 	BEGIN
 		cluster := root; last := NIL; allocated := 0;
 		i := N;
 		REPEAT DEC(i); free[i] := sentinel UNTIL i = 0;
 		WHILE cluster # NIL DO
-			blk := S.VAL(Block, S.VAL(INTEGER, cluster) + 12);
-			end := S.VAL(INTEGER, blk) + (cluster.size - 12) DIV 16 * 16;
+			blk := S.VAL(Block, S.VAL(LONGINT, cluster) + 24);
+			end := S.VAL(LONGINT, blk) + (cluster.size - 24) DIV 16 * 16;
 			fblk := NIL;
-			WHILE S.VAL(INTEGER, blk) < end DO
+			WHILE S.VAL(LONGINT, blk) < end DO
 				next := Next(blk);
 				IF ODD(S.VAL(INTEGER, blk.tag)) THEN
 					IF fblk # NIL THEN
@@ -1885,13 +1905,13 @@ MODULE Kernel;
 				END;
 				blk := next
 			END;
-			IF dealloc & ~monoClusterMem & (S.VAL(INTEGER, fblk) = S.VAL(INTEGER, cluster) + 12) THEN
+			IF dealloc & ~monoClusterMem & (S.VAL(INTEGER, fblk) = S.VAL(INTEGER, cluster) + 24) THEN
 				(* deallocate cluster *)
 				c := cluster; cluster := cluster.next;
 				IF last = NIL THEN root := cluster ELSE last.next := cluster END;
 				DeallocateCluster(c)	(*FreeHeapMem(c)*)
 			ELSE
-				IF fblk # NIL THEN Insert(fblk, end - S.VAL(INTEGER, fblk)) END;
+				IF fblk # NIL THEN Insert(fblk, SHORT(end - S.VAL(LONGINT, fblk))) END;
 				last := cluster; cluster := cluster.next
 			END
 		END;
@@ -2019,6 +2039,7 @@ MODULE Kernel;
 		VAR b: FreeBlock; r, next: Reducer; 
 			a, 	(* address of potential free block *)
 			old, new: INTEGER;	(* old and new committed portion size *)
+			granted: ADDRESS;
 	BEGIN														(* LONG prevents integer overflow on address arithmetic *)
 		IF ~dontCollect & <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA8AAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABqAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAPAAAA@0hlYXBGdWxsKHRzaXplKQ=="/>(used + LONG(tsize) > platform.physicalMemory)<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/> & (reducers # NIL) THEN	(* 3) little space => reduce once *)
 			r := reducers; reducers := NIL;
@@ -2029,16 +2050,16 @@ MODULE Kernel;
 		IF (b = NIL) & platform.gradualCommit THEN	
 			(* this branch is actually win-specific, and should only be invoked if the platform provides a Commit *)
 			<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAWgIAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAADUAQAAAAAAAAAAzwAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAD@AAAAAAAAACoAGPABAAAAAACQAQAAAAA0AAAAAYLyCAAAAAAAAAAnAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAAIAAAACgvIIAAAAAAAAAAAAAAAAAAAAGgAAAAAA9Cq8AAAAAAAqABjwAQAAAAAAkAEAAAAAAwAAAAEVAAAAACgAAAACKAAAAABdAAAA@0lGIHRzaXplIDw9IE1BWChJTlRFR0VSKSBESVYgMyAqIDIgLSBhbGxvY2F0ZWQgVEhFTgkoKj8@PyB!MS41RyAtIGFsbG9jYXRlZCAqKQ0JCQkJcyA6PSAodHNpemUgKyBhbGxvY2F0ZWQpIERJViAyICogMwkoKiBldXJpc3RpYz8gcmVxdWlyZWQgaGVhcCBzaXplICoxLjU@ICopDQkJCUVMU0lGIHRzaXplIDw9IHJvb3QubWF4IC0gYWxsb2NhdGVkIFRIRU4NCQkJCXMgOj0gcm9vdC5tYXgNCQkJRUxTRQ0JCQkJUkVUVVJOIE5JTA0JCQlFTkQ7"/>new := SHORT(MIN(root.max, (tsize + LONG(allocated)) DIV 2 * 3));<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
-			a := 12 + (root.size - 12) DIV 16 * 16;	(* a is always 4 bytes short of a 16-rounded address (or 12 bytes after another 16-rounded address *)
+			a := 24 + (root.size - 24) DIV 16 * 16;	(* a is always 8 bytes short of a 16-rounded address (or 24 bytes after another 16-rounded address *)
 			(* a is the offset WRT root of a potential free block that would apper at the newly committed region *)
 			<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAVgMAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAADQAgAAAAAAAAAAhAEAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAIAAAAAYLyCAAAAAAAAAAuAAAAAAAAABoAAAAAAPQqvAAAAAAAKgAY8AEAAAAAAJABAAAAAAAAAABE6QEAn8EBAILyAAAAAAAAAABsAAAADAAAAGMAAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAEUAAAAAAAAAAAA2AAAAAILyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAAAAAEAAAAAKgAY8AEAAAAAAJABAAAAAAUAAAD@dG90YWwCgvIIAAAAAAAAADMAAAAAAAAAGgAAAAAAAH9@AAAAAAAqABjwAQAAAAAAkAEAAAAACQAAAAAAAAAAROkBAJ@BAQCC8gAAAAAAAAAAAAAAAAwAAAARAAAAAAAAAQAAAACAAAAAAAAAAAAAIAAAAAFOAAAAAF8AAAABYgAAAP9JRiBzIDw9IAJyb290LnNpemUCIFRIRU4NCQkJCWIgOj0gT2xkQmxvY2sodHNpemUpOwkoKiB0aGlzIGhhcyBiZWVuIHRyaWVkIGJlZm9yZSwgaGFzbid0IGl0PyAvLyBObywgbm90IGFmdGVyIGNhbGxpbmcgcmVkdWNlcnMgKikNCQkJCUlGIGIgPSBOSUwgVEhFTiBzIDo9IGEgKyB0c2l6ZSBFTkQNCQkJRUxTSUYgcyA8IGEgKyB0c2l6ZSBUSEVODQkJCQlzIDo9IGEgKyB0c2l6ZQ0JCQlFTkQ7ICgqIHdlaXJkLi4uIHNpbmNlIE9sZEJsb2NrKHRzaXplKSA9IE5JTCwgYm90aCBicmFuY2hlcyBlbmQgdXAgaW4gcyA6PSBhICsgdHNpemUgLSBzYW1lIHJlc3VsdC4gICop"/>IF (new <= root.size) OR (new < a + tsize) THEN new := a + tsize END;<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
 			ASSERT(root.size < new, 78);
 			IF <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABgAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAFAAAA@3RvdGFs"/>root.size<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/> < new THEN	(* 4) enlarge cluster'new committed portion *)
 				(*GrowHeapMem(new, root);*)
 				old := root.size; 
-				platform.Commit(S.VAL(ADDRESS, root), old, root.max, new, root.size);
-				IF <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA4QEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABbAQAAAAAAAAAAQgEAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAKAAAAAYLyCAAAAAAAAAAuAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAAAAAABE6QEAn8EBAILyAAAAAAAAAAB6AAAADAAAAGAAAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAEIAAAAAAAAAAAA2AAAAAILyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAAAAAEAAAAAKgAY8AEAAAAAAJABAAAAAAIAAAD@Pj0BAQAAAAEAAAAAROkBAJ@BAQCC8gAAAAAAAAAAAAAAAAwAAAARAAAAAAAAAQAAAACAAAAAAAAAAAAAAgAAAP9yb290LnNpemUgAjwCIHM="/>root.size # old<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/> THEN	(* successfull commit *)
-					INC(used, root.size - old); (*INC(total, new - root.size);*) root.size := new;
+				platform.Commit(S.VAL(ADDRESS, root), old, root.max, new, granted);
+				IF <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA4QEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABbAQAAAAAAAAAAQgEAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAKAAAAAYLyCAAAAAAAAAAuAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAAAAAABE6QEAn8EBAILyAAAAAAAAAAB6AAAADAAAAGAAAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAEIAAAAAAAAAAAA2AAAAAILyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAAAAAEAAAAAKgAY8AEAAAAAAJABAAAAAAIAAAD@Pj0BAQAAAAEAAAAAROkBAJ@BAQCC8gAAAAAAAAAAAAAAAAwAAAARAAAAAAAAAQAAAACAAAAAAAAAAAAAAgAAAP9yb290LnNpemUgAjwCIHM="/>granted # old<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/> THEN	(* successfull commit *)
+					INC(used, SHORT(granted - old)); (*INC(total, new - root.size);*) root.size := new;
 					b := LastBlock(S.VAL(INTEGER, root) + a);	(* last block of root cluster that ends at a - 4 *)
 					IF b # NIL THEN
 						b.size := (root.size - a + b.size + 4) DIV 16 * 16 - 4
@@ -2062,7 +2083,7 @@ MODULE Kernel;
 	(** Assuming there's no free block of at least tsize, make a new free block of at least tsize bytes in multicluster heap mode *)
 		VAR a, s: INTEGER; b: FreeBlock; new, c: Cluster; r: Reducer;
 	BEGIN
-		AllocateCluster(tsize + 12, new);	(* 3) allocate a new cluster *)
+		AllocateCluster(tsize + 24, new);	(* 3) allocate a new cluster *)
 		IF new # NIL THEN
 			IF (root = NIL) OR (S.VAL(INTEGER, new) < S.VAL(INTEGER, root)) THEN
 				new.next := root; root := new
@@ -2071,8 +2092,8 @@ MODULE Kernel;
 				WHILE (c.next # NIL) & (S.VAL(INTEGER, new) > S.VAL(INTEGER, c.next)) DO c := c.next END;
 				new.next := c.next; c.next := new
 			END;
-			b := S.VAL(FreeBlock, S.VAL(INTEGER, new) + 12);
-			b.size := (new.size - 12) DIV 16 * 16 - 4
+			b := S.VAL(FreeBlock, S.VAL(LONGINT, new) + 24);
+			b.size := (new.size - 24) DIV 16 * 16 - 4
 		ELSE
 			b := NIL	(* 4) give up *)
 		END;
@@ -2101,8 +2122,8 @@ MODULE Kernel;
 		END;
 		IF b # NIL THEN (* b # NIL *)
 			a := b.size + 4 - tsize;
-			IF a > 0 THEN Insert(S.VAL(FreeBlock, S.VAL(INTEGER, b) + tsize), a) END;
-			IF size > 0 THEN Erase(SHORT(S.ADR(b.size)), (size + 3) DIV 4) END;
+			IF a > 0 THEN Insert(S.VAL(FreeBlock, S.VAL(LONGINT, b) + tsize), a) END;
+			IF size > 0 THEN Erase(S.ADR(b.size), (size + 3) DIV 4) END;
 			INC(allocated, tsize)
 		END;
 		RETURN S.VAL(Block, b)
@@ -2330,13 +2351,14 @@ MODULE Kernel;
 	2. Module T converts platform information into BlackBox trap information and calls Kernel.HandleTrap.
 	3. Kernel.HandleTrap calls Platform.GetTrapInfo to get trap information from the platform.
 	Thus, if HandleTrap is called arbitrarily by some client, .GetTrapInfo should return pc = 0, and Kernel will not process a fake HandleTrap call. *)
-		VAR recursive: BOOLEAN;
+		VAR recursive: BOOLEAN; tpc, tsp, tfp: ADDRESS;
 	BEGIN
 		stack := baseStack;
 		INCL(dirty, unit); unit := other;
 		IF ~platform.initialized THEN log.String("Fatal: No Platform hook installed into Kernel"); log.Ln; Quit(1)
 		ELSE
-			platform.GetTrapInfo(pc, sp, fp, err, val, recursive);
+			platform.GetTrapInfo(tpc, tsp, tfp, err, val, recursive);
+			pc := SHORT(tpc); sp := SHORT(tsp); fp := SHORT(tfp);
 			IF pc = 0 THEN log.String('No actual trap when Kernel.HandleTrap called'); log.Ln; HALT(20)
 			ELSE
 				INC(trapCount);
@@ -2376,10 +2398,10 @@ MODULE Kernel;
 		IF monoClusterMem THEN
 			AllocateCluster(1, root);
 			ASSERT(root # NIL, 60);
-			i := MIN(N - 1, (root.size - 12) DIV 16 - 1);
-			free[i] := S.VAL(FreeBlock, S.VAL(INTEGER, root) + 12);
+			i := MIN(N - 1, (root.size - 24) DIV 16 - 1);
+			free[i] := S.VAL(FreeBlock, S.VAL(LONGINT, root) + 24);
 			free[i].next := sentinel;
-			free[i].size := (root.size - 12) DIV 16 * 16 - 4;
+			free[i].size := (root.size - 24) DIV 16 * 16 - 4;
 			free[i].tag:=S.VAL(Type, S.ADR(free[i].size));
 			(* IF debug THEN ;DumpFree; END *)
 		END;

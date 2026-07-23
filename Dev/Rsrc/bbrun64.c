@@ -593,7 +593,7 @@ static void RegisterModule()
 
 static const char *subsystems[] = {"System", "Std", "Text", "Form", "Lin", "Cons", "Dev", NULL};
 
-#define MAXMODS 128
+#define MAXMODS 256
 static ModSpec specs[MAXMODS];
 static int nSpecs;
 static Module* loadOrder[MAXMODS];
@@ -623,6 +623,7 @@ int main (int argc, char *argv[])
             if (dir == NULL) continue;
             struct dirent* de;
             while ((de = readdir(dir)) != NULL && nSpecs < MAXMODS) {
+                if (nSpecs >= MAXMODS - 1) { printf("FATAL: MAXMODS reached, increase it\n"); }
                 int len = strlen(de->d_name);
                 if (len < 5 || strcmp(de->d_name + len - 4, ".ocf") != 0) continue;
                 if (k64 && strcmp(de->d_name, "Kernel64.ocf") != 0) continue;

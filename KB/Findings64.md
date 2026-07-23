@@ -165,6 +165,18 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     а заглушка bbcp/Lin/Mod/Kernel64.odc (старая, 841 байт) удалена из дерева
     use64 fallback'ом... внимание: sync-odc создаёт её заново из tracked
     Lin/Mod/Kernel64.odc.txt — следить.
+26. **Структура ядра в use64**: bbcp64use/System/Mod/Kernel64.odc — симлинк на
+    Mod64/Kernel64.odc (bump-ядро, 94 строки). bbrun64 мапит "$$"-импорты на
+    "Kernel64" (строка kernel в bbrun64.c). Стадия C = заменить bump-ядро на
+    Mod64/Kernel64_full.odc (2381 строка, MODULE Kernel64) — НО это порт
+    WINDOWS-ядра: `IMPORT S := SYSTEM, COM` — надо выпиливать COM (Win COM
+    interop) или заменять на Lin-эквивалент. LinKernel64 (Mod64) ссылается на
+    Kernel64.Cluster/InitHeap — появятся в full-ядре.
+27. **Boot-архитектура**: bbrun64 грузит ВСЕ .ocf из */Code подсистем,
+    разрезолвляет импорты multi-pass, инжектит modlist в Kernel64.modList
+    (modList = последняя var, offset 0), зовёт тела модулей. System Kernel
+    имеет СВОЙ modList и свою раскладку Module — отсюда краш ThisLoadedMod
+    (п.24). Рантайм-аллокатор уже Kernel64 (NewRec/NewArr через $$).
 
 ## Уроки процесса
 - Ассерт-инварианты окупаются: BADPTR (Pointer/ProcTyp size=8) поймал

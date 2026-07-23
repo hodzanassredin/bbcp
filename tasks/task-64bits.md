@@ -4,9 +4,38 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
-## ТЕКУЩЕЕ СОСТОЯНИЕ (на конец сессии 2026-07-24)
+## ТЕКУЩЕЕ СОСТОЯНИЕ (на конец сессии 2026-07-24, вечер)
 
 ### Что работает
+- Компилятор (dev0, 32-бит) генерирует OCF amd64 v2 (нативные 64-бит дескрипторы).
+- Полная сборка: `System Std Text Form Lin Cons` — 0 ошибок (131 ocf;
+  ConsCompiler отключён — нужен весь Dev; DevCommanders собирается фазой в test64.sh).
+- **System Kernel портирован** (агент + ревью): ADDRESS=LONGINT, раскладки
+  Module/Block/Cluster, pad-поля Module/Type/ObjDesc под OCF v2 (компилятор
+  выравнивает поля max на 4!), typed-pointer идиомы вместо S.GET/PUT по
+  LONGINT-локалам, Erase на CP. Kernel64_full — справочно (коммит dd86ead8).
+- **SysV FFI, LinLibc 64-бит** — решены (см. ниже хронологию).
+- **bbrun64 доходит до инфра-инита**: KERNEL OK, тела Utf/LinKernel/Files/
+  LinEnv/LinFiles проходят. Фиксы backend по пути: REX.R для r11 (cmp [mem],r11),
+  stackArray sp 64-бит (pop rsp усекал стек), open-array база Pointer,
+  value Comp-параметры 8-выровнены, modList-инжект в System Kernel,
+  init-инфра первой (порядок dev0-link), LinLoader/LinIntLoader+LinFiles.
+- Инструменты: tools64/ocf.py (refs/disasm), errpos.sh, c64.sh, gdb/ хелперы,
+  bbrun64 _Static_assert ABI + modlist sanity.
+
+### Где остановились: краш в Kernel.Assert (log dispatch) при init LinPackedFiles
+- Тело LinPackedFiles падает на ASSERT (cond=false, причина не выяснена),
+  путь падения сам падает: `log.String` — диспетч через [itable-8], глобал
+  log содержит мусор. OCF v2 НЕ имеет VarBlk — компиляторная инициализация
+  глобалов (interface-таблицы ErrLog) не применяется. Надо: явная инициализация
+  interface-глобалов (TDinit/VarBlk-эквивалент) или обход interface-диспетча.
+- Дальше по плану: (1) log/assert → MAIN OK; (2) StdLoader.Fixup 64-бит
+  (ленивая загрузка внутри BB64); (3) Dev/ConsCompiler → HelloWorld из консоли;
+  (4) exceptions/callbacks (SysV Enter, isGuarded); (5) GTK 64-бит → LinGui.
+
+## ПРЕДЫДУЩЕЕ СОСТОЯНИЕ (утро 2026-07-24)
+
+### Что работало тогда
 - Компилятор (dev0, 32-бит) генерирует OCF amd64 v2 (нативные 64-бит дескрипторы).
 - Полная сборка: `System Std Text Form Lin` — 0 ошибок. LinKernel64 ИСКЛЮЧЁН
   (CompileSubs стоп на первом ошибочном модуле; симлинк bbcp64use/Lin/Mod/
@@ -31,10 +60,17 @@
 - Бут доходит до LinIntLoader → Kernel.ThisLoadedMod → краш в scasb:
   **System/Mod/Kernel.odc имеет 32-битную раскладку Module/Type/Directory**
   (name@112), а bbrun64 строит дескрипторы по OCF v2 (name@152, указатели 8).
-  "Указатель" = ASCII имени модуля. Лечится ТОЛЬКО стадией C (Kernel64_full),
-  точечные правки System Kernel бессмысленны.
-- Заглушка Lin/Mod/Kernel64.odc (старая, импортирует Kernel64.Cluster/InitHeap)
-  удалена из git — ломала CompileSubs (стоп на первом ошибочном модуле).
+  "Указатель" = ASCII имени модуля.
+- **Решение (path B)**: правим System Kernel напрямую (список правок как для
+  Kernel64_full из анализа), а не заменяем на Kernel64_full — так модули
+  продолжают линковаться на "Kernel" без remap/fingerprint-проблем.
+  Kernel64_full портируется справочно (может пригодиться для bump-замены).
+- **Int64-арифметика РАБОТАЕТ** (задача 9): сняты err(260) в CPVamd64 —
+  арифметика идёт через x87 FPU (FILD/FADD/FCOMP, было в backend, Finding #1).
+- **Cons subsystem собран** (Fonts/Windows/Log/Interp) + DevCommanders 64-бит
+  (use64/Dev/Mod — только Commanders.odc, dev0 его не исполняет).
+  ConsCompiler НЕ собирается: ему нужен весь Dev-компилятор внутри BB64
+  (стадия self-hosting, позже). bbrun64 сканирует теперь Cons и Dev.
 
 ### Открытые задачи (порядок)
 1. ~~SysV FFI~~ — СДЕЛАНО (KB/FFI-SysV.md).

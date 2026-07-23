@@ -177,6 +177,19 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     (modList = последняя var, offset 0), зовёт тела модулей. System Kernel
     имеет СВОЙ modList и свою раскладку Module — отсюда краш ThisLoadedMod
     (п.24). Рантайм-аллокатор уже Kernel64 (NewRec/NewArr через $$).
+28. **Int64-арифметика = x87 FPU** (уже было в backend, Finding #1): Ndop
+    plus/minus/times/div и сравнения для Int64 идут через FILD/FADD/FCOMP
+    (точно для 64-бит int, мантисса x87 = 64 бита). err(260) в CPVamd64
+    просто запирал вход. Ограничения: FMUL/FDDIV теряют точность за 2^63;
+    x87 DIV округляет к нулю, а CP DIV к -inf (расхождение на отрицательных).
+    Запасной путь: CPCamd64.LongAdd/LongSub/LongNeg/LongCmp на паре lo/hi
+    (add/adc, sub/sbb) — срабатывает, если item с form=Int64 дойдёт до IntDOp
+    (на практике операнды конвертируются в FPU раньше).
+29. **Hr — эталонный amd64 backend**: /home/hodza/sources/bbcb2-*/Hr/Mod/
+    (HrC=codegen, HrL=эмиттер). Полный нативный 64-битный codegen: всё в
+    одиночных r64 (fInt64), LGenAdd/GenAddC/LGenSub/LGenMul/idiv/cqo.
+    ADDRESS = fInt64. Когда нужен эталон арифметики/конвенций — смотреть туда,
+    а не в 486-бекенд.
 
 ## Уроки процесса
 - Ассерт-инварианты окупаются: BADPTR (Pointer/ProcTyp size=8) поймал
@@ -189,3 +202,39 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
   через HALT(код), trap number виден в репорте; HALT требует КОНСТАНТУ.
 - Микро-репродукции (модуль SystemTestT1 через OdcText.Import + CompileThis)
   — самый быстрый способ изолировать codegen-баг (секунды на итерацию).
+
+## Сессия 2026-07-24 (ночь): System Kernel порт + бут до LinPackedFiles
+30. **Компилятор выравнивает поля записей max на 4** (CPVamd64.TypeSize),
+    SHORTINT=2 байта. OCF v2 формат (CPE.OutModDesc) требует name@152 в
+    Module — в Kernel.odc.txt добавлены явные pad-поля (pad0/pad1 в Module,
+    tpad0/tpad1 в Type, opad в ObjDesc). Инвариант: bbrun64.c _Static_assert.
+31. **Trap-инструкции = `8d f0 XX` / `8d e7` (2 байта)** — objdump их не знает
+    и СЪЕДАЕТ следующий байт (напр. REX 48 нормальной инструкции!). Дизасму
+    верить только через сырые байты + ocf.py refs для границ процедур.
+32. **Open-array ABI**: слот = adr(8)+len(8). CPCamd64.Load грузил базу как
+    Int32 → мусор в старших 4 байтах → краш в циклах копирования строк.
+    Фикс: `IF x.typ.comp = DynArr THEN f := Pointer END`.
+33. **Value Comp-параметр**: слот был (s+3)DIV4*4 — съезжали последующие
+    параметры при s не кратном 8 (Files.Type=ARRAY 16 OF CHAR в Append).
+    Фикс: 8-выравнивание в обоих AdjustStack + empty-string путь (s-8+push8).
+34. **REX для r11**: `mov r11,imm64; op [mem],r11` — REX должен быть W+R(4C),
+    НЕ W+B (49) и НЕ W+R+B вслепую (4D ломает базу rax→r8!). Паттерн:
+    `IF dst.reg >= 8 THEN 4DH ELSE 4CH END`.
+35. **bbrun64**: kernel="Kernel64" (bump), инжект modList нужен и в bump
+    (varBase+0), и в System Kernel (через ThisObject "modList" по export dir).
+    Тела модулей: сначала инфра в порядке dev0-link (Utf, LinKernel, Files,
+    LinEnv, LinFiles, LinPackedFiles, StdLoader, LinLoader, LinIntLoader).
+    LinLoader/LinIntLoader: IMPORT LinFiles (тело ставит Files.dir).
+36. **ConsCompiler не собирается** (нужен весь Dev в BB64) — отключён
+    (Cons/Mod/Compiler.odc.disabled). ConsInterp требует DevCommanders —
+    test64.sh собирает его между Lin и Cons.
+37. Диагностика компилятора: ASSERT→DevCPM.err(220) в CPCamd64.Mem даёт
+    позицию в исходнике; LogWStr/LogWNum живут в dev0-логе (stdout);
+    строки в ocf — UTF-16 (strings не видит); "corrupted code file for
+    DevCPCamd64" = 64-битный ocf попал в bbcp64use/Dev (убить Dev/Code|Sym).
+38. Открыто: Kernel.log (ErrLog interface) — диспетч через [itable-8]:
+    при ASSERT в LinPackedFiles краш в log.String. VarBlk в OCF v2 НЕТ —
+    компиляторная инициализация глобалов (interface-таблицы) не применяется.
+    Надо: явная инициализация или разобрать interface-init (TDinit).
+39. Открыто: StdLoader.Fixup 32-битный (SHORT-заглушки) — ленивая загрузка
+    модулей внутри BB64 сломана. Эталон: bbrun64.c Fixup (6 групп, 8-байт).

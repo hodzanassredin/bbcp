@@ -30,8 +30,9 @@ MODULE StdLoader;
 		(* meta interface consts *)
 		mTyp = 2; mVar = 3; mProc = 4; mExported = 4;
 		
-		(* fixup types *)
-		absolute = 100; relative = 101; copy = 102; table = 103; tableend = 104; deref = 105; halfword = 106;
+		(* fixup types (OCF v2, amd64): pointer slots are 8 bytes; short is not emitted for amd64 *)
+		absolute = 100; relative = 101; copy = 102; table = 103; tableend = 104; short = 105; ripBased = 106;
+		(* ripBased + immLen (immLen = 0..8): disp32 = target - (ladr + 4 + immLen) *)
 		
 	TYPE
 		Name = Kernel.Name;
@@ -45,6 +46,9 @@ MODULE StdLoader;
 		END;
 		
 		Hook = POINTER TO RECORD (Kernel.LoaderHook) END;
+		
+		IntRef = POINTER TO RECORD [untagged] i: INTEGER END;	(* 4-byte slot access w/o S.GET/S.PUT (LONGINT locals break the backend) *)
+		AdrRef = POINTER TO RECORD [untagged] a: LONGINT END;	(* 8-byte slot *)
 
 	VAR
 		res-: INTEGER;
@@ -173,37 +177,40 @@ MODULE StdLoader;
 		Utf8ToString(s, name, res); ASSERT(res = 0)
 	END RName;
 
-	PROCEDURE Fixup (adr: INTEGER; mod: ModSpec);
-		VAR link, offset, linkadr, t, n, x, low, hi: INTEGER;
+	PROCEDURE Fixup (adr: LONGINT; mod: ModSpec);	(* OCF v2 (amd64), cf. bbrun64.c *)
+		VAR link, alink, offset, linkadr, t, n, x, immLen: INTEGER;
+			ir: IntRef; ar, sr: AdrRef;
 	BEGIN
 		RNum(link);
 		WHILE link # 0 DO
 			RNum(offset);
 			WHILE link # 0 DO
 				IF link > 0 THEN linkadr := mod.cad + link
-				ELSE link := -link;
-					IF link < mod.ms THEN linkadr := mod.mad + link
-					ELSE linkadr := mod.dad + link - mod.ms
+				ELSE alink := -link;
+					IF alink < mod.ms THEN linkadr := mod.mad + alink
+					ELSE linkadr := mod.dad + alink - mod.ms
 					END
 				END;
-				S.GET(linkadr, x); t := x DIV 1000000H;
-				n := (x + 800000H) MOD 1000000H - 800000H;
-				IF t = absolute THEN x := adr + offset
-				ELSIF t = relative THEN x := adr + offset - linkadr - 4
-				ELSIF t = copy THEN S.GET(adr + offset, x)
-				ELSIF t = table THEN x := adr + n; n := link + 4
-				ELSIF t = tableend THEN x := adr + n; n := 0
-				ELSIF t = deref THEN S.GET(adr+2, x); INC(x, offset);
-				ELSIF t = halfword THEN
-					x := adr + offset;
-					low := (x + 8000H) MOD 10000H - 8000H;
-					hi := (x - low) DIV 10000H;
-					S.GET(linkadr + 4, x);
-					S.PUT(linkadr + 4, x DIV 10000H * 10000H + low MOD 10000H);
-					x := x * 10000H + hi MOD 10000H
-				ELSE Error(syntaxError, mod, NIL)
+				ir := S.VAL(IntRef, linkadr); x := ir.i;	(* 4 metadata bytes: typ * 1000000H + next24 *)
+				t := x DIV 1000000H;
+				n := (x + 800000H) MOD 1000000H - 800000H;	(* sign-extended next24 *)
+				IF t = absolute THEN	(* 8-byte write overwrites metadata + sentinel *)
+					ar := S.VAL(AdrRef, linkadr); ar.a := adr + offset
+				ELSIF t = relative THEN
+					ir.i := SHORT(adr + offset - linkadr - 4)
+				ELSIF t = copy THEN	(* copy 8 bytes from adr + offset *)
+					sr := S.VAL(AdrRef, adr + offset);
+					ar := S.VAL(AdrRef, linkadr); ar.a := sr.a
+				ELSIF t = table THEN	(* 8-byte case entry; next entry at link + 8 *)
+					ar := S.VAL(AdrRef, linkadr); ar.a := adr + n; n := link + 8
+				ELSIF t = tableend THEN
+					ar := S.VAL(AdrRef, linkadr); ar.a := adr + n; n := 0
+				ELSIF (t >= ripBased) & (t <= ripBased + 8) THEN
+					immLen := t - ripBased;
+					ir.i := SHORT(adr + offset - (linkadr + 4 + immLen))
+				ELSE Error(syntaxError, mod, NIL); n := 0
 				END;
-				S.PUT(linkadr, x); link := n
+				link := n
 			END;
 			RNum(link)
 		END
@@ -245,7 +252,7 @@ MODULE StdLoader;
 	
 	PROCEDURE ReadModule (mod: ModSpec);
 		TYPE BlockPtr = POINTER TO ARRAY [untagged] 1000000H OF BYTE;
-		VAR imptab, x, fp, ofp, opt, a: INTEGER;
+		VAR i, x, fp, ofp, opt, a: INTEGER;
 			name: Name; dp, mp, cp: BlockPtr; imp: ModSpec; obj: Kernel.Object;
 	BEGIN
 		IF mod.file = NIL THEN mod.file := ThisObjFile(mod.name) END;
@@ -267,7 +274,7 @@ MODULE StdLoader;
 				Fixup(mod.dad, mod);
 				Fixup(mod.cad, mod);
 				Fixup(mod.vad, mod);
-				imp := mod.imp; imptab := S.VAL(INTEGER, mod.mod.imports);
+				imp := mod.imp; i := 0;
 				WHILE (res = done) & (imp # NIL) DO
 					RNum(x);
 					WHILE (res <= done) & (x # 0) DO
@@ -285,11 +292,11 @@ MODULE StdLoader;
 									IF (opt > 1) & (obj.id DIV 16 MOD 16 # mExported) THEN
 										Error(objNotFound, imp, mod); object := name$
 									END;
-									Fixup(S.VAL(INTEGER, obj.struct), mod)
+									Fixup(S.VAL(LONGINT, obj.struct), mod)
 								ELSIF x = mVar THEN
-									Fixup(SHORT(imp.mod.varBase + obj.offs), mod)	(* TODO64: Fixup 64-бит, эталон bbrun64.c *)
+									Fixup(imp.mod.varBase + obj.offs, mod)
 								ELSIF x = mProc THEN
-									Fixup(SHORT(imp.mod.procBase + obj.offs), mod)	(* TODO64 *)
+									Fixup(imp.mod.procBase + obj.offs, mod)
 								END;
 								IF ofp # fp THEN
 									Error(illegalFPrint, imp, mod); object := name$
@@ -316,7 +323,7 @@ MODULE StdLoader;
 						END;
 						RNum(x)
 					END;
-					S.PUT(imptab, imp.mod); INC(imptab, 4); imp := imp.next
+					mod.mod.imports[i] := imp.mod; INC(i); imp := imp.next
 				END;
 				IF res = done THEN
 					IF ~Kernel.ProtectModMem(mod.ms, mod.cs, mod.mad, mod.cad) THEN

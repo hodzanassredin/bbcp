@@ -158,7 +158,7 @@ MODULE LinKernel;
 
 	PROCEDURE (VAR p: Platform) AllocateModMem (size: INTEGER; OUT addr: ADDRESS; forCode: BOOLEAN);
 		CONST protection = Libc.PROT_READ + Libc.PROT_WRITE;
-			flags = Libc.MAP_PRIVATE + Libc.MAP_ANON;
+			flags = Libc.MAP_PRIVATE + Libc.MAP_ANON + Libc.MAP_32BIT;	(* addr уходит в INTEGER (Kernel.AllocModMem) — нужно < 4 ГБ *)
 	BEGIN
 		addr := SHORT(Libc.mmap(0, size, protection, flags, -1, 0));
 		IF addr = Libc.MAP_FAILED THEN addr := 0 END
@@ -168,7 +168,7 @@ MODULE LinKernel;
 	(** Allocate at least size bytes of memory for a heap cluster; return base, actually allocated capacity and committed size
 	Post: base MOD 16 = 0, 60 *)
 		CONST protection = Libc.PROT_READ + Libc.PROT_WRITE; 
-			flags = Libc.MAP_PRIVATE + Libc.MAP_ANON;
+			flags = Libc.MAP_PRIVATE + Libc.MAP_ANON + Libc.MAP_32BIT;	(* GC Mark ходит по тегам 32-битными чтениями — куча пока < 4 ГБ *)
 		VAR s: ADDRESS;
 	BEGIN
 		(* IF platform.p.Debug() THEN log.String("LinKernel.AllocateClusterMem "); log.Int(size) END; *)

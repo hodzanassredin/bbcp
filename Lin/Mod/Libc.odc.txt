@@ -19,6 +19,7 @@ MODULE LinLibc ["libc.so.6"];
 		MAP_PRIVATE* = {1};
 		MAP_FIXED* = {4};
 		MAP_ANON* = {5};
+		MAP_32BIT* = {6};	(* Linux: размещать ниже 4 ГБ *)
 
 		(* PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC (intFlags) *)
 		PROT_NONE* = {};

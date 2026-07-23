@@ -147,6 +147,24 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     Libc_errno addr: LONGINT; num/f.len/info.length <- SHORT), LinDates
     (SHORT(-tm_gmtoff DIV 60)), System Kernel (~20 SHORT(S.ADR/S.TYP)),
     Services (SHORT(SYSTEM.ADR/TYP)).
+23. **InstallStackAlloc 32-битный**: `sub esp, eax` усекал rsp до 32 бит при
+    фреймах > stackAllocLimit (2048) -> краш в LinLoader.Load (4x256 CHAR).
+    Переписан сырыми байтами: 64-битные sub rsp, слоты 8, probe по 4088,
+    копия ret/saved-rax из [rsp+rcx-8], shr ecx,2 (caller ждёт 32-бит words).
+    УРОК: весь сгенерированный хелпер-код (не только обычный codegen) надо
+    ревизовать на 32-битные операнды.
+24. **System Kernel дескрипторы НЕ совпадают с OCF v2**: System/Mod/Kernel.odc
+    Module/Type/Directory — 32-битная раскладка (term@32, code/data/refs
+    INTEGER@60..., name@112...), а bbrun64 строит дескрипторы по OCF v2
+    (term@48, code@80..., name@152, все указатели 8 байт). ThisLoadedMod
+    читает "указатель" = ASCII имени модуля -> краш в scasb при LinIntLoader.
+    Лечится только стадией C (Kernel64_full с правильной раскладкой,
+    KB/OcfFormat64.md), НЕ точечными правками System Kernel.
+25. CompileSubs СТОП на первом ошибочном модуле (RETURN при error) — поэтому
+    LinKernel64 (6 ошибок) выведен из bbcp64use/Lin/Mod (Kernel64.odc.disabled),
+    а заглушка bbcp/Lin/Mod/Kernel64.odc (старая, 841 байт) удалена из дерева
+    use64 fallback'ом... внимание: sync-odc создаёт её заново из tracked
+    Lin/Mod/Kernel64.odc.txt — следить.
 
 ## Уроки процесса
 - Ассерт-инварианты окупаются: BADPTR (Pointer/ProcTyp size=8) поймал

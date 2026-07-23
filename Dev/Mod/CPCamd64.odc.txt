@@ -2441,38 +2441,36 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 	END Exit;
 	
 	PROCEDURE InstallStackAlloc*;
-		VAR name: ARRAY 32 OF SHORTCHAR; ax, cx, sp, c, x: DevCPLamd64.Item; l1, l2: DevCPLamd64.Label;
+		VAR name: ARRAY 32 OF SHORTCHAR;
+	PROCEDURE B (b: INTEGER);
+	BEGIN
+		DevCPLamd64.GenCode(b)
+	END B;
 	BEGIN
 		IF stkAllocLbl # DevCPLamd64.NewLbl THEN
 			DevCPLamd64.SetLabel(stkAllocLbl);
-			DevCPLamd64.MakeReg(ax, AX, Int32);
-			DevCPLamd64.MakeReg(cx, CX, Int32);
-			DevCPLamd64.MakeReg(sp, SP, Int32);
-			DevCPLamd64.GenPush(ax);
-			DevCPLamd64.MakeConst(c, -5, Int32); DevCPLamd64.GenAdd(c, cx, FALSE);
-			l1 := DevCPLamd64.NewLbl; DevCPLamd64.GenJump(ccNS, l1, TRUE);
-			DevCPLamd64.MakeConst(c, 0, Int32); DevCPLamd64.GenMove(c, cx);
-			DevCPLamd64.SetLabel(l1);
-			DevCPLamd64.MakeConst(c, -4, Int32); DevCPLamd64.GenAnd(c, cx);
-			DevCPLamd64.GenMove(cx, ax);
-			DevCPLamd64.MakeConst(c, 4095, Int32); DevCPLamd64.GenAnd(c, ax);
-			DevCPLamd64.GenSub(ax, sp, FALSE);
-			DevCPLamd64.GenMove(cx, ax);
-			DevCPLamd64.MakeConst(c, 12, Int32); DevCPLamd64.GenShiftOp(SHR, c, ax);
-			l2 := DevCPLamd64.NewLbl; DevCPLamd64.GenJump(ccE, l2, TRUE);
-			l1 := DevCPLamd64.NewLbl; DevCPLamd64.SetLabel(l1);
-			DevCPLamd64.MakeConst(c, 0, Int32); DevCPLamd64.GenPush(c);
-			DevCPLamd64.MakeConst(c, 4092, Int32); DevCPLamd64.GenSub(c, sp, FALSE);
-			DevCPLamd64.MakeConst(c, -1, Int32); DevCPLamd64.GenAdd(c, ax, FALSE);
-			DevCPLamd64.GenJump(ccNE, l1, TRUE);
-			DevCPLamd64.SetLabel(l2);
-			DevCPLamd64.MakeConst(c, 8, Int32); DevCPLamd64.GenAdd(c, cx, FALSE);
-			x.mode := Ind; x.form := Int32; x.offset := -4; x.index := CX; x.reg := SP; x.scale := 1;
-			DevCPLamd64.GenMove(x, ax);
-			DevCPLamd64.GenPush(ax);
-			DevCPLamd64.GenMove(x, ax);
-			DevCPLamd64.MakeConst(c, 2, Int32); DevCPLamd64.GenShiftOp(SHR, c, cx);
-			DevCPLamd64.GenReturn(0);
+			(* x86-64: pre: rcx = байты для аллокации; слоты стека по 8 байт; page probing *)
+			B(50H);							(* push rax *)
+			B(83H); B(0C1H); B(0F7H);		(* add ecx, -9 *)
+			B(79H); B(02H);					(* jns +2 *)
+			B(31H); B(0C9H);				(* xor ecx, ecx *)
+			B(83H); B(0E1H); B(0F8H);		(* and ecx, -8 *)
+			B(8BH); B(0C1H);				(* mov eax, ecx *)
+			B(25H); B(0FFH); B(0FH); B(0); B(0);	(* and eax, 4095 *)
+			B(48H); B(2BH); B(0E0H);		(* sub rsp, rax *)
+			B(8BH); B(0C1H);				(* mov eax, ecx *)
+			B(0C1H); B(0E8H); B(0CH);		(* shr eax, 12 *)
+			B(74H); B(0EH);					(* je +14 (l2) *)
+			B(6AH); B(00H);					(* l1: push 0 *)
+			B(48H); B(81H); B(0ECH); B(0F8H); B(0FH); B(0); B(0);	(* sub rsp, 4088 *)
+			B(83H); B(0C0H); B(0FFH);		(* add eax, -1 *)
+			B(75H); B(0F2H);				(* jne -14 (l1) *)
+			B(83H); B(0C1H); B(10H);		(* l2: add ecx, 16 *)
+			B(48H); B(8BH); B(44H); B(0CH); B(0F8H);	(* mov rax, [rsp+rcx-8] *)
+			B(50H);							(* push rax *)
+			B(48H); B(8BH); B(44H); B(0CH); B(0F8H);	(* mov rax, [rsp+rcx-8] *)
+			B(0C1H); B(0E9H); B(02H);		(* shr ecx, 2 (caller ждёт 32-битные слова) *)
+			B(0C3H);							(* ret *)
 			name := "$StackAlloc"; DevCPE.OutRefName(name);
 		END
 	END InstallStackAlloc;

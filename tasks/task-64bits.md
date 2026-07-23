@@ -24,11 +24,17 @@
   setlocale, SetPlatform + InitHeap). 119+ модулей, crash-handler работает
   (даёт модуль+offset, псевдо-bt).
 
-### Где остановились: краш в LinLoader
-- `LinLoader.Load(init)` → `m := Kernel.ThisLoadedMod(SHORT(name))`:
-  `mov eax, [rsp+rcx-4]`, rcx=0xa18 (2584) — чтение копии IN-параметра
-  `name: ARRAY OF CHAR` с мусорной длиной/индексом. Копать передачу
-  IN-массива строковой константой (CopyDynArray/VarParDynArr/len-дескриптор).
+### Где остановились: System Kernel vs OCF v2 — СТАДИЯ C
+- ~~LinLoader~~ исправлен: InstallStackAlloc был 32-битным (`sub esp, eax`
+  усекал rsp при фреймах > 2048; LinLoader.Load имеет 4×256 CHAR локалов).
+  Переписан сырыми байтами (64-бит sub rsp, слоты 8, probe 4088).
+- Бут доходит до LinIntLoader → Kernel.ThisLoadedMod → краш в scasb:
+  **System/Mod/Kernel.odc имеет 32-битную раскладку Module/Type/Directory**
+  (name@112), а bbrun64 строит дескрипторы по OCF v2 (name@152, указатели 8).
+  "Указатель" = ASCII имени модуля. Лечится ТОЛЬКО стадией C (Kernel64_full),
+  точечные правки System Kernel бессмысленны.
+- Заглушка Lin/Mod/Kernel64.odc (старая, импортирует Kernel64.Cluster/InitHeap)
+  удалена из git — ломала CompileSubs (стоп на первом ошибочном модуле).
 
 ### Открытые задачи (порядок)
 1. ~~SysV FFI~~ — СДЕЛАНО (KB/FFI-SysV.md).

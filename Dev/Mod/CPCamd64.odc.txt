@@ -178,12 +178,12 @@ MODULE DevCPCamd64;
 	
 	PROCEDURE DecStack (form: INTEGER);
 	BEGIN
-		IF form IN {Real64, Int64} THEN AdjustStack(-8) ELSE AdjustStack(-4) END
+		AdjustStack(-8)	(* 64-bit: машинный стек только 8-байтными слотами *)
 	END DecStack;
 	
 	PROCEDURE IncStack (form: INTEGER);
 	BEGIN
-		IF form IN {Real64, Int64} THEN AdjustStack(8) ELSE AdjustStack(4) END
+		AdjustStack(8)	(* 64-bit: машинный стек только 8-байтными слотами *)
 	END IncStack;
 	
 	(*-----------------register handling------------------*)
@@ -316,7 +316,10 @@ MODULE DevCPCamd64;
 	BEGIN
 		IF f = Int64 THEN
 			GetReg(r, Int32, hint, stop); DevCPLamd64.GenPop(r);
-			GetReg(rh, Int32, hint, stop); DevCPLamd64.GenPop(rh);
+			GetReg(rh, Int32, hint, stop);
+			(* 64-bit: один pop забрал 8 байт (low|high); high dword -> rh *)
+			r.form := Int64; rh.form := Int64; DevCPLamd64.GenMove(r, rh);
+			DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E8H + rh.reg); DevCPE.GenByte(32);	(* shr rh, 32 *)
 			r.form := Int64; r.index := rh.reg
 		ELSE
 			IF f < Int16 THEN INCL(stop, high) END;
@@ -519,12 +522,12 @@ MODULE DevCPCamd64;
 	PROCEDURE LevelBase (VAR a: DevCPLamd64.Item; lev: INTEGER; hint, stop: SET);
 		VAR n: BYTE;
 	BEGIN
-		a.mode := Ind; a.scale := 0; a.form := Int32; a.typ := DevCPT.int32typ;
+		a.mode := Ind; a.scale := 0; a.form := Pointer; a.typ := DevCPT.anyptrtyp;
 		IF lev = DevCPLamd64.level THEN a.reg := BP
 		ELSE
 			a.reg := BX; n := SHORT(SHORT(imLevel[DevCPLamd64.level] - imLevel[lev]));
 			WHILE n > 0 DO
-				a.offset := -4; LoadL(a, hint, stop); a.mode := Ind; DEC(n)
+				a.offset := -8; LoadL(a, hint, stop); a.mode := Ind; DEC(n)
 			END
 		END
 	END LevelBase;
@@ -532,11 +535,12 @@ MODULE DevCPCamd64;
 	PROCEDURE LenDesc (VAR x, len: DevCPLamd64.Item; typ: DevCPT.Struct); (* set len to LEN(x, -typ.n) *)
 	BEGIN
 		IF x.tmode = VarPar THEN
-			LevelBase(len, x.obj.mnolev, {}, {}); len.offset := x.obj.adr;
+			LevelBase(len, x.obj.mnolev, {}, {}); len.offset := x.obj.adr; len.form := Int32;
+			len.typ := DevCPT.int32typ
 		ELSE ASSERT((x.tmode = Ind) & (x.mode = Ind));
 			len := x; len.offset := ArrDOffs; len.scale := 0; len.form := Int32
 		END;
-		INC(len.offset, typ.n * 4 + 4);
+		INC(len.offset, typ.n * 4 + 8);	(* 64-bit: [adr8][len0 4][len1 4]... *)
 		IF typ.sysflag = stackArray THEN len.offset := -4 END
 	END LenDesc;
 	
@@ -987,11 +991,8 @@ MODULE DevCPCamd64;
 				ELSE (* not sysval *) (* int -> float *)
 					IF y.mode = Reg THEN Push(y) END;
 					IF m = Stk THEN
-						Free(y); DevCPLamd64.GenFLoad(y); s := -4;
-						IF f = Real64 THEN DEC(s, 4) END;
-						IF y.mode = Stk THEN
-							IF y.form = Int64 THEN INC(s, 8) ELSE INC(s, 4) END
-						END;
+						Free(y); DevCPLamd64.GenFLoad(y); s := -8;	(* слоты стека всегда 8 байт *)
+						IF y.mode = Stk THEN INC(s, 8) END;
 						IF s # 0 THEN AdjustStack(s) END;
 						GetReg(y, Real32, {}, {});
 						Free(y); DevCPLamd64.GenFStore(x, TRUE)
@@ -1119,7 +1120,7 @@ MODULE DevCPCamd64;
 		VAR local: DevCPLamd64.Label; a, b: DevCPLamd64.Item;
 	BEGIN
 		ASSERT(x.mode = Reg);
-		IF y.form = Int64 THEN LoadR(y) END;
+		IF y.form IN {Int64, Pointer, ProcTyp} THEN LoadR(y) END;
 		IF y.mode = Reg THEN rev := ~rev END;
 		CASE subcl OF
 		| eql..geq: DevCPLamd64.GenFDOp(FCOMP, y)
@@ -1851,7 +1852,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				n := imLevel[DevCPLamd64.level] - imLevel[lev];
 				IF n > 0 THEN
 					saved := TRUE;
-					y.mode := Ind; y.scale := 0; y.form := Pointer; y.reg := BX; y.offset := -4;
+					y.mode := Ind; y.scale := 0; y.form := Pointer; y.reg := BX; y.offset := -8;
 					DevCPLamd64.MakeReg(r, BX, Pointer);
 					WHILE n > 0 DO DevCPLamd64.GenMove(y, r); DEC(n) END
 				END
@@ -1907,9 +1908,8 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					Result(x.obj.link, tag)	(* use result load for first parameter *)
 				END
 			END;
-			IF x.obj.conval.ext # NIL THEN
-				(* skip [code] body — 32-bit x86 asm *)
-				DevCPLamd64.GenCode(0C3H); (* RET *)
+			IF x.obj.conval.ext # NIL THEN i := 0; n := LEN(x.obj.conval.ext^);
+				WHILE i < n DO DevCPLamd64.GenCode(ORD(x.obj.conval.ext^[i])); INC(i) END
 			END
 		ELSE	(* proc var *)
 			DevCPLamd64.GenCall(x); Free(x);

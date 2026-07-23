@@ -56,3 +56,54 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
 - Формат OCF v2 эмитируется правильно (Kernel64.ocf: ModDesc 8-байтные слоты,
   sentinel 11223344, name@152 — hex-проверка 2026-07-22).
 - Быстрый цикл правок: sync-odc + go32/go64 (DevOnce) — секунды на модуль.
+
+## Сессия 2026-07-23: исправленные баги (компилятор/лоадер)
+
+1. **TRAP при компиляции Kernel64 (CheckForm form=13)**: item (Stk, form=Pointer,
+   typ=Real64) — отложенная int→float конверсия адреса (ADR в real-выражении).
+   x87 не имеет FIop m64: грузим через FILD. Фикс: GenFLoad/GenFStore: формы
+   {Int64, Pointer, ProcTyp} → FILD/FISTP qword; CPCamd64.FloatDOp: LoadR для тех
+   же форм; IncStack/DecStack 8 байт для них же.
+2. **modList-инжект лоадера**: Variables() кладёт ПОСЛЕДНЮЮ var на offset 0
+   (первую — наверх). varBase+0 ≠ modList! Решение: modList объявлена ПОСЛЕДНЕЙ
+   в Kernel64 (комментарий в источнике). Иначе инжект затирал heapPos.
+3. **Pop Int64 = два 8-байтных pop** (32-битная пара) → дисбаланс стека. Фикс:
+   один pop r64 + mov rh,r + shr rh,32 (пара reg/index сохранена).
+4. **Локалы 8-байтных типов на 4-границе**: первый pointer-local в rbp-4
+   затирал младшие 4 байта saved rbp (сигнатура rbp=0x7fff00000000!). Фикс:
+   Variables: NegAlign(adr, Base(typ, 8)).
+5. **DevCPVamd64.processor = 10 (!!)** → DevCPT.processor=10 → PtrSz()=4 для
+   ИМПОРТИРУЕМЫХ указателей (m: Kernel.Module size=4!). Фикс: processor=12.
+   Плюс: built-in типы (niltyp, sysptrtyp, punktyp, anyptrtyp) создаются при
+   загрузке DevCPT с processor=0 → size=4. Фикс: Compiler64.Module чинит их
+   size:=8 после DevCPT.Init (и присваивает processor ДО Init).
+   Плюс: sysflags ([ccall] и др.) требуют sys386 в options — CPT.Import: p=12→10.
+   Плюс: self-import старого osf другой платформы при Export — done:=FALSE
+   вместо err(151) (иначе 32-битный fallback-osf bbcp/System/Sym душил сборку).
+6. **[code]-процедуры (CProc)**: вместо inline-байт эмитился RET (заглушка
+   прошлой сессии) → Math.* роняли стек. Фикс: эмитить байты (x87-код
+   режимонезависим; единственный FP-относительный — FSTPDe, под вопросом).
+7. **Static link offset -4 → -8** (CPCamd64.Call, LevelBase уже был -8).
+8. **Машинный стек всегда 8-байтными слотами** (DecStack/IncStack): push/pop
+   на x86-64 всегда 8 байт; FISTP dword+pop rax иначе дисбалансил.
+9. **DynArr VarPar дескриптор [adr8][len4]**: LenDesc читал len по +4
+   (32-бит) → bounds-check против старших 32 бит адреса. Фикс: typ.n*4+8.
+   ВАЖНО: базовая загрузка adr ВСЕГДА была 8-байтной — objdump десинхронился
+   на trap-энкодинге (8d e7/8d f0), съедая REXW 48. УРОК: не верить objdump
+   вокруг HALT-энкодингов, смотреть сырые байты!
+10. **inc/dec регистров однобайтные (40-4F)** = REX-префиксы в x86-64!
+    `dec eax` (0x48) съедался следующей инструкцией → `n-1` не вычиталось
+    (FOR i := 0 TO n-1 работал на одну итерацию дольше → OOB → inxTrap в
+    StdInflate). Фикс: GenSub как GenAdd: FF /0,/1 + REXW для 64-битных форм.
+11. **crush-хендлер в bbrun64** (SIGSEGV/SIGILL → модуль+offset, stack refs,
+    mincore-защита скана) + CheckSentinels (непропатченные слоты 11223344).
+
+## ГЛАВНЫЙ ОТКРЫТЫЙ БАГ: SysV FFI — см. KB/FFI-SysV.md
+
+## Уроки процесса
+- Ассерт-инварианты окупаются: BADPTR (Pointer/ProcTyp size=8) поймал
+  processor=10 и builtin-types=4 НА КОМПИЛЯЦИИ, а не в рантайме.
+- objdump ДЕСИНХРОНИЗИРУЕТСЯ на trap-энкодингах (8d f0 XX / 8d e7) —
+  доверять только сырым байтам (x/Nxb).
+- 32-битный эталон: компилировать тот же микро-модуль 32-битным бэкендом
+  (go32) и diff дизасма — мгновенно показывает потерянные байты (dec!).

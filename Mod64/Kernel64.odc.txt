@@ -5,13 +5,14 @@ MODULE Kernel64;
 		processor* = 12;
 		N = 16;
 		any = 1000000;
+		heapSize = 16 * 1024 * 1024;
 
 	TYPE
 		Module* = POINTER TO RECORD
 			next: Module;	(* @0 *)
 			opts: SET;	(* @8 *)
 			refcnt: INTEGER;	(* @12 *)
-			compTime, loadTime: ARRAY 12 OF SHORTINT;	(* @16, @28 *)
+			compTime, loadTime: ARRAY 6 OF SHORTINT;	(* @16, @28 *)
 			ext: INTEGER;	(* @40 *)
 			term: PROCEDURE;	(* @48 *)
 			nofimps, nofptrs: INTEGER;	(* @56, @60 *)
@@ -36,24 +37,36 @@ MODULE Kernel64;
 		FreeBlk* = POINTER TO RECORD tag: Type; size: INTEGER; next: FreeBlk END;
 
 	VAR
-		modList: Module; root: Cluster;
+		root: Cluster;
 		free: ARRAY N OF FreeBlk;
 		sentinel: FreeBlk; sRec: RECORD tag: Type; size: INTEGER; next: FreeBlk END;
 		allocated-: LONGINT;
+		heap: ARRAY heapSize OF CHAR;
+		heapPos: LONGINT;
+		modList: Module;	(* ПОСЛЕДНЯЯ: offset 0 = varBase+0, лоадер инжектит сюда modlist *)
 
 	PROCEDURE NewBlock* (size: INTEGER): Block;
-		VAR i: INTEGER; fb: FreeBlk;
+		VAR p, sz: LONGINT;
 	BEGIN
-		i := (size + 19) DIV 16;
-		IF i >= N THEN i := N - 1 END;
-		WHILE i < N DO
-			fb := free[i];
-			WHILE (fb # sentinel) & (fb.size < size) DO fb := fb.next END;
-			IF fb # sentinel THEN RETURN S.VAL(Block, S.VAL(LONGINT, fb)) END;
-			INC(i)
-		END;
-		RETURN NIL
+		sz := size;
+		IF sz < 24 THEN sz := 24 END;
+		p := S.ADR(heap) + heapPos;
+		p := (p + 15) DIV 16 * 16;
+		IF p + sz - S.ADR(heap) > heapSize THEN RETURN NIL END;
+		heapPos := p + sz - S.ADR(heap);
+		RETURN S.VAL(Block, p)
 	END NewBlock;
+
+	PROCEDURE NewArr* (eltyp, nofelem, nofdim: INTEGER): LONGINT;
+		VAR b: Block; sz: LONGINT;
+	BEGIN
+		sz := S.VAL(LONGINT, nofelem) * 8 + S.VAL(LONGINT, nofdim) * 8 + 24;
+		IF sz < 24 THEN sz := 24 END;
+		b := NewBlock(SHORT(sz));
+		IF b = NIL THEN RETURN 0 END;
+		b.tag := S.VAL(Type, S.VAL(LONGINT, eltyp));
+		RETURN S.ADR(b.last)
+	END NewArr;
 
 	PROCEDURE NewRec* (typ: LONGINT): LONGINT;
 		VAR tag: Type; b: Block;

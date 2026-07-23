@@ -60,3 +60,15 @@ target processor=12. LogMarks печатает позиции ошибок в к
 - В CP: объявления до использования; ORD(BOOLEAN) нет; SHORTCHAR ≠ CHAR.
 - .odc редактировать только через OdcText round-trip (bbcb2), виджеты StdHeaders/
   StdLinks/StdFolds в шапках сохранять.
+
+## Добавлено 2026-07-23
+
+- `tools64/cycle64.sh [DevMod ...]` — полный цикл: sync-odc + go32 для указанных
+  модулей компилятора + test64 (System Std Text Form Lin) + сборка и запуск
+  bbrun64.
+- bbrun64: crash-handler (SIGSEGV/SIGILL): модуль+offset для rip, псевдо-bt
+  по стеку (mincore-защита), CheckSentinels при загрузке (слоты 11223344).
+- Отладка крашей: НЕ верить objdump вокруг trap-энкодингов (8d f0/e7) —
+  смотреть `x/Nxb`; эталонный diff: тот же микро-модуль через go32.
+- Ассерт-инвариант в CPVamd64.Variables: Pointer/ProcTyp обязаны иметь size=8
+  (ловит 32-битные раскладки на компиляции).

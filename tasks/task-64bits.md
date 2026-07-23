@@ -4,47 +4,39 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
-## ТЕКУЩЕЕ СОСТОЯНИЕ (на конец сессии 2026-07-23)
+## ТЕКУЩЕЕ СОСТОЯНИЕ (на конец сессии 2026-07-23, вечер)
 
 ### Что работает
 - Компилятор (dev0, 32-бит) генерирует OCF amd64 v2 (нативные 64-бит дескрипторы).
-- Полная сборка: `System Std Text Form Lin` — 0 ошибок (83+ модулей).
-- Загрузчик bbrun64: 119 модулей загружаются, multi-pass import resolution.
-- **KERNEL OK** — тело Kernel64 исполняется корректно (rip-relative, frame, ret ок).
-- Воспроизведение: `cd ~/sources/bbcp64use && ~/sources/bbcp/Dev/Rsrc/bbrun64`
-  (bbrun64 собирается: `cd ~/sources/bbcp/Dev/Rsrc && gcc -m64 -std=c99 -Wall -g
-  -D_GNU_SOURCE -o bbrun64 bbrun64.c -ldl`; Makefile64 устарел — EXESIZE не нужен).
+- Полная сборка: `System Std Text Form Lin` — 0 ошибок (кроме LinKernel64, см. ниже).
+- Загрузчик bbrun64: 119+ модулей, multi-pass import resolution, **crash-handler**
+  (SIGSEGV/SIGILL → модуль+offset, псевдо-bt), CheckSentinels.
+- **KERNEL OK** + **тела модулей исполняются в порядке загрузки** (bbrun64 зовёт
+  body каждого модуля как Kernel.InitModule): доходит до LinConsole включительно.
+- Kernel64: bump-allocator (16 МБ статическая куча), NewRec/NewArr работают
+  (LinClipboard.Install делает NEW).
 
-### Где остановились: LinInit body падает (SIGILL)
-- `Lin/Code/Init.ocf` (module LinInit): тело начинается нормально (push rbp...),
-  SIGILL на 0x222. В теле на +0x10: `6a 00 push 0; e8 00 00 00 65` = call с rel32
-  = 0x65000000 — это НЕПРОПАТЧЕННАЯ fixup-метаданная (typ=101 relative, next=0).
-  Т.е. вызов импортированной процедуры, чья UseBlk-цепочка НЕ была применена.
-- LinInit импортирует: Kernel, Services, Log, Dialog, Converters, Loop, Meta,
-  LinGtk2GLib, LinGtk2Gtk, LinGui, LinConsole, Windows, StdWindows, StdInterpreter,
-  LinRegistry, LinFonts, StdStdCFrames, LinDates, LinMechanisms, LinBackends,
-  LinClipboard, LinLang, StdCmds, LinDialog.
-- Направление: выяснить, какой это вызов (push 0 + call = вероятно HALT/Kernel.XX
-  или вызов в $dll). Проверить UseBlk LinInit: все ли mProc-цепочки пропатчены.
-  Возможные причины: (a) импорт из $dll (LinGtk2*) — ThisDllObj/Fixup(a);
-  (b) импорт из Kernel64 (kernel.New*/term proc); (c) цепочка пропущена загрузчиком.
-- Отладка: python-парсер FixBlk/UseBlk (есть наработки в логе сессии), gdb.
+### Где остановились: SysV FFI (ccall → libc/GTK) — КЛЮЧЕВОЙ БЛОК
+- `LinConsole.Init`: `Libc.fdopen(0,"rb")` → HALT(100) (ASSERT input # NULL).
+- Причина: amd64 backend зовёт ccall по 32-битной cdecl (аргументы на стеке),
+  а SysV ABI требует rdi/rsi/rdx/rcx/r8/r9. ВСЕ $dll-вызовы сломаны.
+- Плюс: caller cleanup 4-байтными слотами (add rsp,12 при 16 pushed);
+  LinLibc-типы (PtrFILE, long, size_t...) = INTEGER → усечение указателей до 4.
+- План и детали: **KB/FFI-SysV.md**. Исправленные баги сессии: KB/Findings64.md
+  (11 штук: processor=12, inc/dec 40-4F, LenDesc, Pop Int64, align 8, ...).
 
 ### Открытые задачи (порядок)
-1. LinInit: починить непропатченный вызов (см. выше).
-2. Cons subsystem 64-бит (ConsFonts/ConsWindows/ConsLog нужны Lin/Code/IntInit.ocf).
-3. LinKernel64 (Mod64/LinKernel64.odc): 6 ошибок — минимальный, ссылается на
-   Kernel64.InitHeap/Cluster/monoCluster которых нет. Нужен ПОЛНЫЙ Kernel64
-   (стадия C): база = Mod64/Kernel64_full.odc (2381 строка, полный порт Kernel,
-   но Module.code/data/refs: INTEGER — расширить до ADDRESS/LONGINT по новой
-   раскладке ModDesc (KB/OcfFormat64.md)).
-4. isGuarded/exception frames: отложено, 32-битный дизайн (fs:0), для amd64 Linux
-   нужен redesign (размеры в Enter/Exit временно: guarded vadr=-48, size=48).
-5. GUI: Lin/GTK модули грузятся; после LinInit — окна.
-6. Убрать диагностику из DevCPT: DbgTyp, PVFP/FP249 принты, "W " дампы в OutStr
-   (ОСТАВЛЕНЫ в коде — убрать после стабилизации!).
-7. Kernel64.Init: modList := NIL — лоадер инжектит modlist ПОСЛЕ тела ядра (ок),
-   но полный Kernel64 должен читать bootInfo ДО (как 32-бит bbrun.c).
+1. **SysV FFI в компиляторе** (CPCamd64.Call ccall): регистры rdi..r9, стек 8,
+   align 16; CCallParSize только хвост; variadic AL=0. Callbacks из C — тоже SysV.
+2. LinLibc: INTEGER → LONGINT для указателей/long/size_t (+ потребители, GTK-структуры).
+3. Cons subsystem 64-бит (ConsFonts/ConsWindows/ConsLog нужны Lin/Code/IntInit.ocf).
+4. LinKernel64 (Mod64/LinKernel64.odc): ошибки компиляции — нужен ПОЛНЫЙ Kernel64
+   (стадия C): база = Mod64/Kernel64_full.odc (2381 строка; Module.code/data/refs:
+   INTEGER — расширить до ADDRESS/LONGINT по ModDesc (KB/OcfFormat64.md)).
+5. isGuarded/exception frames: 32-битный дизайн (fs:0), нужен amd64 redesign.
+6. GUI: Lin/GTK после FFI.
+7. Убрать диагностику из DevCPT: DbgTyp, PVFP/FP249 принты, "W " дампы в OutStr.
+8. Kernel64.Init: читать bootInfo ДО тела (как 32-бит bbrun.c), не инжект после.
 
 ## Диагноз (почему прошлая попытка провалилась)
 Компилятор эмитировал 32-битные дескрипторы (4-байтные слоты) против 64-битных

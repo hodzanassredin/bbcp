@@ -12,10 +12,10 @@ MODULE DevCPVamd64;
 
 **)
 
-	IMPORT SYSTEM, DevCPM, DevCPT, DevCPE, DevCPH, DevCPLamd64, DevCPCamd64;
+	IMPORT SYSTEM, DevCPM, DevCPT, DevCPE, DevCPH, DevCPLamd64, DevCPCamd64, Console;
 	
 	CONST
-		processor* = 10; (* for i386 *)
+		processor* = 12; (* amd64 *)
 
 		(* object modes *)
 		Var = 1; VarPar = 2; Con = 3; Fld = 4; Typ = 5; LProc = 6; XProc = 7;
@@ -484,6 +484,21 @@ MODULE DevCPVamd64;
 		END
 	END Parameters;
 	
+	PROCEDURE DbgSz (i: INTEGER);
+	BEGIN
+		IF i = 0 THEN Console.WriteChar("0") ELSE
+			IF i >= 10 THEN DbgSz(i DIV 10) END;
+			Console.WriteChar(CHR(ORD("0") + i MOD 10))
+		END
+	END DbgSz;
+
+	PROCEDURE DbgNm (IN n: ARRAY OF SHORTCHAR);
+		VAR i: INTEGER;
+	BEGIN
+		i := 0;
+		WHILE (i < LEN(n)) & (n[i] # 0X) DO Console.WriteChar(n[i]); INC(i) END
+	END DbgNm;
+
 	PROCEDURE Variables(var: DevCPT.Object; VAR varSize: INTEGER);
 	(* allocates only offsets, regs allocated in DevCPCamd64.Enter *)
 		VAR adr: INTEGER; typ: DevCPT.Struct;
@@ -491,11 +506,17 @@ MODULE DevCPVamd64;
 		adr := varSize;
 		WHILE var # NIL DO
 			typ := var.typ; TypeAlloc(typ);
+			(* инвариант 64-битной раскладки: указатели и проц. типы — 8 байт *)
+			IF (typ.form IN {Pointer, ProcTyp}) & (typ.size # 8) THEN
+				Console.WriteStr("BADPTR "); DbgNm(var.name^);
+				Console.WriteStr(" size="); DbgSz(typ.size); Console.WriteLn;
+				ASSERT(typ.size = 8)
+			END;
 			DEC(adr, typ.size);
 			IF typ.sysflag = align16 THEN
 				NegAlign(adr, 16)
 			ELSE
-				NegAlign(adr, Base(typ, 4));
+				NegAlign(adr, Base(typ, 8));	(* 64-bit: 8-байтные типы на 8-границу (иначе straddle saved rbp в кадре) *)
 			END;
 			var.adr := adr;
 			var := var.link

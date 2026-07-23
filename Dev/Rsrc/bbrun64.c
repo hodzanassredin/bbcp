@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <signal.h>
+#include <ucontext.h>
 
 /* fixup types */
 #define absolute 100
@@ -142,6 +144,68 @@ static Module* ThisModule(char* name)
         }
     }
     return ml;
+}
+
+/* ---- crash reporting: map rip/stack to modules, no gdb needed for triage ---- */
+static Module* ModByCodeAdr(intptr_t a) {
+    Module* m = modlist;
+    while (m != NULL) {
+        if ((a >= m->code) && (a < m->code + m->csize)) return m;
+        m = m->next;
+    }
+    return NULL;
+}
+
+static int IsMapped(void* p) {
+    unsigned char vec;
+    return mincore((void*)((uintptr_t)p & ~(uintptr_t)(getpagesize()-1)), 1, &vec) == 0;
+}
+
+static intptr_t mainStackApprox;	/* адрес локала в main: потолок скана стека */
+
+static void CrashHandler(int sig, siginfo_t* si, void* uc0) {
+    ucontext_t* uc = (ucontext_t*)uc0;
+    intptr_t rip = uc->uc_mcontext.gregs[REG_RIP];
+    intptr_t rsp = uc->uc_mcontext.gregs[REG_RSP];
+    intptr_t rbp = uc->uc_mcontext.gregs[REG_RBP];
+    Module* m = ModByCodeAdr(rip);
+    printf("\n*** CRASH %s: rip=%p fault=%p\n", strsignal(sig), (void*)rip, si->si_addr);
+    if (m) printf("    in %s code+0x%lx\n", m->name, rip - m->code);
+    else printf("    outside module code\n");
+    printf("    rsp=%p rbp=%p\n", (void*)rsp, (void*)rbp);
+    /* pseudo-backtrace: stack words pointing into module code */
+    printf("    stack code refs:\n");
+    intptr_t* sp = (intptr_t*) rsp;
+    Module* last = NULL;
+    for (int i = 0; i < 2048; i++) {
+        if (((intptr_t)&sp[i] >= mainStackApprox - 8192) || !IsMapped(&sp[i])) break;
+        Module* f = ModByCodeAdr(sp[i]);
+        if ((f != NULL) && (f != last)) {
+            printf("      %s+0x%lx\n", f->name, sp[i] - f->code);
+            last = f;
+        }
+    }
+    _exit(128 + sig);
+}
+
+static void InstallCrashHandler() {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = CrashHandler;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+}
+
+/* invariant check: no leftover fixup sentinel in module blocks */
+static void CheckSentinels(char* name, intptr_t base, int size, int* total) {
+    int n = 0;
+    for (int off = 0; off + 4 <= size; off += 4)
+        if (*(uint32_t*)(base + off) == 0x11223344) n++;
+    if (n > 0) {
+        printf("  ! %s: %d unpatched sentinel slots at %p\n", name, n, (void*)base);
+        *total += n;
+    }
 }
 
 static Object* ThisObject(Module* mod, char* name)
@@ -504,7 +568,11 @@ static bool ReadModule ()
 static void RegisterModule()
 {
     Module* m = (Module*) mod.dad;
-    printf("  + %-16s dad=%p ms=%d ds=%d cs=%d\n", mod.name, (void*)mod.dad, mod.ms, mod.ds, mod.cs);
+    static int badSlots = 0;
+    printf("  + %-16s dad=%p ms=%d ds=%d cs=%d cad=%p\n", mod.name, (void*)mod.dad, mod.ms, mod.ds, mod.cs, (void*)mod.cad);
+    CheckSentinels(mod.name, mod.mad, mod.ms, &badSlots);
+    CheckSentinels(mod.name, mod.dad, mod.ds, &badSlots);
+    CheckSentinels(mod.name, mod.cad, mod.cs, &badSlots);
     m->next = modlist;
     modlist = m;
 }
@@ -517,6 +585,8 @@ static const char *subsystems[] = {"System", "Std", "Text", "Form", "Lin", NULL}
 #define MAXMODS 128
 static ModSpec specs[MAXMODS];
 static int nSpecs;
+static Module* loadOrder[MAXMODS];
+static int nLoaded;
 
 int main (int argc, char *argv[])
 {
@@ -525,6 +595,8 @@ int main (int argc, char *argv[])
 
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("64-bit BlackBox boot loader (OCF v2)\n");
+    mainStackApprox = (intptr_t)&i;
+    InstallCrashHandler();
     ArenaInit();
     modlist = NULL;
     strcpy(kernel, "Kernel64");
@@ -583,6 +655,7 @@ int main (int argc, char *argv[])
             RegisterModule();
             specs[i] = mod;
             specs[i].loaded = true;
+            loadOrder[nLoaded++] = (Module*) mod.dad;
             loaded++;
         }
         if (loaded == 0) break;
@@ -621,17 +694,22 @@ out:
     if (k->varBase != 0)
         *(intptr_t*)k->varBase = (intptr_t)modlist;
 
-    /* call main module body if present */
+    /* run all module bodies in load order (like Kernel.InitModule) */
+    for (i = 0; i < nLoaded; i++) {
+        Module* m = loadOrder[i];
+        if (m == k) continue;
+        if (m->opts & init) continue;
+        m->opts = m->opts | init;
+        BodyProc body = (BodyProc) m->code;
+        printf("init %s...\n", m->name);
+        body();
+    }
+    printf("MAIN OK (all module bodies done)\n");
+
+    /* call main module body if present (usually already run above) */
     {
         Module *m = ThisModule(mainmod);
-        if (m != NULL) {
-            BodyProc body = (BodyProc) m->code;
-            printf("calling %s body...\n", mainmod);
-            body();
-            printf("MAIN OK\n");
-        } else {
-            printf("no main module %s\n", mainmod);
-        }
+        if (m == NULL) printf("no main module %s\n", mainmod);
     }
 
     printf("module list:\n");

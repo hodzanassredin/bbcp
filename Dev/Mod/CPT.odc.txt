@@ -1166,6 +1166,7 @@ MODULE DevCPT;
 		IF name = "SYSTEM" THEN
 			SYSimported := TRUE;
 			p := processor;
+			IF p = 12 THEN p := 10 END;	(* amd64: x86-семейство (sys386) для sysflag *)
 			IF (p < 10) OR (p > 30) THEN p := DevCPM.sysImp END;
 			INCL(DevCPM.options, p);	(* for sysflag handling *)
 			Insert(aliasName, obj); obj.mode := Mod; obj.mnolev := 0; obj.scope := syslink; obj.typ := notyp;
@@ -1186,7 +1187,12 @@ MODULE DevCPT;
 			IF done THEN
 				lib := NIL;
 				impProc := SHORT(DevCPM.SymRInt());
-				IF (impProc # 0) & (processor # 0) & (impProc # processor) THEN err(151) END;
+				IF (impProc # 0) & (processor # 0) & (impProc # processor) THEN
+					IF impCtxt.self THEN	(* старый osf другой платформы: просто негоден для сравнения *)
+						DevCPM.CloseOldSym; done := FALSE
+					ELSE err(151)
+					END
+				END;
 				DevCPM.checksum := 0;	(* start checksum here to avoid problems with proc id fixup *)
 				tag := DevCPM.SymRInt();
 				IF tag < Smname THEN version := tag; tag := DevCPM.SymRInt()

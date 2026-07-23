@@ -1,0 +1,111 @@
+MODULE ConsCompiler64;
+
+	(*
+		A. V. Shiryaev, 2012.09
+	*)
+
+	IMPORT StdLog, DevCompiler64, DevMarkers, TextModels, TextViews, Views, Files;
+
+	PROCEDURE LogStr (IN s: ARRAY OF CHAR);
+	BEGIN
+		StdLog.String(s)
+	END LogStr;
+
+	PROCEDURE LogInt (x: LONGINT);
+	BEGIN
+		StdLog.Int(x)
+	END LogInt;
+
+	PROCEDURE LogLn;
+	BEGIN
+		StdLog.Ln
+	END LogLn;
+
+	PROCEDURE LogMarks (r: TextModels.Reader);
+		VAR v: Views.View;
+			v1: DevMarkers.View;
+	BEGIN
+		r.SetPos(0);
+		r.ReadView(v);
+		WHILE ~r.eot DO
+			IF v IS DevMarkers.View THEN
+				v1 := v(DevMarkers.View);
+				v1.SetMode(DevMarkers.message);
+				LogStr("  pos = "); LogInt(r.Pos()); LogStr(", error = '"); LogStr(v1.msg); LogStr("'"); LogLn
+			END;
+			r.ReadView(v)
+		END
+	END LogMarks;
+
+	PROCEDURE Load0 (f: Files.File): TextModels.Model;
+		VAR r: Files.Reader;
+			w: TextModels.Writer;
+			m: TextModels.Model;
+			x: BYTE;
+	BEGIN
+		r := f.NewReader(NIL);
+		m := TextModels.dir.New();
+		w := m.NewWriter(NIL);
+		r.ReadByte(x);
+		WHILE ~r.eof DO
+			IF x = 0AH THEN
+				w.WriteChar(TextModels.line)
+			ELSE
+				w.WriteChar(CHR(x))
+			END;
+			r.ReadByte(x)
+		END;
+	RETURN m
+	END Load0;
+
+	PROCEDURE Do (IN path, name: ARRAY OF CHAR);
+		VAR loc: Files.Locator;
+			f: Files.File;
+			v: Views.View;
+			src: TextModels.Model;
+
+		PROCEDURE Do1 (src: TextModels.Model);
+			VAR error: BOOLEAN;
+		BEGIN
+			DevCompiler64.CompileText(src, 0, error);
+			IF error THEN
+				LogMarks(src.NewReader(NIL))
+			END
+		END Do1;
+
+	BEGIN
+		loc := Files.dir.This(path);
+		IF loc.res = 0 THEN
+			v := Views.OldView(loc, name$);
+			IF v # NIL THEN
+				WITH v: TextViews.View DO
+					src := v.ThisModel();
+					Do1(src)
+				ELSE
+					LogStr("file open error: ");
+						LogStr(path); LogStr(" "); LogStr(name); LogLn
+				END
+			ELSE (* try compile text file *)
+				f := Files.dir.Old(loc, name$, TRUE);
+				IF f # NIL THEN
+					src := Load0(f);
+					f.Close;
+					Do1(src)
+				ELSE
+					LogStr("file not found: ");
+						LogStr(path); LogStr(" "); LogStr(name); LogLn
+				END
+			END
+		ELSE
+			LogStr("path not found: ");
+				LogStr(path); LogLn
+		END
+	END Do;
+
+	PROCEDURE Compile* (IN path, name: ARRAY OF CHAR);
+	BEGIN
+		LogStr("compiling "); LogStr(path); LogStr(" "); LogStr(name); LogLn;
+		Do(path, name)
+	END Compile;
+
+END ConsCompiler64.

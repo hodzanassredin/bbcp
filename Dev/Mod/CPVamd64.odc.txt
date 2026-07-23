@@ -1043,7 +1043,7 @@ MODULE DevCPVamd64;
 	
 	PROCEDURE Call (n: DevCPT.Node; VAR x: DevCPLamd64.Item);
 		CONST
-			ccall16 = -12;
+			ccall16 = -12; ccall = -10;
 		VAR tag: DevCPLamd64.Item; proc: DevCPT.Object; m: BYTE;
 			p: DevCPT.Object; val :INTEGER; c16: BOOLEAN;
 	BEGIN
@@ -1065,7 +1065,9 @@ MODULE DevCPVamd64;
 			ActualPar(n.right.link, n.obj.link, FALSE, tag);
 			expr(n.right, tag, wreg - {AX}, {});	(* tag = first param *)
 		ELSE
-			IF proc # NIL THEN DevCPCamd64.PrepCall(proc) END;
+			IF proc # NIL THEN DevCPCamd64.PrepCall(proc)
+			ELSIF n.left.typ.sysflag = ccall THEN DevCPCamd64.BeginCCall	(* SysV: контекст для Param *)
+			END;
 			IF c16 THEN DevCPCamd64.PreCcall16(val) END;
 			ActualPar(n.right, n.obj, (m = TProc) & (n.left.subcl = 0), tag);
 		END;
@@ -1213,14 +1215,14 @@ MODULE DevCPVamd64;
 							expr(n.left, x, hint + stop, {high, con}); DevCPCamd64.Convert(x, f, n.typ.size, hint, stop)	(* ??? *)
 					| adr:
 							IF n.left.class = Ntype THEN
-								x.mode := Con; x.offset := 0; x.obj := n.left.obj; x.form := Int32; x.typ := n.left.typ;
+								x.mode := Con; x.offset := 0; x.obj := n.left.obj; x.form := Pointer; x.typ := n.left.typ;
 							ELSE
 								AdrExpr(n.left, x, hint + stop, {});
 							END;
 							DevCPCamd64.GetAdr(x, hint + stop, {})
 					| typfn:
 							IF n.left.class = Ntype THEN
-								x.mode := Con; x.offset := 0; x.obj := n.left.obj; x.form := Int32; x.typ := n.left.typ;
+								x.mode := Con; x.offset := 0; x.obj := n.left.obj; x.form := Pointer; x.typ := n.left.typ;
 								IF x.obj.typ.untagged THEN DevCPM.err(111) END
 							ELSE
 								expr(n.left, x, hint + stop, {});

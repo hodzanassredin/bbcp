@@ -1,0 +1,765 @@
+MODULE LinLibc ["libc.so.6"];
+
+	(*
+		GNU/Linux
+		i386
+	*)
+
+	CONST
+		NULL* = 0H;
+		FALSE* = 0;
+		TRUE* = 1;
+
+		CLOCKS_PER_SEC* = 1000000;
+
+		MAP_FAILED* = -1;
+
+		(* MAP_PRIVATE, MAP_ANON (intFlags) *)
+		MAP_SHARED* = {0};
+		MAP_PRIVATE* = {1};
+		MAP_FIXED* = {4};
+		MAP_ANON* = {5};
+
+		(* PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC (intFlags) *)
+		PROT_NONE* = {};
+		PROT_READ* = {0};
+		PROT_WRITE* = {1};
+		PROT_EXEC* = {2};
+
+		(* SIG_UNBLOCK, SIG_SETMASK (int) *)
+		SIG_BLOCK* = 0;
+		SIG_UNBLOCK* = 1;
+		SIG_SETMASK* = 2;
+
+		(* SIG_DFL, SIG_IGN, SIG_ERR *)
+		SIG_DFL* = 0;
+		SIG_IGN* = 1;
+		SIG_ERR* = -1;
+
+		(* FPE_INTDIV, FPE_INTOVF, FPE_FLTDIV, FPE_FLTOVF, FPE_FLTUND, FPE_FLTRES, FPE_FLTINV, FPE_FLTSUB (int) *)
+		FPE_FLTDIV* = 3;
+		FPE_FLTOVF* = 4;
+		FPE_INTDIV* = 1;
+		FPE_FLTSUB* = 8;
+		FPE_INTOVF* = 2;
+		FPE_CONDTRAP* = 15;
+		FPE_FLTRES* = 6;
+		FPE_FLTINV* = 7;
+		FPE_FLTUND* = 5;
+		FPE_FLTUNK* = 14;
+
+		(* SA_SIGINFO (intFlags) *)
+		SA_SIGINFO* = {2};
+		SA_ONSTACK* = {27};
+		SA_NODEFER* = {30};
+		SA_RESETHAND* = {31};
+		SA_NOCLDSTOP* = {0};
+		SA_STACK* = SA_ONSTACK;
+		SA_ONESHOT* = SA_RESETHAND;
+		SA_RESTART* = {28};
+		SA_INTERRUPT* = {29};
+		SA_NOMASK* = SA_NODEFER;
+		SA_NOCLDWAIT* = {1};
+
+		SIGSTKSZ* = 8192;
+
+		(* SIGINT, SIGILL, SIGFPE, SIGSEGV, SIGKILL, SIGSTOP, SIGWINCH, SIGTHR (int) *)
+		SIGBUS* = 7;
+		SIGTTIN* = 21;
+		SIGPROF* = 27;
+		SIGFPE* = 8;
+		SIGSTKFLT* = 16;
+		SIGUSR1* = 10;
+		SIGTTOU* = 22;
+		SIGURG* = 23;
+		SIGQUIT* = 3;
+		SIGCHLD* = 17;
+		SIGCLD* = SIGCHLD;
+		SIGPOLL* = 29;
+		SIGIO* = SIGPOLL;
+		SIGABRT* = 6;
+		SIGUSR2* = 12;
+		SIGTRAP* = 5;
+		SIGEV_THREAD* = 2;
+		SIGEV_NONE* = 1;
+		SIGVTALRM* = 26;
+		SIGHUP* = 1;
+		SIGSEGV* = 11;
+		SIGCONT* = 18;
+		SIGEV_THREAD_ID* = 4;
+		SIGPIPE* = 13;
+		SIGWINCH* = 28;
+		SIGXFSZ* = 25;
+		SIGRTMAX* = 64;
+		SIGSTOP* = 19;
+		SIGSYS* = 31;
+		SIGRTMIN* = 34;
+		SIGALRM* = 14;
+		SIGTSTP* = 20;
+		SIGKILL* = 9;
+		SIGXCPU* = 24;
+		SIGEV_SIGNAL* = 0;
+		SIGPWR* = 30;
+		SIGILL* = 4;
+		SIGINT* = 2;
+		SIGIOT* = SIGABRT;
+		SIGTERM* = 15;
+		_NSIG* = 65;
+
+(*
+		PAGE_SIZE* = 4096;
+*)
+		_SC_PAGESIZE* = 30;
+
+		(* ENOENT, EEXIST, EACCES, ENOMEM, EDQUOT, EMFILE, ENOTDIR (int) *)
+		EMULTIHOP* = 72;
+		EUNATCH* = 49;
+		EAFNOSUPPORT* = 97;
+		ELIBMAX* = 82;
+		EREMCHG* = 78;
+		EACCES* = 13;
+		EDESTADDRREQ* = 89;
+		EILSEQ* = 84;
+		ESPIPE* = 29;
+		EMLINK* = 31;
+		EOWNERDEAD* = 130;
+		ENOTTY* = 25;
+		EBADE* = 52;
+		EBADF* = 9;
+		EBADR* = 53;
+		EADV* = 68;
+		ERANGE* = 34;
+		ECANCELED* = 125;
+		ETXTBSY* = 26;
+		ENOMEM* = 12;
+		EINPROGRESS* = 115;
+		ENOTBLK* = 15;
+		EPROTOTYPE* = 91;
+		ERESTART* = 85;
+		EISNAM* = 120;
+		ENOMSG* = 42;
+		EALREADY* = 114;
+		ETIMEDOUT* = 110;
+		ENODATA* = 61;
+		EINTR* = 4;
+		ENOLINK* = 67;
+		ECHILD* = 10;
+		ENOTCONN* = 107;
+		EPERM* = 1;
+		ELOOP* = 40;
+		ESTALE* = 116;
+		ENOTSOCK* = 88;
+		ENOSR* = 63;
+		EBADMSG* = 74;
+		ELNRNG* = 48;
+		ENOTUNIQ* = 76;
+		ENOSYS* = 38;
+		EDEADLK* = 35;
+		EPIPE* = 32;
+		EBFONT* = 59;
+		ERFKILL* = 132;
+		EREMOTE* = 66;
+		ETOOMANYREFS* = 109;
+		EPFNOSUPPORT* = 96;
+		EOPNOTSUPP* = 95;
+		ENOTSUP* = EOPNOTSUPP;
+		ESRMNT* = 69;
+		ENONET* = 64;
+		EXFULL* = 54;
+		ENOTNAM* = 118;
+		EKEYREJECTED* = 129;
+		ENOCSI* = 50;
+		ENOTEMPTY* = 39;
+		EADDRINUSE* = 98;
+		ENETRESET* = 102;
+		EISDIR* = 21;
+		EIDRM* = 43;
+		ECOMM* = 70;
+		ECONNABORTED* = 103;
+		EHOSTUNREACH* = 113;
+		EBADFD* = 77;
+		EL2HLT* = 51;
+		ENOKEY* = 126;
+		EINVAL* = 22;
+		EADDRNOTAVAIL* = 99;
+		ESHUTDOWN* = 108;
+		ELIBSCN* = 81;
+		ENAVAIL* = 119;
+		EMFILE* = 24;
+		EOVERFLOW* = 75;
+		EUCLEAN* = 117;
+		ENOMEDIUM* = 123;
+		EBUSY* = 16;
+		EPROTO* = 71;
+		ENODEV* = 19;
+		EKEYEXPIRED* = 127;
+		EROFS* = 30;
+		ELIBACC* = 79;
+		EHWPOISON* = 133;
+		E2BIG* = 7;
+		ECONNRESET* = 104;
+		ENXIO* = 6;
+		EBADRQC* = 56;
+		EL3RST* = 47;
+		ENAMETOOLONG* = 36;
+		ESOCKTNOSUPPORT* = 94;
+		ELIBEXEC* = 83;
+		EDOTDOT* = 73;
+		ETIME* = 62;
+		EPROTONOSUPPORT* = 93;
+		ENOTRECOVERABLE* = 131;
+		EIO* = 5;
+		ENETUNREACH* = 101;
+		EXDEV* = 18;
+		EDQUOT* = 122;
+		EREMOTEIO* = 121;
+		ENOSPC* = 28;
+		ENOEXEC* = 8;
+		EMSGSIZE* = 90;
+		EBADSLT* = 57;
+		EDOM* = 33;
+		ENOSTR* = 60;
+		EFBIG* = 27;
+		ESRCH* = 3;
+		ECHRNG* = 44;
+		EHOSTDOWN* = 112;
+		ENOLCK* = 37;
+		ENFILE* = 23;
+		EDEADLOCK* = EDEADLK;
+		ENOANO* = 55;
+		EISCONN* = 106;
+		EUSERS* = 87;
+		ENETDOWN* = 100;
+		ENOPROTOOPT* = 92;
+		ENOBUFS* = 105;
+		EL3HLT* = 46;
+		EFAULT* = 14;
+		EAGAIN* = 11;
+		EWOULDBLOCK* = EAGAIN;
+		ELIBBAD* = 80;
+		ESTRPIPE* = 86;
+		ECONNREFUSED* = 111;
+		EEXIST* = 17;
+		EL2NSYNC* = 45;
+		ENOENT* = 2;
+		ENOPKG* = 65;
+		EKEYREVOKED* = 128;
+		ENOTDIR* = 20;
+		EMEDIUMTYPE* = 124;
+
+		WAIT_ANY* = -1;
+		WCONTINUED* = {3};
+		WNOHANG* = {0};
+		WUNTRACED* = {1};
+
+		NAME_MAX* = 255;
+
+		SEEK_SET* = 0;
+		SEEK_CUR* = 1;
+		SEEK_END* = 2;
+
+		STDIN_FILENO* = 0;
+		STDOUT_FILENO* = 1;
+		STDERR_FILENO* = 2;
+
+		P_tmpdir* = "/tmp";
+
+		(* O_RDWR, O_NONBLOCK (intFlags) *)
+		O_NOCTTY* = {8};
+		O_ACCMODE* = {0,1};
+		O_NONBLOCK* = {11};
+		O_NDELAY* = O_NONBLOCK;
+		O_ASYNC* = {13};
+		O_SYNC* = {12,20};
+		O_RSYNC* = O_SYNC;
+		O_DSYNC* = {12};
+		O_FSYNC* = O_SYNC;
+		O_APPEND* = {10};
+		O_EXCL* = {7};
+		O_RDWR* = {1};
+		O_DIRECTORY* = {16};
+		O_RDONLY* = {};
+		O_CLOEXEC* = {19};
+		O_CREAT* = {6};
+		O_TRUNC* = {9};
+		O_WRONLY* = {0};
+		O_NOFOLLOW* = {17};
+
+		CLOCK_MONOTONIC_COARSE* = 6;
+		CLOCK_THREAD_CPUTIME_ID* = 3;
+		CLOCK_REALTIME* = 0;
+		CLOCK_BOOTTIME_ALARM* = 9;
+		CLOCK_BOOTTIME* = 7;
+		CLOCK_REALTIME_ALARM* = 8;
+		CLOCK_MONOTONIC_RAW* = 4;
+		CLOCK_REALTIME_COARSE* = 5;
+		CLOCK_TAI* = 11;
+		CLOCK_MONOTONIC* = 1;
+		CLOCK_PROCESS_CPUTIME_ID* = 2;
+
+		RLIMIT_AS* = 9;
+		RLIMIT_NLIMITS* = 16;
+		RLIMIT_DATA* = 2;
+		RLIMIT_LOCKS* = 10;
+		RLIMIT_SIGPENDING* = 11;
+		RLIMIT_OFILE* = 7;
+		RLIMIT_MSGQUEUE* = 12;
+		RLIMIT_CPU* = 0;
+		RLIMIT_NPROC* = 6;
+		RLIMIT_CORE* = 4;
+		RLIMIT_RSS* = 5;
+		RLIMIT_NOFILE* = 7;
+		RLIMIT_RTTIME* = 15;
+		RLIMIT_RTPRIO* = 14;
+		RLIMIT_MEMLOCK* = 8;
+		RLIMIT_NICE* = 13;
+		RLIMIT_FSIZE* = 1;
+		RLIMIT_STACK* = 3;
+
+		UTIME_NOW* = 1073741823;
+		UTIME_OMIT* = 1073741822;
+
+	TYPE
+		StrArray* = POINTER TO ARRAY [untagged] OF PtrSTR;
+		PtrSTR* = POINTER TO ARRAY [untagged] OF SHORTCHAR;
+
+		(* PtrVoid, int, long, size_t, ssize_t, off_t, time_t, clock_t, sigjmp_buf *)
+		(* mode_t, rlim_t, intFlags, sigset_t (set) *)
+		(* x86-64: указатели и long-семейство = 8 байт (LONGINT); int = 4 (INTEGER) *)
+		PtrVoid* = LONGINT;
+		int* = INTEGER;
+		long* = LONGINT;
+		ulong* = LONGINT;
+		size_t* = LONGINT;
+		ssize_t* = LONGINT;
+		off_t* = LONGINT;
+		clock_t* = LONGINT;
+		clockid_t* = INTEGER;
+		time_t* = LONGINT;
+		mode_t* = SET;
+		pid_t* = INTEGER;
+		uid_t* = INTEGER;
+		gid_t* = INTEGER;
+		dev_t* = LONGINT;
+		ino_t* = LONGINT;
+		nlink_t* = LONGINT;
+		blkcnt_t = LONGINT;
+		blksize_t = LONGINT;
+		int8_t* = SHORTCHAR;
+		uint8_t* = SHORTCHAR;
+		int16_t* = SHORTINT;
+		uint16_t* = SHORTINT;
+		int32_t* = INTEGER;
+		uint32_t* = INTEGER;
+		int64_t* = LONGINT;
+		uint64_t* = LONGINT;
+		wchar_t* = INTEGER;
+		rlim_t* = LONGINT;
+		sigjmp_buf* = ARRAY [untagged] 25 OF LONGINT;	(* x86-64: sizeof(jmp_buf) = 200 *)
+		intFlags* = SET;
+		sigset_t* = ARRAY [untagged] 128 OF BYTE;
+		PtrSigset_t* = POINTER [untagged] TO sigset_t;
+
+
+		tm* = POINTER TO tmDesc;
+		tmDesc* = RECORD [untagged]
+			(* NOTE: check record size *)
+			(* tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec, tm_wday [ , tm_gmtoff ] *)
+			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/types/struct_tm.h: *)
+				tm_sec*: int; (* Seconds.     [0-60] (1 leap second) *)
+				tm_min*: int; (* Minutes.     [0-59] *)
+				tm_hour*: int; (* Hours.       [0-23] *)
+				tm_mday*: int; (* Day.         [1-31] *)
+				tm_mon*: int; (* Month.       [0-11] *)
+				tm_year*: int; (* Year - 1900.  *)
+				tm_wday*: int; (* Day of week. [0-6] *)
+				tm_yday*: int; (* Days in year.[0-365] *)
+				tm_isdst*: int; (* DST.         [-1/0/1] *)
+
+				tm_gmtoff*: long; (* Seconds east of UTC *)
+				tm_zone*: PtrSTR; (* Timezone abbreviation *)
+		END;
+
+		Ptrsiginfo_t* = POINTER TO siginfo_t;
+		siginfo_t = RECORD [untagged]
+			(* si_code, fault address *)
+			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/types/siginfo_t.h: *)
+				si_signo*: int; 	(* Signal number *)
+				si_errno*: int;  	(* An errno value *)
+				si_code*: int;   	(* Signal code *)
+
+				_sifields*: RECORD [union]
+					_pad: ARRAY [untagged] 29 OF int;
+					_kill*: RECORD [untagged]
+						si_pid*: pid_t;
+						si_uid*: uid_t
+					END;
+					_timer*: RECORD [untagged]
+						si_tid*: int;
+						si_overrun*: int;
+						si_sigval*: sigval_t
+					END;
+					_rt*: RECORD [untagged]
+						si_pid*: pid_t;
+						si_uid*: uid_t;
+						si_sigval*: sigval_t
+					END;
+					_sigchild*: RECORD [untagged]
+						si_pid: pid_t;
+						si_uid*: uid_t;
+						si_status*: int;
+						si_utime*: clock_t;
+						si_stime*: clock_t
+					END;
+					_sigfault*: RECORD [untagged]
+						si_addr*: PtrVoid;
+						si_addr_lsb*: SHORTINT;
+						_bounds*: RECORD [union]
+							_addr_bnd*: RECORD [untagged]
+								_lower*: PtrVoid;
+								_upper*: PtrVoid
+							END;
+							_pkey: INTEGER
+						END
+					END;
+					_sigpoll: RECORD [untagged]
+						si_band*: int; (* long int *);
+						si_fd*: int
+					END;
+					_sigsys*: RECORD [untagged]
+						_call_addr*: PtrVoid;
+						_syscall*: int;
+						_arch*: int (* unsigned int *)
+					END
+				END;
+		END;
+
+		Ptrucontext_t* = POINTER TO ucontext_t;
+		ucontext_t = RECORD [untagged]
+			(* IP, SP, FP *)
+			(* x86-64 /usr/include/x86_64-linux-gnu/sys/ucontext.h *)
+				uc_flags*: LONGINT (* unsigned long int *);
+				uc_link: Ptrucontext_t;
+				uc_stack: stack_t;
+				uc_mcontext-: mcontext_t;
+				uc_sigmask: sigset_t;
+				__fpregs_mem: _libc_fpstate;
+				_ssp: ARRAY [untagged] 4 OF LONGINT (* unsigned long int *)
+		END;
+
+		sa_sigaction_t* = PROCEDURE [ccall] (sig: int; siginfo: Ptrsiginfo_t; context: Ptrucontext_t);
+		sigaction_t* = RECORD [untagged]
+(*
+			sa_sigaction*: sa_sigaction_t,
+			sa_flags*: intFlags, sa_mask*: sigset_t
+*)
+			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/asm/signal.h, /usr/include/i386-linux-gnu/bits/sigaction.h *)
+				sa_sigaction*: sa_sigaction_t; (* union with sa_handler*: PtrProc;*)
+				sa_mask*: sigset_t;
+				sa_flags*: intFlags;
+				sa_restorer*: PROCEDURE [ccall];
+		END;
+
+		stack_t* = RECORD [untagged]
+(*
+			ss_sp*: PtrVoid, ss_size*: size_t, ss_flags*: intFlags
+*)
+			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/types/stack_t.h: *)
+				ss_sp*: PtrVoid;
+				ss_flags*: intFlags;
+				ss_size*: size_t;
+		END;
+
+		stat_t* = RECORD [untagged]
+			(* x86-64 /usr/include/x86_64-linux-gnu/bits/stat.h: *)
+				st_dev*: dev_t;
+				st_ino*: ino_t;
+				st_nlink*: nlink_t;
+				st_mode*: mode_t;
+				st_uid*: uid_t;
+				st_gid*: gid_t;
+				__pad0: int;
+				st_rdev*: dev_t;
+				st_size*: off_t;
+				st_blksize*: blksize_t;
+				st_blocks*: blkcnt_t;
+				st_atim*: timespec_t;
+				st_mtim*: timespec_t;
+				st_ctim*: timespec_t;
+				__glibc_reserved: ARRAY [untagged] 3 OF long;
+		END;
+
+		PtrFILE* = PtrVoid;
+		PtrDIR* = PtrVoid;
+
+		PtrDirent* = POINTER TO Dirent;
+		Dirent = RECORD [untagged]
+(*
+			d_name*: ARRAY [untagged] NAME_MAX + 1 OF SHORTCHAR
+*)
+			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/dirent.h: *)
+				d_ino*: ino_t; (* inode number *)
+				d_off*: off_t; (* offset to this dirent *)
+				d_reclen*: SHORTINT; (* length of this d_name *)
+				d_type*: BYTE;
+				d_name*: ARRAY [untagged] 256 OF SHORTCHAR;
+		END;
+
+		timespec_t* = RECORD [untagged]
+			(* x86-64: time_t tv_sec; long tv_nsec *)
+				tv_sec*: time_t;
+				tv_nsec*: long;
+		END;
+
+		rlimit* = RECORD [untagged]
+			rlim_cur*, rlim_max*: rlim_t
+		END;
+
+		TVP* = RECORD [untagged] access*, modification*: timespec_t END;
+
+(*
+	VAR
+		stdin*: INTEGER;
+		timezone*: INTEGER; (* or tm.tm_gmtoff *)
+*)
+(*
+	PROCEDURE [ccall] __errno_location* (): PtrVoid;
+*)
+(*
+	(* POSIX.1 *)
+		PROCEDURE [ccall] stat* (path: PtrSTR; VAR sp: stat_t): int;
+*)
+	CONST
+		(* Ubuntu 18.04 /usr/include/i386-linux-gnu/bits/stat.h *)
+			_STAT_VER_LINUX* = 3;
+
+		(* /usr/include/x86_64-linux-gnu/sys/ucontext.h *)
+			__NGREG = 23;
+
+		(* x86-64: REG_RBP=10, REG_RSP=15, REG_RIP=16 (имена сохранены для HandleTrap) *)
+		REG_EBP* = 10;
+		REG_ESP* = 15;
+		REG_EIP* = 16;
+
+	TYPE
+		off64_t* = LONGINT;
+		blkcnt64_t* = LONGINT;
+		ino64_t* = LONGINT;
+
+		(* x86-64: stat64 == stat (та же раскладка) *)
+			stat64_t* = RECORD [untagged]
+				st_dev*: dev_t;
+				st_ino*: ino_t;
+				st_nlink*: nlink_t;
+				st_mode*: mode_t;
+				st_uid*: uid_t;
+				st_gid*: gid_t;
+				__pad0: int;
+				st_rdev*: dev_t;
+				st_size*: off64_t;
+				st_blksize*: blksize_t;
+				st_blocks*: blkcnt64_t;
+				st_atim*: timespec_t;
+				st_mtim*: timespec_t;
+				st_ctim*: timespec_t;
+				__glibc_reserved: ARRAY [untagged] 3 OF long;
+			END;
+
+		(* /usr/include/bits/types/sigval_t.h *)
+		(* /usr/include/bits/types/__sigval_t.h *)
+			sigval_t* = RECORD [union]
+				sival_int*: int;
+				sival_ptr*: PtrVoid
+			END;
+
+		(* /usr/include/x86_64-linux-gnu/sys/ucontext.h  *)
+			greg_t* = LONGINT;
+			gregset_t* = ARRAY [untagged] __NGREG OF greg_t;
+			fpregset_t* = POINTER [untagged] TO _libc_fpstate;
+
+			(* x86-64 fxsave-область, 512 байт (раскладка не используется) *)
+			_libc_fpstate = ARRAY [untagged] 64 OF LONGINT;
+
+			mcontext_t* = RECORD [untagged]
+				gregs-: gregset_t;
+				fpregs: fpregset_t;
+				__reserved: ARRAY [untagged] 8 OF LONGINT
+			END;
+
+(*
+	VAR
+		timezone*: INTEGER; (* seconds from GMT *)
+		stdin*, stdout*, stderr* : PtrFILE;
+*)
+
+	PROCEDURE [ccall] __errno_location*(): PtrVoid;
+
+	PROCEDURE [ccall] stat* (filename: PtrSTR; VAR buf: stat_t): int;
+	PROCEDURE [ccall] stat64* (filename: PtrSTR; VAR buf: stat64_t): int;
+	PROCEDURE [ccall] fopen64* (path, mode: PtrSTR): PtrFILE;
+	PROCEDURE [ccall] lseek64* (fd: int; offset: off64_t; whence: int): off64_t;
+	PROCEDURE [ccall] fseeko64* (stream: PtrFILE; off: off64_t; whence: int): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sigsetjmp* ["__sigsetjmp"] (VAR env: sigjmp_buf; savemask: int): int;
+		PROCEDURE [ccall] siglongjmp* (VAR env: sigjmp_buf; val: int);
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sigemptyset* (set: PtrSigset_t): int;
+		PROCEDURE [ccall] sigfillset* (set: PtrSigset_t): int;
+		PROCEDURE [ccall] sigaddset* (set: PtrSigset_t; signo: int): int;
+		PROCEDURE [ccall] sigprocmask* (how: int; set: PtrSigset_t; oset: PtrSigset_t): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sigaction* (sig: int; VAR [nil] act: sigaction_t; VAR [nil] oact: sigaction_t): int;
+
+	(* BSD *)
+		PROCEDURE [ccall] sigaltstack* (VAR [nil] ss: stack_t; VAR [nil] oss: stack_t): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] clock_gettime* (clock_id: clockid_t; VAR tp: timespec_t): int;
+
+	(* AT&T UNIX *)
+		PROCEDURE [ccall] time* (VAR [nil] tloc: time_t): time_t;
+
+	(* AT&T UNIX *)
+		PROCEDURE [ccall] gmtime* (VAR [nil] clock: time_t): tm;
+		PROCEDURE [ccall] localtime* (VAR [nil] clock: time_t): tm;
+		PROCEDURE [ccall] mktime* (VAR tm: tmDesc): time_t;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] opendir* (filename: PtrSTR): PtrDIR;
+		PROCEDURE [ccall] readdir* (dirp: PtrDIR): PtrDirent;
+
+	(* GNU *)
+		PROCEDURE [ccall] canonicalize_file_name* (path: PtrSTR): PtrSTR;
+
+	(* Linux only *)
+		PROCEDURE [ccall] sendfile* (out_fd: int; in_fd: int; VAR [nil] offset: off_t; count: size_t): ssize_t;
+
+
+	(* ANSI C 89 *)
+		PROCEDURE [ccall] clock* (): clock_t;
+
+(*
+	(* POSIX.1 *)
+		PROCEDURE [ccall] clock_gettime* (clock_id: clockid_t; VAR tp: timespec_t): int;
+
+	(* AT&T UNIX *)
+		PROCEDURE [ccall] time* (VAR [nil] tloc: time_t): time_t;
+
+	(* AT&T UNIX *)
+		PROCEDURE [ccall] gmtime* (VAR [nil] clock: time_t): tm;
+		PROCEDURE [ccall] localtime* (VAR [nil] clock: time_t): tm;
+		PROCEDURE [ccall] mktime* (VAR tm: tmDesc): time_t;
+*)
+
+	PROCEDURE [ccall] mmap* (adr: PtrVoid; len: size_t; prot: intFlags; flags: intFlags; fd: int; offset: off_t): PtrVoid;
+	(* BSD *)
+		PROCEDURE [ccall] munmap* (adr: PtrVoid; len: size_t): int;
+		PROCEDURE [ccall] mprotect* (adr: PtrVoid; len: size_t; prot: intFlags): int;
+
+	PROCEDURE [ccall] calloc* (nmemb: size_t; size: size_t): PtrVoid;
+(*	(* ANSI C 89 *)
+		PROCEDURE [ccall] malloc* (size: size_t): PtrVoid;
+*)
+		PROCEDURE [ccall] free* (ptr: PtrVoid);
+
+
+(*
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sigsetjmp* (VAR env: sigjmp_buf; savemask: int): int;
+		PROCEDURE [ccall] siglongjmp* (VAR env: sigjmp_buf; val: int);
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sigemptyset* (set: PtrSigset_t): int;
+		PROCEDURE [ccall] sigfillset* (set: PtrSigset_t): int;
+		PROCEDURE [ccall] sigaddset* (set: PtrSigset_t; signo: int): int;
+		PROCEDURE [ccall] sigprocmask* (how: int; set: PtrSigset_t; oset: PtrSigset_t): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sigaction* (sig: int; VAR [nil] act: sigaction_t; VAR [nil] oact: sigaction_t): int;
+
+	(* BSD *)
+		PROCEDURE [ccall] sigaltstack* (VAR [nil] ss: stack_t; VAR [nil] oss: stack_t): int;
+*)
+
+	(* ANSI C 89 *)
+		PROCEDURE [ccall] getenv* (s: PtrSTR): PtrSTR;
+
+	(* ANSI C 89 *)
+		PROCEDURE [ccall] fopen* (path, mode: PtrSTR): PtrFILE;
+		PROCEDURE [ccall] fdopen* (fildes: int; mode: PtrSTR): PtrFILE;
+		PROCEDURE [ccall] fclose* (stream: PtrFILE): int;
+		PROCEDURE [ccall] fread* (ptr: PtrVoid; size: size_t; nmemb: size_t; stream: PtrFILE): size_t;
+		PROCEDURE [ccall] fwrite* (ptr: PtrVoid; size: size_t; nmemb: size_t; stream: PtrFILE): size_t;
+		PROCEDURE [ccall] fflush* (s: PtrFILE): int;
+		PROCEDURE [ccall] printf0* ["printf"] (format: PtrSTR): int;
+		PROCEDURE [ccall] printfs* ["printf"] (format, s: PtrSTR): int;
+	(* ANSI C 89, XPG4 *)
+		PROCEDURE [ccall] fseek* (stream: PtrFILE; offset: long; whence: int): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] fileno* (stream: PtrFILE): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] rename* (from, to: PtrSTR): int;
+		PROCEDURE [ccall] mkdir* (path: PtrSTR; mode: mode_t): int;
+(*
+		PROCEDURE [ccall] opendir* (filename: PtrSTR): PtrDIR;
+		PROCEDURE [ccall] readdir* (dirp: PtrDIR): PtrDirent;
+*)
+		PROCEDURE [ccall] closedir* (dirp: PtrDIR): int;
+	(* ANSI C 89, XPG4.2 *)
+		PROCEDURE [ccall] remove* (path: PtrSTR): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] getcwd* (buf: PtrSTR; size: size_t): PtrSTR;
+
+	(* ANSI C 99 *)
+		PROCEDURE [ccall] exit* (status: int);
+
+	(* ANSI C 89 *)
+		PROCEDURE [ccall] strftime* (buf: PtrSTR; maxsize: size_t; format: PtrSTR; timeptr: tm): size_t;
+
+	(* XXX: use fread instead *)
+		PROCEDURE [ccall] fgets* (str: PtrSTR; size: int; stream: PtrFILE): PtrSTR;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] open* (path: PtrSTR; flags: intFlags; mode: mode_t): int;
+		PROCEDURE [ccall] write* (d: int; buf: PtrVoid; nbytes: size_t): ssize_t;
+		PROCEDURE [ccall] read* (d: int; buf: PtrVoid; nbytes: size_t): ssize_t;
+		PROCEDURE [ccall] close* (d: int): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] chmod* (path: PtrSTR; mode: mode_t): int;
+		PROCEDURE [ccall] fchmod* (fd: int; mode: mode_t): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] fork* (): pid_t;
+		PROCEDURE [ccall] waitpid* (wpid: pid_t; VAR [nil] status: int; options: intFlags): pid_t;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] execv* (path: PtrSTR; argv: POINTER [untagged] TO ARRAY [untagged] OF PtrSTR): int;
+		PROCEDURE [ccall] execvp* (file: PtrSTR; argv: POINTER [untagged] TO ARRAY [untagged] OF PtrSTR): int;
+
+	(* POSIX.2 *)
+		PROCEDURE [ccall] system* (string: PtrSTR): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] sysconf* (name: int): long;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] popen* (command, type: PtrSTR): PtrFILE;
+		PROCEDURE [ccall] pclose* (stream: PtrFILE): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] getrlimit* (resource: int; VAR rlim: rlimit): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] utimensat* (fd: int; path: PtrSTR; VAR times: TVP; flag: intFlags): int;
+
+	(* POSIX.1 *)
+		PROCEDURE [ccall] readlink* (path: PtrSTR; buf: PtrSTR; bufsiz: size_t): ssize_t;
+
+END LinLibc.

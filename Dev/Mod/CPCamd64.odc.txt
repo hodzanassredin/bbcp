@@ -114,6 +114,7 @@ MODULE DevCPCamd64;
 		ptrTab: ARRAY MaxPtrs OF INTEGER;
 		stkAllocLbl: DevCPLamd64.Label;
 		procedureUsesFpu: BOOLEAN;
+		curCCall: BOOLEAN;	(* SysV: текущий вызов - внешний [ccall] (для Param) *)
 
 	
 	PROCEDURE Init* (opt: SET);
@@ -163,6 +164,8 @@ MODULE DevCPCamd64;
 	END StackAlloc;
 	
 	PROCEDURE^ CheckAv* (reg: INTEGER);
+	PROCEDURE^ GenB (b: INTEGER);
+	PROCEDURE^ GenD (d: INTEGER);
 
 	PROCEDURE AdjustStack (val: INTEGER);
 		VAR c, sp: DevCPLamd64.Item;
@@ -328,6 +331,7 @@ MODULE DevCPCamd64;
 	END Pop;
 	
 	PROCEDURE^ LoadLong (VAR x: DevCPLamd64.Item; hint, stop: SET);
+	PROCEDURE^ PtrToLong (VAR y: DevCPLamd64.Item; hint, stop: SET);
 	
 	PROCEDURE Load* (VAR x: DevCPLamd64.Item; hint, stop: SET);	(* = Assert(x, hint, stop + {mem, stk}) *)
 		VAR r: DevCPLamd64.Item; f: BYTE;
@@ -478,6 +482,17 @@ MODULE DevCPCamd64;
 		END;
 		x.form := Int64
 	END LoadLong;
+
+	PROCEDURE PtrToLong (VAR y: DevCPLamd64.Item; hint, stop: SET);
+		(* 64-bit: Pointer/ProcTyp (один 64-битный регистр) -> пара Int64 lo/hi *)
+		VAR rh: DevCPLamd64.Item;
+	BEGIN
+		Load(y, hint, stop);
+		GetReg(rh, Int32, hint, stop);
+		y.form := Int64; rh.form := Int64; DevCPLamd64.GenMove(y, rh);	(* mov rh, r (REXW) *)
+		DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E8H + rh.reg); DevCPE.GenByte(32);	(* shr rh, 32 *)
+		y.form := Int64; y.index := rh.reg
+	END PtrToLong;
 	
 	(*------------------------------------------------*)
 	
@@ -928,7 +943,8 @@ MODULE DevCPCamd64;
 		ELSE (* y not real *)
 			IF sysval THEN
 				IF (y.form < Int16) & (f >= Int16) OR (y.form IN {Int16, Char16}) & (f >= Int32) & (f < Char16) THEN LoadL(y, hint, stop) END;
-				IF (y.form >= Int16) & (f < Int16) THEN FreeHi(y) END
+				IF (y.form >= Int16) & (f < Int16) THEN FreeHi(y) END;
+				IF (f = Int64) & (y.form IN {Pointer, ProcTyp}) THEN PtrToLong(y, hint, stop) END	(* 64-bit *)
 			ELSE
 				CASE y.form OF
 				| Byte, Bool:
@@ -965,7 +981,8 @@ MODULE DevCPCamd64;
 						ELSIF f = Char16 THEN Check(y, 0, 65536)
 						ELSIF f = Int8 THEN Check(y, -128, 127); FreeHi(y)
 						ELSIF f = Int16 THEN Check(y, -32768, 32767)
-						ELSIF f = Int64 THEN LoadLong(y, hint, stop)
+						ELSIF f = Int64 THEN
+							IF y.form IN {Pointer, ProcTyp} THEN PtrToLong(y, hint, stop) ELSE LoadLong(y, hint, stop) END
 						END
 				| Int64:
 						IF f IN {Bool..Int32, Char16} THEN
@@ -1644,6 +1661,26 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 	BEGIN
 		par.mode := Stk; par.typ := fp.typ; par.form := par.typ.form;
 		IF ODD(fp.sysflag DIV nilBit) THEN niltest := FALSE END;
+		IF curCCall & (par.form = Int64) & (fp.mode # VarPar) THEN	(* SysV: int64 arg = один 8-байтный слот *)
+			IF ap.mode = Con THEN
+				GenB(48H); GenB(0B8H); GenD(ap.offset); GenD(ap.scale);	(* mov rax, imm64 *)
+				GenB(50H)	(* push rax *)
+			ELSIF ap.mode = Reg THEN
+				IF ap.form = Int64 THEN	(* регистровая пара lo/hi *)
+					AdjustStack(-8);
+					c.mode := Ind; c.reg := SP; c.offset := 0; c.scale := 0; c.form := Int32;
+					DevCPLamd64.MakeReg(a, ap.reg, Int32); DevCPLamd64.GenMove(a, c);
+					c.offset := 4; DevCPLamd64.MakeReg(a, ap.index, Int32); DevCPLamd64.GenMove(a, c)
+				ELSE	(* 32-битное значение: sign-extend через rax *)
+					GenB(48H); GenB(63H); GenB(0C0H + ap.reg);	(* movsxd rax, r32 *)
+					GenB(50H)	(* push rax *)
+				END;
+				Free(ap)
+			ELSE
+				DevCPLamd64.GenPush(ap); Free(ap)	(* push qword [mem] *)
+			END;
+			RETURN
+		END;
 		IF ap.typ = DevCPT.niltyp THEN
 			IF ((par.typ.comp = Record) OR (par.typ.comp = DynArr)) & ~par.typ.untagged THEN
 				DevCPM.err(142)
@@ -1787,6 +1824,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 	PROCEDURE PrepCall* (proc: DevCPT.Object);
 		VAR lev: BYTE; r: DevCPLamd64.Item;
 	BEGIN
+		curCCall := proc.sysflag = ccall;	(* SysV: контекст для Param *)
 		lev := proc.mnolev;
 		IF (slNeeded IN proc.conval.setval) & (imLevel[lev] > 0) & (imLevel[DevCPLamd64.level] > imLevel[lev]) THEN
 			DevCPLamd64.MakeReg(r, BX, Pointer); DevCPLamd64.GenPush(r)
@@ -1840,12 +1878,99 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		END;
 		RETURN n
 	END CCallParSize;
+
+	(* ---------------- SysV AMD64 ABI для [ccall] ---------------- *)
+	(* Аргументы уже лежат на стеке cdecl-порядком ([rsp] = arg1, слоты по 8 байт).
+	   SysVPreCall: сохраняет rsp в r12, выравнивает rsp по 16, копирует хвост
+	   (аргументы за 6 регистровыми) вниз, грузит arg1..6 в rdi,rsi,rdx,rcx,r8,r9,
+	   AL := 0 (variadic). SysVPostCall: mov rsp, r12; pop r12 (чистит всё). *)
+
+	PROCEDURE BeginCCall*;	(* вызывается из CPVamd64 для ccall через proc-переменную *)
+	BEGIN
+		curCCall := TRUE
+	END BeginCCall;
+
+	PROCEDURE GenB (b: INTEGER);
+	BEGIN
+		DevCPLamd64.GenCode(b MOD 256)
+	END GenB;
+
+	PROCEDURE GenD (d: INTEGER);	(* dword little-endian *)
+	BEGIN
+		GenB(d); GenB(d DIV 100H); GenB(d DIV 10000H); GenB(d DIV 1000000H)
+	END GenD;
+
+	PROCEDURE CCallSlots (proc: DevCPT.Object; typ: DevCPT.Struct): INTEGER;
+		(* число 8-байтных слотов аргументов, которые накопил ActualPar/Param *)
+		VAR p: DevCPT.Object; n: INTEGER;
+	BEGIN
+		n := 0;
+		IF proc # NIL THEN p := proc.link; ELSE p := typ.link; END;
+		WHILE p # NIL DO
+			IF p.mode = VarPar THEN
+				IF (p.typ.comp = DynArr) & ~p.typ.untagged THEN INC(n, p.typ.n + 1)	(* adr + len desc *)
+				ELSIF (p.typ.comp = Record) & ~p.typ.untagged THEN INC(n, 2)	(* adr + tag *)
+				ELSE INC(n)
+				END
+			ELSIF (p.typ.comp IN {Array, Record}) & (p.typ.size > 8) THEN
+				INC(n, (p.typ.size + 7) DIV 8)
+			ELSE INC(n)
+			END;
+			p := p.link
+		END;
+		RETURN n
+	END CCallSlots;
+
+	PROCEDURE SysVPreCall (nslots: INTEGER);
+		VAR i, src, tail, t2, nreg: INTEGER;
+	BEGIN
+		tail := nslots - 6; IF tail < 0 THEN tail := 0 END;
+		nreg := nslots - tail;
+		t2 := (tail * 8 + 15) DIV 16 * 16;
+		GenB(41H); GenB(54H);					(* push r12 *)
+		GenB(49H); GenB(89H); GenB(0E4H);		(* mov r12, rsp *)
+		GenB(48H); GenB(83H); GenB(0E4H); GenB(0F0H);	(* and rsp, -16 *)
+		IF t2 > 0 THEN
+			IF t2 < 128 THEN GenB(48H); GenB(83H); GenB(0ECH); GenB(t2)	(* sub rsp, imm8 *)
+			ELSE GenB(48H); GenB(81H); GenB(0ECH); GenD(t2)	(* sub rsp, imm32 *)
+			END
+		END;
+		i := 0;	(* копируем стековый хвост: src = r12+8+nreg*8+i*8, dst = rsp+i*8 *)
+		WHILE i < tail DO
+			src := 8 + nreg * 8 + i * 8;
+			GenB(49H); GenB(8BH); GenB(84H); GenB(24H); GenD(src);	(* mov rax, [r12+src] *)
+			GenB(48H); GenB(89H); GenB(84H); GenB(24H); GenD(i * 8);	(* mov [rsp+i*8], rax *)
+			INC(i)
+		END;
+		i := 0;	(* регистровые аргументы из исходной области: r12+8+i*8 *)
+		WHILE i < nreg DO
+			src := 8 + i * 8;
+			CASE i OF
+			| 0: GenB(49H); GenB(8BH); GenB(7CH); GenB(24H)	(* mov rdi, [r12+d8] *)
+			| 1: GenB(49H); GenB(8BH); GenB(74H); GenB(24H)	(* mov rsi, [r12+d8] *)
+			| 2: GenB(49H); GenB(8BH); GenB(54H); GenB(24H)	(* mov rdx, [r12+d8] *)
+			| 3: GenB(49H); GenB(8BH); GenB(4CH); GenB(24H)	(* mov rcx, [r12+d8] *)
+			| 4: GenB(4DH); GenB(8BH); GenB(44H); GenB(24H)	(* mov r8, [r12+d8] *)
+			| 5: GenB(4DH); GenB(8BH); GenB(4CH); GenB(24H)	(* mov r9, [r12+d8] *)
+			END;
+			GenB(src);	(* disp8: 8..48 *)
+			INC(i)
+		END;
+		GenB(31H); GenB(0C0H)	(* xor eax, eax: AL = 0 vector regs для variadic *)
+	END SysVPreCall;
+
+	PROCEDURE SysVPostCall;
+	BEGIN
+		GenB(4CH); GenB(89H); GenB(0E4H);	(* mov rsp, r12 *)
+		GenB(41H); GenB(5CH)				(* pop r12 *)
+	END SysVPostCall;
 	
 	PROCEDURE Call* (VAR x, tag: DevCPLamd64.Item);	(* TProc: tag.typ = actual receiver type *)
 		CONST
 			ccall16 = -12;
-		VAR i, n: INTEGER; r, y: DevCPLamd64.Item; typ: DevCPT.Struct; lev: BYTE; saved: BOOLEAN;
+		VAR i, n: INTEGER; r, y: DevCPLamd64.Item; typ: DevCPT.Struct; lev: BYTE; saved, cc, savedCC: BOOLEAN;
 	BEGIN
+		savedCC := curCCall; cc := FALSE;
 		IF x.mode IN {LProc, XProc, IProc} THEN
 			lev := x.obj.mnolev; saved := FALSE;
 			IF (slNeeded IN x.obj.conval.setval) & (imLevel[lev] > 0) THEN	(* pass static link *)
@@ -1857,12 +1982,13 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					WHILE n > 0 DO DevCPLamd64.GenMove(y, r); DEC(n) END
 				END
 			END;
+			IF x.obj.sysflag = ccall THEN cc := TRUE; SysVPreCall(CCallSlots(x.obj, NIL)) END;
 			DevCPLamd64.GenCall(x);
 			IF (x.obj.sysflag = ccall) OR (x.obj.sysflag = ccall16) THEN
-				n:=CCallParSize(x.obj, NIL);
 				IF (x.obj.sysflag = ccall) THEN 
-					AdjustStack(n)
+					SysVPostCall
 				ELSE (* ccall16*)
+					n:=CCallParSize(x.obj, NIL);
 					PostCcall16(n)
 				END;
 			END;
@@ -1912,12 +2038,13 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				WHILE i < n DO DevCPLamd64.GenCode(ORD(x.obj.conval.ext^[i])); INC(i) END
 			END
 		ELSE	(* proc var *)
+			IF x.typ.sysflag = ccall THEN cc := TRUE; SysVPreCall(CCallSlots(NIL, x.typ)) END;
 			DevCPLamd64.GenCall(x); Free(x);
 			IF (x.typ.sysflag = ccall) OR (x.typ.sysflag = ccall16) THEN	
-				n:=CCallParSize(NIL, x.typ);
 				IF x.typ.sysflag = ccall THEN 
-					AdjustStack(n)
+					SysVPostCall
 				ELSE (* ccall16*)
+					n:=CCallParSize(NIL, x.typ);
 					PostCcall16(n)
 				END
 			END;
@@ -1929,10 +2056,19 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		END;
 		CheckReg;
 		IF x.typ.form = Int64 THEN
-			GetReg(x, Int32, {}, wreg - {AX}); GetReg(y, Int32, {}, wreg - {DX});
-			x.index := y.reg; x.form := Int64
+			IF cc THEN	(* SysV: int64 возвращается в rax, делим на пару lo/hi *)
+				GetReg(x, Int32, {}, {AX}); GetReg(y, Int32, {}, {AX});
+				GenB(89H); GenB(0C0H + x.reg);				(* mov r32(x), eax *)
+				GenB(48H); GenB(0C1H); GenB(0E8H); GenB(20H);	(* shr rax, 32 *)
+				GenB(89H); GenB(0C0H + y.reg);				(* mov r32(y), eax *)
+				x.index := y.reg; x.form := Int64
+			ELSE
+				GetReg(x, Int32, {}, wreg - {AX}); GetReg(y, Int32, {}, wreg - {DX});
+				x.index := y.reg; x.form := Int64
+			END
 		ELSIF x.typ.form # NoTyp THEN GetReg(x, x.typ.form, {}, wreg - {AX} + {high})
-		END
+		END;
+		curCCall := savedCC
 	END Call;
 	
 	PROCEDURE CopyDynArray* (adr: INTEGER; typ: DevCPT.Struct);	(* needs CX, SI, DI *)

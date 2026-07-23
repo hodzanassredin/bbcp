@@ -731,10 +731,15 @@ out:
 
     /* инфраструктура загрузчика — первой, в порядке 32-битного dev0 link:
        тела этих модулей устанавливают хуки (Files.dir, SetLoader...),
-       без которых тела остальных модулей падают (Librarian нужен Files.dir) */
+       без которых тела остальных модулей падают (Librarian нужен Files.dir).
+       Режим: bbrun64 --console или BB_CONSOLE=1 — консоль (LinIntLoader);
+       по умолчанию GUI (LinLoader). */
     {
+        int consoleMode = 0;
+        for (int a = 1; a < argc; a++) if (strcmp(argv[a], "--console") == 0) consoleMode = 1;
+        if (getenv("BB_CONSOLE") != NULL) consoleMode = 1;
         static const char* infra[] = {"Utf", "LinKernel", "Files", "LinEnv",
-            "LinFiles", "LinPackedFiles", "StdLoader", "LinLoader", "LinIntLoader", NULL};
+            "LinFiles", "LinPackedFiles", "StdLoader", NULL};
         for (int j = 0; infra[j] != NULL; j++) {
             Module* m = ThisModule((char*)infra[j]);
             if (m == NULL || (m->opts & init)) continue;
@@ -742,6 +747,12 @@ out:
             BodyProc body = (BodyProc) m->code;
             printf("init %s (infra)...\n", m->name);
             body();
+        }
+        Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
+        if (m != NULL && !(m->opts & init)) {
+            m->opts = m->opts | init;
+            printf("init %s (infra, %s mode)...\n", m->name, consoleMode ? "console" : "gui");
+            ((BodyProc) m->code)();
         }
     }
 

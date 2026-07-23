@@ -33,12 +33,22 @@
   DevCommanders терялись → 0 pending, KERNEL OK (коммит 43f73bd5).
 - РЕШЕНО: ErrLog/BufLog de-virtualization (plain-процедуры; OCF v2 без VarBlk
   не инициализирует interface-глобалы) — коммит a4237caf.
+- РЕШЕНО: StdLoader.Fixup 64-бит по эталону bbrun64.c (коммит 950cbfe0).
+- РЕШЕНО: LinDl 64-бит (PtrVoid=LONGINT, [ccall16]→[ccall]) — cf1a1382.
+- РЕШЕНО: MAP_32BIT для модулей/кучи (INTEGER-капы интерфейсов и 32-битные
+  чтения тегов в GC Mark требуют арену < 4 ГБ).
+- РЕШЕНО: Dev-пайплайн компилятора собран в BB64 (DevCP* + DevCompiler64 +
+  ConsCompiler64 = ConsCompiler поверх DevCompiler64) — build-dev64.sh,
+  запускается автоматически в конце test64.sh. ConsCompiler64 = Compiler64.odc.txt.
+- Подготовлено: ObxHello + tools64/smoke-console.sh (compile+run в консоли),
+  bbrun64 --console (консольный LinIntLoader вместо GUI LinLoader).
+- GTK-аудит готов (KB/Gtk64-Audit.md): алиасы, GdkEvent×8, xmm/double×31,
+  varargs, колбэки. Идёт миграция типов [ccall16]→[ccall] + алиасы (агент).
 - ТЕКУЩИЙ блокер: таблица методов LinKernel.Platform сдвинута на слот
   (слот k = метод k+1, первый = 0, последний = мусор) — краш при вызове
   платформенного метода в LinPackedFiles init. В работе (агент).
-- Дальше по плану: (1) method table → MAIN OK; (2) StdLoader.Fixup 64-бит
-  (ленивая загрузка внутри BB64); (3) Dev/ConsCompiler → HelloWorld из консоли;
-  (4) exceptions/callbacks (SysV Enter, isGuarded); (5) GTK 64-бит → LinGui.
+- Дальше по плану: (1) method table → MAIN OK; (2) smoke-console (HelloWorld);
+  (3) exceptions/callbacks (SysV Enter, isGuarded); (4) GTK 64-бит → LinGui.
 
 ## ПРЕДЫДУЩЕЕ СОСТОЯНИЕ (утро 2026-07-24)
 

@@ -19,3 +19,6 @@ case " $subs " in
 		echo "DevCompiler64.CompileSubs $subs" | "$HOME/sources/bbcp/run-dev0"
 		;;
 esac
+
+# Dev-пайплайн (для компиляции внутри BB64) — всегда добираем в конце
+"$HOME/sources/bbcp/tools64/build-dev64.sh" 2>&1 | grep -E '== ConsCompiler64|== DevCompiler64' | tail -2

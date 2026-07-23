@@ -72,3 +72,25 @@ target processor=12. LogMarks печатает позиции ошибок в к
   смотреть `x/Nxb`; эталонный diff: тот же микро-модуль через go32.
 - Ассерт-инвариант в CPVamd64.Variables: Pointer/ProcTyp обязаны иметь size=8
   (ловит 32-битные раскладки на компиляции).
+
+## Обновление (2026-07-24, вечер)
+
+- bbcp64use/Dev ТЕПЕРЬ содержит 64-битный Dev-пайплайн (нужен для компиляции
+  внутри BB64). Правило выше («Dev там быть не должно») ОТМЕНЕНО для Code/Sym,
+  но из-за этого dev0 из bbcp64use падает с "corrupted code file for DevCP*" —
+  поэтому build-dev64.sh прячет Dev на время компиляции (stash/restore).
+- tools64/ocf.py — парсер ocf: refs/dis/bytes/hdr.
+- tools64/errpos.sh Sub Mod pos — позиция ошибки → строка исходника.
+- tools64/c64.sh Mod [off] — один модуль: sync+compile+disasm.
+- tools64/build-dev64.sh — Dev-пайплайн (Markers,CPM..CPVamd64,Selectors,
+  Commanders,Compiler64,ConsCompiler64) в bbcp64use. Запускать ПОСЛЕ test64.sh
+  (test64 всё вайпит, включая Dev).
+- tools64/smoke-console.sh — smoke: ConsCompiler64.Compile + ObxHello.Do.
+- tools64/gdb/ — findmod/a2m/stackscan. ВАЖНО: ASLR — адреса только внутри
+  одного прогона; брейки через ThisModule, но вычислять ПОСЛЕ загрузки
+  (break по строке в main, потом source/findmod).
+- bbrun64: --console / BB_CONSOLE=1 — консоль (LinIntLoader) вместо GUI.
+- ConsCompiler64 = ConsCompiler поверх DevCompiler64 (Cons/Mod/Compiler64.odc.txt).
+- Строки в .ocf — UTF-16LE (strings их не видит; искать как u'..'.encode('utf-16-le')).
+- trap-инструкции `8d f0 XX` / `8d e7` — objdump десинхронизируется и съедает
+  следующий байт (напр. REX 48!). Верить сырым байтам + refs для границ процедур.

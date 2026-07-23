@@ -369,7 +369,6 @@ MODULE Kernel;
 		unit: INTEGER;	(** currently active unit; used to identify which unit becomes dirty after a trap *)
 		tryCount: INTEGER;	(* counter of nested Try calls *)
 		dontCollect: BOOLEAN;
-		log: ErrLog;
 		blog: BufLog;
 
 		bootInfo-: BootInfo;
@@ -594,55 +593,15 @@ MODULE Kernel;
 
 	(* ----------------- direct logger ----------------- *)
 	
-	PROCEDURE (VAR e: ErrLog) String (IN str: ARRAY OF CHAR), NEW, EXTENSIBLE;
-	BEGIN e.string(str)
-	END String;
-	
-	PROCEDURE (VAR e: ErrLog) Ln, NEW, EXTENSIBLE; BEGIN e.ln END Ln;
-	
-	PROCEDURE (VAR e: ErrLog) Int (x: LONGINT), NEW;
-		VAR a: ARRAY 25 OF CHAR;
-		CONST max = 25;
-		VAR b: ARRAY max OF CHAR; i, j: INTEGER; y: LONGINT;
-	BEGIN
-		IF x < 0 THEN x := -x; a[0] := '-'; j := 1 ELSIF x > 0 THEN j := 0 ELSE j := 1; a[0] := '0' END;
-		i := 0;
-		WHILE x # 0 DO y := x MOD 10; b[i] := SHORT(CHR(y + ORD('0'))); x := x DIV 10; INC(i) END;
-		DEC(i); WHILE (i >= 0) & (j < max) DO a[j] := b[i]; INC(j); DEC(i) END;
-		ASSERT(j < max, 20);
-		a[j] := 0X; 
-		e.String(a)
-	END Int;
-	
-	PROCEDURE (VAR e: ErrLog) Hex (x: LONGINT), NEW;
-		VAR i, xx, yy: INTEGER; y: LONGINT; buf: ARRAY 17 OF CHAR;
-	BEGIN 
-		IF (MIN(INTEGER) < x) & (x < MAX(INTEGER)) THEN 
-			i := 7; xx := SHORT(x); WHILE i >= 0 DO
-				yy := xx MOD 16; xx := xx DIV 16;
-				IF yy > 9 THEN yy := yy + (ORD("A") - ORD("0") - 10) END;
-				buf[i] := CHR(yy + ORD("0")); DEC(i)
-			END;
-			buf[8] := 0X
-		ELSE 
-			i := 15; WHILE i >= 0 DO
-				y := x MOD 16; x := x DIV 16;
-				IF y > 9 THEN y := y + (ORD("A") - ORD("0") - 10) END;
-				buf[i] := CHR(y + ORD("0")); DEC(i)
-			END;
-			buf[16] := 0X
-		END;
-		e.String(buf)
-	END Hex;
-	
-	(* ----------------- buffered logger ----------------- *)
-	
+	(* plain-процедуры вместо bound-методов: OCF v2 не инициализирует
+	   interface/таблицы методов для глобалов (нет VarBlk) *)
+
 	PROCEDURE ^ NewArr* (eltyp, nofelem, nofdim: INTEGER): INTEGER;	(* impl. of NEW(ptr, dim0, dim1, ...) *)
 
 	PROCEDURE GrowBuf (by: INTEGER);
 		VAR a: ADDRESS; copy: POINTER TO ARRAY OF CHAR; max, u, len: INTEGER; hb: Block;
 	BEGIN
-		u := unit; dontCollect := unit = defLogger; unit := gc; 
+		u := unit; dontCollect := unit = defLogger; unit := gc;
 		IF blog.buf = NIL THEN max := 0 ELSE max := LEN(blog.buf) END;
 		IF max <= blog.pos + by THEN
 			(* allocate copy *)
@@ -655,31 +614,67 @@ MODULE Kernel;
 		END;
 		unit := u; dontCollect := FALSE
 	END GrowBuf;
-	
-	PROCEDURE (VAR log: BufLog) Append (IN str: ARRAY OF CHAR), NEW;
+
+	PROCEDURE BAppend (IN str: ARRAY OF CHAR);
 		VAR len, i: INTEGER;
 	BEGIN
 		IF ~(gc IN dirty) THEN
 			len := LEN(str$);
 			GrowBuf(len + 1);
-			i := len; INC(log.pos, len); len := log.pos;
-			WHILE i >= 0 DO log.buf[len] := str[i]; DEC(i); DEC(len) END
+			i := len; INC(blog.pos, len); len := blog.pos;
+			WHILE i >= 0 DO blog.buf[len] := str[i]; DEC(i); DEC(len) END
 		END
-	END Append;
-	
-	PROCEDURE (VAR log: BufLog) String (IN str: ARRAY OF CHAR);
+	END BAppend;
+
+	PROCEDURE BString (IN str: ARRAY OF CHAR);
 	BEGIN
-		IF debug THEN log.string(str) END;	(* could cause a fatal error with a specific number, huh? *)
-		log.Append(str)
-	END String;
-	
-	PROCEDURE (VAR log: BufLog) Ln; 
+		IF debug THEN blog.string(str) END;
+		BAppend(str)
+	END BString;
+
+	PROCEDURE BLn;
 	BEGIN
-		IF debug THEN log.ln; END;
-		log.Append(platform.eoln)
-	END Ln;
-	
-	PROCEDURE (VAR log: BufLog) Reset, NEW; BEGIN log.pos := 0 END Reset;
+		IF debug THEN blog.ln END;
+		BAppend(platform.eoln)
+	END BLn;
+
+	PROCEDURE BReset; BEGIN blog.pos := 0 END BReset;
+
+	PROCEDURE BInt (x: LONGINT);
+		VAR a: ARRAY 25 OF CHAR;
+		CONST max = 25;
+		VAR b: ARRAY max OF CHAR; i, j: INTEGER; y: LONGINT;
+	BEGIN
+		IF x < 0 THEN x := -x; a[0] := '-'; j := 1 ELSIF x > 0 THEN j := 0 ELSE j := 1; a[0] := '0' END;
+		i := 0;
+		WHILE x # 0 DO y := x MOD 10; b[i] := SHORT(CHR(y + ORD('0'))); x := x DIV 10; INC(i) END;
+		DEC(i); WHILE (i >= 0) & (j < max) DO a[j] := b[i]; INC(j); DEC(i) END;
+		ASSERT(j < max, 20);
+		a[j] := 0X;
+		BString(a)
+	END BInt;
+
+	PROCEDURE BHex (x: LONGINT);
+		VAR i, xx, yy: INTEGER; y: LONGINT; buf: ARRAY 17 OF CHAR;
+	BEGIN
+		IF (MIN(INTEGER) < x) & (x < MAX(INTEGER)) THEN
+			i := 7; xx := SHORT(x); WHILE i >= 0 DO
+				yy := xx MOD 16; xx := xx DIV 16;
+				IF yy > 9 THEN yy := yy + (ORD("A") - ORD("0") - 10) END;
+				buf[i] := CHR(yy + ORD("0")); DEC(i)
+			END;
+			buf[8] := 0X
+		ELSE
+			i := 15; WHILE i >= 0 DO
+				y := x MOD 16; x := x DIV 16;
+				IF y > 9 THEN y := y + (ORD("A") - ORD("0") - 10) END;
+				buf[i] := CHR(y + ORD("0")); DEC(i)
+			END;
+			buf[16] := 0X
+		END;
+		BString(buf)
+	END BHex;
+
 	
 	(* -------------------- miscellaneous tools -------------------- *)
 
@@ -745,7 +740,7 @@ MODULE Kernel;
 	
 	PROCEDURE Assert (cond: BOOLEAN; IN msg: ARRAY OF CHAR);
 	BEGIN
-		IF ~cond THEN log.String(msg); log.Ln; IF platform.initialized THEN Quit(1) END END
+		IF ~cond THEN BString(msg); BLn; IF platform.initialized THEN Quit(1) END END
 	END Assert;
 	
 	PROCEDURE Time* (): LONGINT;
@@ -780,13 +775,13 @@ MODULE Kernel;
 				ASSERT(base MOD 16 = 0, 60);
 				c := S.VAL(Cluster, base); c.size := SHORT(sz); c.max := capacity
 				(*INC(total, <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6QAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABjAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAIAAAA@2NhcGFjaXR5"/>size<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>)*)
-				(* ;IF debug THEN log.String("monoClusterMem: c.max = "); log.Hex(c.max); log.Ln END; *)
+				(* ;IF debug THEN BString("monoClusterMem: c.max = "); BHex(c.max); BLn END; *)
 			ELSE 
 				a := (base + 15) DIV 16 * 16; c := S.VAL(Cluster, a); 
 				c.max := base; 
 				c.size := SHORT(capacity - (a - base));
 				(*INC(total, size)*) 
-				(* ;IF debug THEN log.String("~monoClusterMem: c.max = "); log.Hex(c.max); log.Ln END; *)
+				(* ;IF debug THEN BString("~monoClusterMem: c.max = "); BHex(c.max); BLn END; *)
 			END;
 			INC(used, SHORT(sz)); 
 		END
@@ -1156,12 +1151,12 @@ MODULE Kernel;
 			IF platform # NIL THEN platform.InitModule(mod) END;
 			(*
 			IF debug THEN
-				log.String("BEGIN "); log.String(LONG(mod.name)); log.String(' ')
+				BString("BEGIN "); BString(LONG(mod.name)); BString(' ')
 			END;
 			*)
 			body(); actual := NIL
 		ELSIF debug THEN
-			log.String("Noinit"); log.Ln
+			BString("Noinit"); BLn
 		END
 	END InitModule;
 
@@ -1177,9 +1172,9 @@ MODULE Kernel;
 		IF m = NIL THEN loadres := moduleNotFound END;
 		(*
 		IF debug THEN
-			log.String('Module '); log.String(SHORT(name)); 
-			IF m = NIL THEN log.String(' NOT yet') ELSE log.String(' already') END;
-			log.String(' loaded'); log.String(0AX);
+			BString('Module '); BString(SHORT(name)); 
+			IF m = NIL THEN BString(' NOT yet') ELSE BString(' already') END;
+			BString(' loaded'); BString(0AX);
 		END;
 		*)
 		RETURN m
@@ -1190,7 +1185,7 @@ MODULE Kernel;
 		IF loader # NIL THEN
 			loader.res := done;
 			(*
-			IF debug THEN log.String('Loading '); log.String(SHORT(name)); log.String(0AX); END;
+			IF debug THEN BString('Loading '); BString(SHORT(name)); BString(0AX); END;
 			*)
 			RETURN loader.ThisMod(name)
 		ELSE
@@ -1327,7 +1322,7 @@ MODULE Kernel;
 		mod.next := modList; modList := mod; 
 		(*
 		IF debug THEN
-			log.String('Registering '); log.String(LONG(mod.name)); log.String(0AX)
+			BString('Registering '); BString(LONG(mod.name)); BString(0AX)
 		END;
 		*)
 		mod.refcnt := 0; INCL(mod.opts, dyn); i := 0;
@@ -1541,7 +1536,7 @@ MODULE Kernel;
 				mode := 0X; form := 0X; adr := 0
 			END
 		ELSE
-			log.String("Kernel.GetRefVar failed! "); log.Hex(ref); log.String('H'); log.Ln;
+			BString("Kernel.GetRefVar failed! "); BHex(ref); BString('H'); BLn;
 			mode := 0X; form := 0X; adr := 0
 		END
 	END GetRefVar;
@@ -1960,9 +1955,9 @@ MODULE Kernel;
 		VAR c: Cluster;
 	BEGIN
 		c := root;
-		log.String('Clusters:'); log.Ln;
+		BString('Clusters:'); BLn;
 		WHILE c # NIL DO
-			log.Hex(S.VAL(ADDRESS, c)); log.String(' '); log.Hex(c.size); log.String(' '); log.Hex(c.max); log.Ln; c := c.next
+			BHex(S.VAL(ADDRESS, c)); BString(' '); BHex(c.size); BString(' '); BHex(c.max); BLn; c := c.next
 		END;
 	END DumpClusters;
 	
@@ -1971,13 +1966,13 @@ MODULE Kernel;
 	BEGIN
 		i := 0;
 		REPEAT
-			log.Hex(i); log.String(": ");
-			IF free[i] = sentinel THEN log.String('!')
+			BHex(i); BString(": ");
+			IF free[i] = sentinel THEN BString('!')
 			ELSE 
 				f := free[i];
-				REPEAT log.Hex(f.size); log.String(' '); f := f.next UNTIL (f = sentinel) OR (f = NIL)
+				REPEAT BHex(f.size); BString(' '); f := f.next UNTIL (f = sentinel) OR (f = NIL)
 			END;
-			log.Ln;
+			BLn;
 			INC(i)
 		UNTIL i = N
 	END DumpFree;
@@ -2206,7 +2201,7 @@ MODULE Kernel;
 			IF ~platform.IsReadable(i, i) THEN chars := "?? "
 			ELSE S.MOVE(i, S.ADR(b), 1); chars[0] := HexDig(b DIV 10H); chars[1] := HexDig(b MOD 10H)
 			END;
-			blog.String(chars); INC(i) 
+			BString(chars); INC(i) 
 		END
 	END ShowOffendingCodes;
 	
@@ -2217,18 +2212,18 @@ MODULE Kernel;
 		u := unit; unit := defLogger;
 		GetThisRefFrame(frame, pc, fp);
 		WHILE ~frame.eos DO
-			blog.Int(frame.depth); blog.String(': ');
-			IF frame.m = '' THEN blog.String('<caller outside BB>') 
-			ELSE blog.String(frame.m); blog.String('.'); blog.String(frame.p)
+			BInt(frame.depth); BString(': ');
+			IF frame.m = '' THEN BString('<caller outside BB>') 
+			ELSE BString(frame.m); BString('.'); BString(frame.p)
 			END;
-			IF frame.pos >= 0 THEN blog.String(" [@="); blog.Int(frame.pos); blog.String('] ' ) 
-			ELSIF frame.pos = unloaded THEN blog.String("[unloaded] ")
+			IF frame.pos >= 0 THEN BString(" [@="); BInt(frame.pos); BString('] ' ) 
+			ELSIF frame.pos = unloaded THEN BString("[unloaded] ")
 			END;
-			blog.String(" <PC="); blog.Hex(frame.<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5gAAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABgAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAFAAAA@21vZHBj"/>pc<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>); blog.String(' FP='); blog.Hex(frame.fp); blog.String('>'); 
+			BString(" <PC="); BHex(frame.<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5gAAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABgAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAFAAAA@21vZHBj"/>pc<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>); BString(' FP='); BHex(frame.fp); BString('>'); 
 			(* improve? show PC WRT module's code rather than absolute address 
 				ShowOffendingCodes(frame.pc + 1);
 			*)
-			blog.Ln;
+			BLn;
 			GetRefFrame(frame)
 		END;
 		unit := u
@@ -2256,7 +2251,7 @@ MODULE Kernel;
 	PROCEDURE Try* (h: TryHandler; a, b, c: INTEGER);
 	BEGIN
 		IF ~platform.initialized THEN
-			log.String('Fatal: No Platform hook installed into Kernel'); log.Ln; Quit(1)
+			BString('Fatal: No Platform hook installed into Kernel'); BLn; Quit(1)
 		ELSE
 			INC(tryCount); platform.Try(h, a, b, c); DEC(tryCount)
 		END
@@ -2279,59 +2274,59 @@ MODULE Kernel;
 	
 	PROCEDURE TrapTitle (err, val: INTEGER);
 	BEGIN
-		IF err = 129 THEN blog.String("129 invalid with")
-		ELSIF err = 130 THEN blog.String("130 invalid case")
-		ELSIF err = 131 THEN blog.String("131 function without return")
-		ELSIF err = 132 THEN blog.String("132 type guard")
-		ELSIF err = 133 THEN blog.String("133 implied type guard")
-		ELSIF err = 134 THEN blog.String("134 value out of range")
-		ELSIF err = 135 THEN blog.String("135 index out of range")
-		ELSIF err = 136 THEN blog.String("136 string too long")
-		ELSIF err = 137 THEN blog.String("137 stack overflow")
-		ELSIF err = 138 THEN blog.String("138 integer overflow")
-		ELSIF err = 139 THEN blog.String("139 division by zero")
-		ELSIF err = 140 THEN blog.String("140 infinite real result")
-		ELSIF err = 141 THEN blog.String("141 real underflow")
-		ELSIF err = 142 THEN blog.String("142 real overflow")
-		ELSIF err = 143 THEN blog.String("143 undefined real result")
-		ELSIF err = 200 THEN blog.String("200 keyboard interrupt")
-		ELSIF err = 202 THEN blog.String("202 illegal instruction:  "); blog.Int(val)
-		ELSIF err = 203 THEN blog.String("203 illegal memory read [ad = "); blog.Hex(val); blog.String("]")
-		ELSIF err = 204 THEN blog.String("204 illegal memory write [ad = "); blog.Hex(val); blog.String("]")
-		ELSIF err = 205 THEN blog.String("205 illegal execution [ad = "); blog.Hex(val); blog.String("]")
-		ELSIF err < 0 THEN blog.String("exception #"); blog.Int(-err) 
-		ELSE blog.Int(err);
-			IF err = 126 THEN blog.String(" (not yet implemented)")
-			ELSIF err = 125 THEN blog.String(" (call of obsolete procedure)")
-			ELSIF err >= 100 THEN blog.String(" (invariant violated)")
-			ELSIF err >= 60 THEN blog.String(" (postcondition violated)")
-			ELSIF err >= 20 THEN blog.String(" (precondition violated)")
+		IF err = 129 THEN BString("129 invalid with")
+		ELSIF err = 130 THEN BString("130 invalid case")
+		ELSIF err = 131 THEN BString("131 function without return")
+		ELSIF err = 132 THEN BString("132 type guard")
+		ELSIF err = 133 THEN BString("133 implied type guard")
+		ELSIF err = 134 THEN BString("134 value out of range")
+		ELSIF err = 135 THEN BString("135 index out of range")
+		ELSIF err = 136 THEN BString("136 string too long")
+		ELSIF err = 137 THEN BString("137 stack overflow")
+		ELSIF err = 138 THEN BString("138 integer overflow")
+		ELSIF err = 139 THEN BString("139 division by zero")
+		ELSIF err = 140 THEN BString("140 infinite real result")
+		ELSIF err = 141 THEN BString("141 real underflow")
+		ELSIF err = 142 THEN BString("142 real overflow")
+		ELSIF err = 143 THEN BString("143 undefined real result")
+		ELSIF err = 200 THEN BString("200 keyboard interrupt")
+		ELSIF err = 202 THEN BString("202 illegal instruction:  "); BInt(val)
+		ELSIF err = 203 THEN BString("203 illegal memory read [ad = "); BHex(val); BString("]")
+		ELSIF err = 204 THEN BString("204 illegal memory write [ad = "); BHex(val); BString("]")
+		ELSIF err = 205 THEN BString("205 illegal execution [ad = "); BHex(val); BString("]")
+		ELSIF err < 0 THEN BString("exception #"); BInt(-err) 
+		ELSE BInt(err);
+			IF err = 126 THEN BString(" (not yet implemented)")
+			ELSIF err = 125 THEN BString(" (call of obsolete procedure)")
+			ELSIF err >= 100 THEN BString(" (invariant violated)")
+			ELSIF err >= 60 THEN BString(" (postcondition violated)")
+			ELSIF err >= 20 THEN BString(" (precondition violated)")
 			END
-		END; blog.Ln
+		END; BLn
 	END TrapTitle;
 	
 	PROCEDURE SigRepHeader (pc, fp, sp: ADDRESS; err: INTEGER; recursive: BOOLEAN);
 	BEGIN
-		blog.Reset;
-		blog.String("********* TRAP REPORT - BEGIN *********"); blog.Ln;
+		BReset;
+		BString("********* TRAP REPORT - BEGIN *********"); BLn;
 		platform.PrintHeaderInfo;
-		IF recursive THEN blog.String("RECURSIVE! ") END;
-		blog.String(" <PC="); blog.Hex(pc); blog.String(", FP="); blog.Hex(fp); 
-		blog.String(", SP="); blog.Hex(sp); blog.String(">"); blog.Ln;
+		IF recursive THEN BString("RECURSIVE! ") END;
+		BString(" <PC="); BHex(pc); BString(", FP="); BHex(fp); 
+		BString(", SP="); BHex(sp); BString(">"); BLn;
 		IF debug THEN
-			blog.String("dirty = {");
-			IF defLogger IN dirty THEN blog.String(" defLogger") END;
-			IF gc IN dirty THEN blog.String(" gc") END;
-			IF cleanup IN dirty THEN blog.String(" cleanup") END;
-			IF viewer IN dirty THEN blog.String(" viewer") END;
-			blog.String(" }"); blog.Ln;
+			BString("dirty = {");
+			IF defLogger IN dirty THEN BString(" defLogger") END;
+			IF gc IN dirty THEN BString(" gc") END;
+			IF cleanup IN dirty THEN BString(" cleanup") END;
+			IF viewer IN dirty THEN BString(" viewer") END;
+			BString(" }"); BLn;
 		END;
 		TrapTitle(err, val)
 	END SigRepHeader;
 
 	PROCEDURE SigRepFooter;
 	BEGIN
-		blog.String("********* TRAP REPORT - END *********"); blog.Ln;
+		BString("********* TRAP REPORT - END *********"); BLn;
 	END SigRepFooter;
 
 	PROCEDURE Report (_, __, ___: INTEGER);
@@ -2355,11 +2350,11 @@ MODULE Kernel;
 	BEGIN
 		stack := baseStack;
 		INCL(dirty, unit); unit := other;
-		IF ~platform.initialized THEN log.String("Fatal: No Platform hook installed into Kernel"); log.Ln; Quit(1)
+		IF ~platform.initialized THEN BString("Fatal: No Platform hook installed into Kernel"); BLn; Quit(1)
 		ELSE
 			platform.GetTrapInfo(tpc, tsp, tfp, err, val, recursive);
 			pc := SHORT(tpc); sp := SHORT(tsp); fp := SHORT(tfp);
-			IF pc = 0 THEN log.String('No actual trap when Kernel.HandleTrap called'); log.Ln; HALT(20)
+			IF pc = 0 THEN BString('No actual trap when Kernel.HandleTrap called'); BLn; HALT(20)
 			ELSE
 				INC(trapCount);
 				InitFpu;
@@ -2373,7 +2368,7 @@ MODULE Kernel;
 				END;
 				
 				IF (err = keyboardInterrupt) & (<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA!AAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAByAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAXAAAA@2N1cnJlbnRUcnlDb250ZXh0ID0gTklM"/>tryCount = 0<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>) THEN 
-					log.String("SIGINT received, preparing to quit"); log.Ln; Quit(1) 
+					BString("SIGINT received, preparing to quit"); BLn; Quit(1) 
 				ELSE 
 					IF ~(cleanup IN dirty) THEN Try(TrapCleanup, -1, -1, -1) END;
 					IF ~(viewer IN dirty) THEN Try(Report, -1, -1, -1) END
@@ -2408,11 +2403,11 @@ MODULE Kernel;
 		(*
 		IF debug THEN
 			IF monoClusterMem THEN
-				log.String("MonoCluster Heap Layout; ");
-				log.Int(root.size); log.String(" committed, "); log.Int(root.max); log.String(" reserved"); log.Ln;
+				BString("MonoCluster Heap Layout; ");
+				BInt(root.size); BString(" committed, "); BInt(root.max); BString(" reserved"); BLn;
 				DumpClusters	
 			ELSE
-				log.String("MultiCluster Heap Layout; no cluster allocated yet "); log.ln
+				BString("MultiCluster Heap Layout; no cluster allocated yet "); blog.ln
 			END
 		END
 		*)
@@ -2438,7 +2433,6 @@ MODULE Kernel;
 		ASSERT(platform.eoln # '', 23);
 		ASSERT(platform.Try # NIL, 24);
 		platform.SetupModListAccess; (* A. V. Shiryaev, 2012.11: OpenBSD *)
-		log.string := platform.String; log.ln := platform.Ln;
 		blog.string := platform.String; blog.ln := platform.Ln;
 		platform.initialized := TRUE;
 		(* After platform has been initialized, heap may be initialized *)

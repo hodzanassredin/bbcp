@@ -990,7 +990,7 @@ MODULE Kernel;
 			l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
 			l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 			l.blk := b; l.iptr := TRUE; l.next := finalizers; finalizers := l;
-			RETURN SHORT(S.ADR(b.last))
+			RETURN S.ADR(b.last)
 		ELSE
 			tag := S.VAL(Type, typ);
 			b := NewBlock(tag.size);
@@ -1001,7 +1001,7 @@ MODULE Kernel;
 				l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 				l.blk := b; l.next := finalizers; finalizers := l
 			END;
-			RETURN SHORT(S.ADR(b.last))
+			RETURN S.ADR(b.last)
 		END
 	END NewRec;
 
@@ -1043,7 +1043,7 @@ MODULE Kernel;
 			l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 			l.blk := b; l.aiptr := TRUE; l.next := finalizers; finalizers := l
 		END;
-		RETURN SHORT(S.ADR(b.last))
+		RETURN S.ADR(b.last)
 	END NewArr;
 
 
@@ -1291,7 +1291,7 @@ MODULE Kernel;
 		IF t.size = -1 THEN o := NIL
 		ELSE
 			i := 0; WHILE t.ptroffs[i] >= 0 DO INC(i) END;
-			IF t.ptroffs[i+1] >= 0 THEN INC(S.VAL(INTEGER, t)) END;	(* with interface pointers *)
+			IF t.ptroffs[i+1] >= 0 THEN INC(S.VAL(LONGINT, t)) END;	(* with interface pointers *)
 			o := S.VAL(S.PTR, NewRec(S.VAL(INTEGER, t)))	(* generic NEW *)
 		END
 	END NewObj;

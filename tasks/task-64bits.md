@@ -210,3 +210,13 @@ CP-записей. Плюс calling convention полностью 32-битна�
   +16, HandleTrap читал мусор), tmDesc, _pad 28, si_band: long — исправлено;
   GTK-записи (GtkSelectionData, GdkEvent×17, GObject-иерархия и др.) съезжают —
   отдельный список в KB/LibcLayout64-Audit.md для GUI-этапа.
+- StdInterpreter краш: prologue-заполнение локалов (InitOutPar/InitPtrs2/
+  AllocAndInitAll) использовало MakeReg(DI/SP, Int32) → lea/mov 32-бит →
+  стековый адрес усекался (rep stos по rdi=0xffff9de8). Фикс: форма Pointer.
+- Kernel.NewRec/NewArr: НЕ трогать сигнатуры INTEGER (арена < 2ГБ, err 220/777
+  от бэкенда при LONGINT-парамах). Реальный баг был SHORT(S.ADR) = 16 бит.
+- Files.dir: корень = dirname(/proc/self/exe), поэтому bbrun64 требует
+  BB_STANDARD_DIR=<корень проекта> (иначе динамическая загрузка ищет
+  Code/ под Dev/Rsrc). bbrun64 сам инжектит bootInfo (argc/argv).
+- Kernel.processor должен быть 12 (amd64), иначе StdLoader: syntax error.
+- Инструмент: tools64/crash.sh — краш → Module+offset+регистры+стек+дизасм.

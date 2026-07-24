@@ -49,7 +49,7 @@ MODULE Meta;
 			obj-: INTEGER;			(* typObj, varObj, procObj, fieldObj, modObj, parObj *)
 			typ-: INTEGER;			(* typObj, varObj, fieldObj, parObj: type;	else: 0 *)
 			vis-: INTEGER;			(* varObj, procObj, fieldObj, parObj: vis;	else: 0 *)
-			adr-: INTEGER;			(* varObj, procObj: adr;	fieldObj: offs;	parObj: num;	else: 0 *)
+			adr-: LONGINT;			(* varObj, procObj: adr;	fieldObj: offs;	parObj: num;	else: 0 *)
 			mod: Kernel.Module;	(* static varObj, procObj, modObj: mod;	else: NIL *)
 			desc: Kernel.Type;		(* typObj, varObj, fieldObj, parObj: struct;	procObj: sig;	else: NIL *)
 			ptr: ArrayPtr;				  (* # NIL => item valid;	dynamic varObj: ptr;	else: dummy *)
@@ -62,7 +62,7 @@ MODULE Meta;
 			mode: INTEGER;	(* modScan, globScan, recVarScan, recTypeScan *)
 			base: INTEGER;	(* recVarScan, recTypeScan: base level index *)
 			vis: INTEGER;		(* recVarScan: record vis *)
-			adr: INTEGER;		(* recVarScan: record adr *)
+			adr: LONGINT;		(* recVarScan: record adr *)
 			idx: INTEGER;		(* globScan, recVarScan, recTypeScan: object index *)
 			desc: Kernel.Type;	(* recVarScan, recTypeScan: record desc *)
 			mod: Kernel.Module;	(* modScan: next mod;	globScan, recVarScan: source mod *)
@@ -252,10 +252,10 @@ MODULE Meta;
 		i.vis := obj.id DIV 16 MOD 16;
 		IF i.obj = procObj THEN
 			i.typ := undef; i.desc := SYSTEM.VAL(Kernel.Type, obj.struct);
-			i.adr := SHORT(mod.procBase + obj.offs); i.mod := mod	(* TODO64: Item.adr СЂР°СЃС€РёСЂРёС‚СЊ РґРѕ LONGINT *)
+			i.adr := mod.procBase + obj.offs; i.mod := mod
 		ELSE
 			i.typ := TypOf(obj.struct); i.desc := obj.struct;
-			IF i.obj = varObj THEN i.adr := SHORT(mod.varBase + obj.offs); i.mod := mod
+			IF i.obj = varObj THEN i.adr := mod.varBase + obj.offs; i.mod := mod
 			ELSIF i.obj = fieldObj THEN i.adr := obj.offs; i.mod := NIL
 			ELSE i.adr := undef; i.mod := NIL
 			END
@@ -293,7 +293,7 @@ MODULE Meta;
 	END Lookup;
 
 	PROCEDURE (IN in: Item) Lookup* (IN name: ARRAY OF CHAR; VAR i: Item), NEW;
-		VAR obj: Kernel.Object; o, v, lev, j, a: INTEGER; m: Kernel.Module;
+		VAR obj: Kernel.Object; o, v, lev, j: INTEGER; a: LONGINT; m: Kernel.Module;
 	BEGIN
 		IF in.ext # NIL THEN in.ext.Lookup(name, i); RETURN END;
 		ASSERT(in.ptr # NIL, 20);
@@ -451,7 +451,7 @@ MODULE Meta;
 		ASSERT(ptr.typ IN {sysPtrTyp, anyPtrTyp, ptrTyp}, 21);
 		ASSERT(ptr.obj = varObj, 22);
 		ASSERT((ptr.mod = NIL) OR (ptr.mod.refcnt >= 0), 23);
-		SYSTEM.GET(ptr.adr, ref.adr);
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, ptr.adr), ref.adr);
 		IF ref.adr # 0 THEN
 			IF ptr.typ # ptrTyp THEN ref.typ := recTyp
 			ELSE ref.desc := ptr.desc.base[0]; ref.typ := TypOf(ref.desc)
@@ -600,7 +600,13 @@ MODULE Meta;
 
 	(* ---------- access to item values ---------- *)
 
-	PROCEDURE ValToItem (IN x: Value; VAR i: Item);
+	PROCEDURE AdrOf (VAR x: Value): LONGINT;
+		VAR a: LONGINT;
+	BEGIN
+		a := SYSTEM.ADR(x); RETURN a	(* напрямую RETURN ADR — регистровая утечка 777 в бэкенде *)
+	END AdrOf;
+
+PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-записи сломан в бэкенде (777) *)
 		VAR desc: Kernel.Type;
 	BEGIN
 		desc := DescOf(x);
@@ -608,7 +614,7 @@ MODULE Meta;
 		ASSERT(desc.fields.num = 1, 26);	(* one field in x *)
 		i.desc := desc.fields.obj[0].struct;
 		i.typ := TypOf(i.desc); i.obj := varObj; i.ext := NIL; i.vis := exported;
-		i.ptr := dummy; i.adr := SYSTEM.ADR(x)
+		i.ptr := dummy; i.adr := AdrOf(x)
 	END ValToItem;
 	
 	PROCEDURE^ EqualSignature (a, b: Kernel.Signature): BOOLEAN;
@@ -651,14 +657,14 @@ MODULE Meta;
 		IF a.obj = procObj THEN
 			IF (b.typ # procTyp)
 				OR ~EqualSignature(SignatureOf(a), SignatureOf(b)) THEN RETURN END;
-			SYSTEM.PUT(b.adr, a.adr); 
+			SYSTEM.PUT(SYSTEM.VAL(ANYPTR, b.adr), a.adr); 
 		ELSE	(* a.obj = varObj *)
 			IF a.typ # b.typ THEN RETURN END;
 			IF a.typ >= recTyp THEN
 				IF a.typ = ptrTyp THEN
 					at.desc := a.desc.base[0]; at.typ := TypOf(at.desc); at.ptr := dummy; at.ext := NIL;
 					bt.desc := b.desc.base[0]; bt.typ := TypOf(bt.desc); bt.ptr := dummy; bt.ext := NIL;
-					SYSTEM.GET(a.adr, n);
+					SYSTEM.GET(SYSTEM.VAL(ANYPTR, a.adr), n);
 					IF (at.typ = recTyp) & (n # 0) THEN
 						SYSTEM.GET(SYSTEM.VAL(INTEGER, n) - 4, at.desc);	(* dynamic type *)
 						at.desc :=  at.desc.base[bt.desc.id DIV 16 MOD 16]	(* projection to b *)
@@ -674,7 +680,7 @@ MODULE Meta;
 					~((at.typ = procTyp) & (bt.typ = procTyp)
 						& EqualSignature(SignatureOf(at), SignatureOf(bt))) THEN RETURN END
 			END;
-			SYSTEM.MOVE(a.adr, b.adr, SizeOf(b))
+			SYSTEM.MOVE(SYSTEM.VAL(ANYPTR, a.adr), SYSTEM.VAL(ANYPTR, b.adr), SizeOf(b))
 		END;
 		ok := TRUE
 	END Copy;
@@ -687,7 +693,7 @@ MODULE Meta;
 		IF proc.obj = procObj THEN
 			p := SYSTEM.VAL(Kernel.Command, proc.adr)
 		ELSE ASSERT((proc.obj = varObj) & (proc.typ = procTyp), 22);
-			SYSTEM.GET(proc.adr, p)
+			SYSTEM.GET(SYSTEM.VAL(ANYPTR, proc.adr), p)
 		END;
 		ASSERT((proc.mod = NIL) OR (proc.mod.refcnt >= 0), 23);
 		sig := SignatureOf(proc);
@@ -697,9 +703,9 @@ MODULE Meta;
 	END Call;
 	
 	PROCEDURE PutParam (IN par: Item; sig: Kernel.Signature; p: INTEGER;
-										VAR data: ARRAY OF INTEGER; VAR n: INTEGER;
+										VAR data: ARRAY OF LONGINT; VAR n: INTEGER;
 										OUT ok: BOOLEAN);	(* check & assign a parameter *)
-		VAR mode, fTyp, aTyp, padr, i, top: INTEGER; fDesc, aDesc: Kernel.Type;
+		VAR mode, fTyp, aTyp, i, top: INTEGER; padr: LONGINT; fDesc, aDesc: Kernel.Type;
 			l: LONGINT; s: SHORTINT; b: BYTE;
 	BEGIN
 		ok := FALSE;
@@ -740,7 +746,7 @@ MODULE Meta;
 				fDesc := fDesc.base[0];	(* formal base type *)
 				IF (mode = value) & (TypOf(fDesc) = recTyp) THEN
 					IF (aTyp # ptrTyp) & (aTyp # anyPtrTyp) THEN RETURN END;
-					SYSTEM.GET(padr, i); SYSTEM.GET(i - 4, aDesc);	(* dynamic record type *)
+					SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), i); SYSTEM.GET(i - 4, aDesc);	(* dynamic record type *)
 					aDesc := aDesc.base[fDesc.id DIV 16 MOD 16]	(* projection *)
 				ELSE
 					IF aTyp # ptrTyp THEN RETURN END;
@@ -756,17 +762,17 @@ MODULE Meta;
 			ELSIF fTyp = procTyp THEN
 				IF (aTyp # procTyp) OR (fDesc.size # aDesc.size) THEN RETURN END	(* same fingerprint *)
 			END;
-			IF mode = value THEN SYSTEM.GET(padr, data[n]); INC(n)
+			IF mode = value THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), data[n]); INC(n)
 			ELSE data[n] := padr; INC(n)
 			END
 		ELSE	(* basic type *)
 			IF fTyp # aTyp THEN RETURN END;
 			IF mode = value THEN
 				CASE SizeOf(par) OF
-				| 1: SYSTEM.GET(padr, b); data[n] := b; INC(n)
-				| 2: SYSTEM.GET(padr, s); data[n] := s; INC(n)
-				| 4: SYSTEM.GET(padr, i); data[n] := i; INC(n)
-				| 8: SYSTEM.GET(padr, l); data[n] := SHORT(l); INC(n); data[n] := SHORT(l DIV 100000000L); INC(n)
+				| 1: SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), b); data[n] := b; INC(n)
+				| 2: SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), s); data[n] := s; INC(n)
+				| 4: SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), i); data[n] := i; INC(n)
+				| 8: SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), l); data[n] := l; INC(n)	(* 64-Р±РёС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ вЂ” РѕРґРЅРёРј СЃР»РѕС‚РѕРј *)
 				END
 			ELSE	(* var par *)
 				data[n] := padr; INC(n)
@@ -797,15 +803,15 @@ MODULE Meta;
 	
 	PROCEDURE (IN proc: Item) ParamCall* (IN par: ARRAY OF Item; VAR dest: Item;
 																			OUT ok: BOOLEAN), NEW;
-		VAR n, p, adr, padr: INTEGER; ret: LONGINT;
-			data: ARRAY 256 OF INTEGER; sig: Kernel.Signature;
+		VAR n, p: INTEGER; adr: LONGINT; ret: LONGINT;
+			data: ARRAY 256 OF LONGINT; sig: Kernel.Signature;
 	BEGIN
 		ok := TRUE;
 		ASSERT(proc.ext = NIL, 31);
 		ASSERT(proc.ptr # NIL, 20);
 		IF proc.obj = procObj THEN adr := proc.adr
 		ELSE ASSERT((proc.obj = varObj) & (proc.typ = procTyp), 22);
-			SYSTEM.GET(proc.adr, adr);
+			SYSTEM.GET(SYSTEM.VAL(ANYPTR, proc.adr), adr);
 			IF adr = 0 THEN ok := FALSE; RETURN END
 		END;
 		ASSERT((proc.mod = NIL) OR (proc.mod.refcnt >= 0), 23);
@@ -825,15 +831,15 @@ MODULE Meta;
 	PROCEDURE (IN proc: Item) ParamCallVal* (IN par: ARRAY OF POINTER TO Value; VAR dest: Value;
 																			OUT ok: BOOLEAN), NEW;
 		TYPE IP = POINTER TO Item;
-		VAR n, p, adr, padr: INTEGER; ret: LONGINT; x: Item;
-			data: ARRAY 256 OF INTEGER; sig: Kernel.Signature;
+		VAR n, p: INTEGER; adr: LONGINT; ret: LONGINT; x: Item;
+			data: ARRAY 256 OF LONGINT; sig: Kernel.Signature;
 	BEGIN
 		ok := TRUE;
 		ASSERT(proc.ext = NIL, 31);
 		ASSERT(proc.ptr # NIL, 20);
 		IF proc.obj = procObj THEN adr := proc.adr
 		ELSE ASSERT((proc.obj = varObj) & (proc.typ = procTyp), 22);
-			SYSTEM.GET(proc.adr, adr);
+			SYSTEM.GET(SYSTEM.VAL(ANYPTR, proc.adr), adr);
 			IF adr = 0 THEN ok := FALSE; RETURN END
 		END;
 		ASSERT((proc.mod = NIL) OR (proc.mod.refcnt >= 0), 23);
@@ -880,7 +886,7 @@ MODULE Meta;
 		END
 	END GetVal;
 
-	PROCEDURE (IN var: Item) PutVal* (IN x: Value; OUT ok: BOOLEAN), NEW;
+	PROCEDURE (IN var: Item) PutVal* (VAR x: Value; OUT ok: BOOLEAN), NEW;  (* VAR: через ValToItem нужен адрес *)
 		VAR xi: Item;
 	BEGIN
 		ASSERT(var.ext = NIL, 31);
@@ -968,7 +974,7 @@ MODULE Meta;
 		ASSERT(var.typ IN {anyPtrTyp, ptrTyp}, 21);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		SYSTEM.GET(var.adr, p);
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), p);
 		RETURN p
 	END PtrVal;
 
@@ -985,7 +991,7 @@ MODULE Meta;
 			vt := var.desc.base[0]; xt := Kernel.TypeOf(x);
 			ASSERT(xt.base[vt.id DIV 16 MOD 16] = vt, 28);	(* xt IS vt *)
 		END;
-		SYSTEM.PUT(var.adr, x)
+		SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 	END PutPtrVal;
 
 	PROCEDURE (IN var: Item) IntVal* (): INTEGER, NEW;
@@ -995,11 +1001,11 @@ MODULE Meta;
 		ASSERT(var.ptr # NIL, 20);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		IF var.typ = sCharTyp THEN SYSTEM.GET(var.adr, sc); x := ORD(sc)
-		ELSIF var.typ = charTyp THEN SYSTEM.GET(var.adr, ch); x := ORD(ch)
-		ELSIF var.typ = byteTyp THEN SYSTEM.GET(var.adr, s); x := s
-		ELSIF var.typ = sIntTyp THEN SYSTEM.GET(var.adr, i); x := i
-		ELSIF var.typ = intTyp THEN SYSTEM.GET(var.adr, x)
+		IF var.typ = sCharTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), sc); x := ORD(sc)
+		ELSIF var.typ = charTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), ch); x := ORD(ch)
+		ELSIF var.typ = byteTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), s); x := s
+		ELSIF var.typ = sIntTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), i); x := i
+		ELSIF var.typ = intTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), x)
 		ELSE HALT(21)
 		END;
 		RETURN x
@@ -1012,11 +1018,11 @@ MODULE Meta;
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
 		ASSERT(var.vis = exported, 27);
-		IF var.typ = sCharTyp THEN SYSTEM.PUT(var.adr, SHORT(CHR(x)))
-		ELSIF var.typ = charTyp THEN SYSTEM.PUT(var.adr, CHR(x))
-		ELSIF var.typ = byteTyp THEN SYSTEM.PUT(var.adr, SHORT(SHORT(x)))
-		ELSIF var.typ = sIntTyp THEN SYSTEM.PUT(var.adr, SHORT(x))
-		ELSIF var.typ = intTyp THEN SYSTEM.PUT(var.adr, x)
+		IF var.typ = sCharTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), SHORT(CHR(x)))
+		ELSIF var.typ = charTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), CHR(x))
+		ELSIF var.typ = byteTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), SHORT(SHORT(x)))
+		ELSIF var.typ = sIntTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), SHORT(x))
+		ELSIF var.typ = intTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 		ELSE HALT(21)
 		END
 	END PutIntVal;
@@ -1028,8 +1034,8 @@ MODULE Meta;
 		ASSERT(var.ptr # NIL, 20);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		IF var.typ = sRealTyp THEN SYSTEM.GET(var.adr, r); x := r
-		ELSIF var.typ = realTyp THEN SYSTEM.GET(var.adr, x)
+		IF var.typ = sRealTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), r); x := r
+		ELSIF var.typ = realTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), x)
 		ELSE HALT(21)
 		END;
 		RETURN x
@@ -1042,8 +1048,8 @@ MODULE Meta;
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
 		ASSERT(var.vis = exported, 27);
-		IF var.typ = sRealTyp THEN SYSTEM.PUT(var.adr, SHORT(x))
-		ELSIF var.typ = realTyp THEN SYSTEM.PUT(var.adr, x)
+		IF var.typ = sRealTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), SHORT(x))
+		ELSIF var.typ = realTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 		ELSE HALT(21)
 		END
 	END PutRealVal;
@@ -1056,7 +1062,7 @@ MODULE Meta;
 		ASSERT(var.typ = longTyp, 21);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		SYSTEM.GET(var.adr, x);
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), x);
 		RETURN x
 	END LongVal;
 
@@ -1068,7 +1074,7 @@ MODULE Meta;
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
 		ASSERT(var.vis = exported, 27);
-		SYSTEM.PUT(var.adr, x)
+		SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 	END PutLongVal;
 
 	PROCEDURE (IN var: Item) CharVal* (): CHAR, NEW;
@@ -1078,8 +1084,8 @@ MODULE Meta;
 		ASSERT(var.ptr # NIL, 20);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		IF var.typ = sCharTyp THEN SYSTEM.GET(var.adr, s); x := s
-		ELSIF var.typ = charTyp THEN SYSTEM.GET(var.adr, x)
+		IF var.typ = sCharTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), s); x := s
+		ELSIF var.typ = charTyp THEN SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), x)
 		ELSE HALT(21)
 		END;
 		RETURN x
@@ -1092,8 +1098,8 @@ MODULE Meta;
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
 		ASSERT(var.vis = exported, 27);
-		IF var.typ = sCharTyp THEN SYSTEM.PUT(var.adr, SHORT(x))
-		ELSIF var.typ = charTyp THEN SYSTEM.PUT(var.adr, x)
+		IF var.typ = sCharTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), SHORT(x))
+		ELSIF var.typ = charTyp THEN SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 		ELSE HALT(21)
 		END
 	END PutCharVal;
@@ -1106,7 +1112,7 @@ MODULE Meta;
 		ASSERT(var.typ = boolTyp, 21);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		SYSTEM.GET(var.adr, x);
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), x);
 		RETURN x
 	END BoolVal;
 
@@ -1118,7 +1124,7 @@ MODULE Meta;
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
 		ASSERT(var.vis = exported, 27);
-		SYSTEM.PUT(var.adr, x)
+		SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 	END PutBoolVal;
 
 	PROCEDURE (IN var: Item) SetVal* (): SET, NEW;
@@ -1129,7 +1135,7 @@ MODULE Meta;
 		ASSERT(var.typ = setTyp, 21);
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
-		SYSTEM.GET(var.adr, x);
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, var.adr), x);
 		RETURN x
 	END SetVal;
 
@@ -1141,7 +1147,7 @@ MODULE Meta;
 		ASSERT(var.obj = varObj, 22);
 		ASSERT((var.mod = NIL) OR (var.mod.refcnt >= 0), 23);
 		ASSERT(var.vis = exported, 27);
-		SYSTEM.PUT(var.adr, x)
+		SYSTEM.PUT(SYSTEM.VAL(ANYPTR, var.adr), x)
 	END PutSetVal;
 
 	PROCEDURE (IN  type: Item) New* (): ANYPTR, NEW;
@@ -1174,7 +1180,7 @@ MODULE Meta;
 		ASSERT((i < n) & (d.obj[i].id DIV 16 MOD 16 = exported), 29);
 		ASSERT(val.desc.id DIV 4 MOD 4 < limited, 30);
 		Kernel.NewObj(p, val.desc);
-		SYSTEM.MOVE(val.adr, p, val.desc.size);
+		SYSTEM.MOVE(SYSTEM.VAL(ANYPTR, val.adr), p, val.desc.size);
 		RETURN p
 	END Copy;
 

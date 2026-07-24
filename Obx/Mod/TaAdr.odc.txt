@@ -1,0 +1,57 @@
+MODULE ObxTaAdr;
+	IMPORT S := SYSTEM;
+	TYPE R = RECORD a: INTEGER END;
+		Item = RECORD adr: LONGINT; x: INTEGER END; E = RECORD END;
+	PROCEDURE T1*;
+		VAR r: R; l, m: LONGINT; i: INTEGER;
+	BEGIN
+		l := S.ADR(r);
+		S.GET(S.VAL(ANYPTR, l), m);
+		S.PUT(S.VAL(ANYPTR, l), m);
+		S.GET(S.VAL(ANYPTR, l), i);
+		S.MOVE(S.VAL(ANYPTR, l), S.VAL(ANYPTR, m), 4)
+	END T1;
+	PROCEDURE T2* (IN r: R);
+		VAR l: LONGINT;
+	BEGIN
+		l := S.ADR(r.a)
+	END T2;
+	PROCEDURE T3* (IN a, b: Item);
+		VAR n: INTEGER; l: LONGINT;
+	BEGIN
+		S.GET(S.VAL(ANYPTR, a.adr), n);
+		S.GET(S.VAL(ANYPTR, a.adr), l);
+		S.PUT(S.VAL(ANYPTR, b.adr), l);
+		S.MOVE(S.VAL(ANYPTR, a.adr), S.VAL(ANYPTR, b.adr), 4)
+	END T3;
+	PROCEDURE T5* (VAR r: R);
+		VAR l: LONGINT;
+	BEGIN
+		l := S.ADR(r)
+	END T5;
+	PROCEDURE T6* (VAR e: E);
+		VAR l: LONGINT;
+	BEGIN
+		l := S.ADR(e)
+	END T6;
+	PROCEDURE T7* (x: REAL);
+		VAR a: LONGINT; s: SET;
+	BEGIN
+		a := S.ADR(x);
+		S.GET(S.VAL(ANYPTR, a + 4), s)
+	END T7;
+	PROCEDURE T8* (x: REAL);
+		VAR a, a2: LONGINT; s: SET;
+	BEGIN
+		a := S.ADR(x);
+		S.GET(S.VAL(ANYPTR, a), s);	(* базовая: без арифметики *)
+		a2 := a + 4;					(* арифметика отдельно *)
+		S.GET(S.VAL(ANYPTR, a2), s)
+	END T8;
+	PROCEDURE T9* (x: REAL);
+		VAR a: LONGINT; s: SET;
+	BEGIN
+		a := S.ADR(x) + 4;
+		S.GET(S.VAL(ANYPTR, a), s)
+	END T9;
+END ObxTaAdr.

@@ -794,8 +794,9 @@ MODULE DevCPLamd64;
 				DevCPE.GenByte(79H); DevCPE.GenByte(2);	(* jns end *)
 				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
 			ELSE
-				DevCPE.GenByte(79H); DevCPE.GenByte(1);	(* jns end *)
-				DevCPE.GenByte(48H);					(* dec eax *)
+				DevCPE.GenByte(79H);	(* jns end *)
+				IF src.form = Int16 THEN DevCPE.GenByte(3); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(2) END;
+				DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H)	(* dec ax/eax; 32-битный 48H в 64 битах = REX-префикс! TODO64: для Int64 нужен dec rax + cqo/REX.W idiv *)
 			END
 		ELSE
 			CheckSize(src.form, w); DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
@@ -807,11 +808,12 @@ MODULE DevCPLamd64;
 				DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
 				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
 			ELSE
-				DevCPE.GenByte(79H);	(* jns end *)
-				IF src.form = Int16 THEN DevCPE.GenByte(6); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(5) END;
+				DevCPE.GenByte(79H);	(* jns end: пропускает or(2) + je(2) + dec(3/2) *)
+				IF src.form = Int16 THEN DevCPE.GenByte(7); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(6) END;
 				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
-				DevCPE.GenByte(74H); DevCPE.GenByte(1);	(* je end *)
-				DevCPE.GenByte(48H);					(* dec eax *)
+				DevCPE.GenByte(74H);	(* je end: пропускает dec(3/2) *)
+				IF src.form = Int16 THEN DevCPE.GenByte(3); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(2) END;
+				DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H)	(* dec ax/eax; 32-битный 48H в 64 битах = REX-префикс! *)
 			END
 (*
 			CheckSize(src.form, w); DevCPE.GenByte(3AH + w); GenCExt(8 * rem, src); (* cmp rem,src *)
@@ -1101,18 +1103,22 @@ MODULE DevCPLamd64;
 		IF (dsize = 2) & (wsize < 2) THEN DevCPE.GenByte(31H); DevCPE.GenByte(0C0H) END; (* xor eax,eax *)
 		loop := NewLbl; end := NewLbl;
 		SetLabel(loop); LoadStr(wsize);
-		IF wsize = 0 THEN DevCPE.GenByte(46H) END; (* inc esi *)
+		IF wsize = 0 THEN	(* inc rsi (skip high byte of utf-16); 32-битный inc esi (46H) в 64 битах = REX-префикс! *)
+			DevCPE.GenByte(48H); DevCPE.GenByte(0FFH); DevCPE.GenByte(0C6H)
+		END;
 		IF len < 0 THEN (* no limit *)
 			StoreStr(dsize); TestNull(wsize); GenJump(ccNE, loop, TRUE);
-			IF excl THEN (* dec edi *)
-				DevCPE.GenByte(4FH);
-				IF dsize # 1 THEN DevCPE.GenByte(4FH) END
+			IF excl THEN (* dec rdi *)
+				DevCPE.GenByte(48H); DevCPE.GenByte(0FFH); DevCPE.GenByte(0CFH);
+				IF dsize # 1 THEN
+					DevCPE.GenByte(48H); DevCPE.GenByte(0FFH); DevCPE.GenByte(0CFH)
+				END
 			END;
 		ELSE	(* cx limit *)
 			IF excl THEN TestNull(wsize); GenJump(ccE, end, TRUE); StoreStr(dsize)
 			ELSE StoreStr(dsize); TestNull(wsize); GenJump(ccE, end, TRUE)
 			END;
-			DevCPE.GenByte(49H); (* dec ecx *)
+			DevCPE.GenByte(0FFH); DevCPE.GenByte(0C9H); (* dec ecx; 32-битный 49H в 64 битах = REX-префикс! *)
 			GenJump(ccNE, loop, TRUE);
 			GenAssert(ccNever, copyTrap); (* trap *)
 			SetLabel(end)
@@ -1127,9 +1133,13 @@ MODULE DevCPLamd64;
 		IF (dsize = 2) & (wsize < 2) THEN DevCPE.GenByte(31H); DevCPE.GenByte(0C0H); (* xor eax,eax *) END;
 		loop := NewLbl; end := NewLbl;
 		SetLabel(loop); LoadStr(wsize);
-		IF wsize = 0 THEN DevCPE.GenByte(46H) END; (* inc esi *)
+		IF wsize = 0 THEN	(* inc rsi; 32-битный inc esi (46H) в 64 битах = REX-префикс! *)
+			DevCPE.GenByte(48H); DevCPE.GenByte(0FFH); DevCPE.GenByte(0C6H)
+		END;
 		ScanStr(dsize, FALSE); GenJump(ccNE, end, TRUE);
-		IF dsize = 0 THEN DevCPE.GenByte(47H) END; (* inc edi *)
+		IF dsize = 0 THEN	(* inc rdi; 32-битный inc edi (47H) в 64 битах = REX-префикс! *)
+			DevCPE.GenByte(48H); DevCPE.GenByte(0FFH); DevCPE.GenByte(0C7H)
+		END;
 		TestNull(wsize); GenJump(ccNE, loop, TRUE);
 		SetLabel(end);
 		a1.mode := 0; a2.mode := 0

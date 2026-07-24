@@ -1,0 +1,613 @@
+MODULE Math;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="168275" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox"
+	organization	= "www.oberon.ch"
+	contributors	= "Oberon microsystems"
+	version	= "<odc-view type="StdLinks.Link" w="225940" h="132660" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="225940" h="132660" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="225940" h="132660" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="225940" h="132660" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="225940" h="132660" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAQwAAAAAAAAE7AAAAU3RkQ21kcy5PcGVuQnJvd3NlcignRG9jdS9CQi1MaWNlbnNlJywgJ0JsYWNrQm94IExpY2Vuc2UnKQA="/>Docu/BB-License<odc-view type="StdLinks.Link" w="225940" h="132660" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="153385" h="132660" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA@AEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAB2AQAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAbAQAA@w0JLSAyMDE3MDIyNCwgY2VudGVyICMxNDcsIEFkZGluZyBhICJNb2QxIiBmdW5jdGlvbiB0byBNYXRoL1NNYXRoDQktIDIwMTcwMzEwLCBjZW50ZXIgIzE1MSwgRXh0ZW5kaW5nIHRoZSBkb21haW4gb2YgIE1hdGguQXJjVGFuMiANCS0gMjAxNzAzMzAsIGNlbnRlciAjMTU3LCBFeHRlbmRpbmcgdGhlIGRvbWFpbiBvZiBNYXRoLlNpbiwgQ29zLCAmIFRhbg0JLSAyMDE4MDYyMywgY2VudGVyICMxODksIGltcHJvdmluZyB0aGUgdHJlYXRtZW50IG9mIHRoZSBzaWduIGJpdCBpbiBNYXRoL1NNYXRoDQk="/><odc-view type="StdFolds.Fold" w="153385" h="132660" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="153385" h="132660" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABkAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAJAAAA@w0JLSAuLi4NCQ=="/><odc-view type="StdFolds.Fold" w="153385" h="132660" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT SYSTEM;
+
+	VAR eps, e: REAL;
+
+
+	(* code procedures for 80387 math coprocessor *)
+
+	PROCEDURE [code] FLD (x: REAL);
+	PROCEDURE [code] TOP (): REAL;
+	PROCEDURE [code] FSW (): INTEGER 0DFH, 0E0H;
+	PROCEDURE [code] FSWs (): SET 0DFH, 0E0H;
+	PROCEDURE [code] ST0 (): REAL 0D9H, 0C0H;
+	PROCEDURE [code] ST1 (): REAL 0D9H, 0C1H;
+
+	PROCEDURE [code] FXCH 0D9H, 0C9H;
+	PROCEDURE [code] FLDst0 0D9H, 0C0H;	(* doublicate st[0] *)
+	PROCEDURE [code] FSTPst0 0DDH, 0D8H;	(* remove st[0] *)
+	PROCEDURE [code] FSTPst1 0DDH, 0D9H;	(* remove st[1] *)
+	PROCEDURE [code] FSTPDe 0DBH, 05DH, 0F4H;	(* FSTPD -12[FP] *)	(* COMPILER DEPENDENT *)
+	PROCEDURE [code] WAIT 09BH;
+	PROCEDURE [code] FNOP 0D9H, 0D0H;
+
+	PROCEDURE [code] FLD0 0D9H, 0EEH;
+	PROCEDURE [code] FLD1 0D9H, 0E8H;
+	PROCEDURE [code] FLDPI 0D9H, 0EBH;
+	PROCEDURE [code] FLDLN2 0D9H, 0EDH;
+	PROCEDURE [code] FLDLG2 0D9H, 0ECH;
+	PROCEDURE [code] FLDL2E 0D9H, 0EAH;
+
+	PROCEDURE [code] FADD 0DEH, 0C1H;
+	PROCEDURE [code] FADDst0 0D8H, 0C0H;
+	PROCEDURE [code] FSUB 0DEH, 0E9H;
+	PROCEDURE [code] FSUBn 0DCH, 0E9H;	(* no pop *)
+	PROCEDURE [code] FSUBR 0DEH, 0E1H;
+	PROCEDURE [code] FSUBst1 0D8H, 0E1H;
+	PROCEDURE [code] FMUL 0DEH, 0C9H;
+	PROCEDURE [code] FMULst0 0D8H, 0C8H;
+	PROCEDURE [code] FMULst1st0 0DCH, 0C9H;
+	PROCEDURE [code] FDIV 0DEH, 0F9H;
+	PROCEDURE [code] FDIVR 0DEH, 0F1H;
+	PROCEDURE [code] FDIVRst1 0D8H, 0F9H;
+	PROCEDURE [code] FCHS 0D9H, 0E0H;
+
+	PROCEDURE [code] FCOM 0D8H, 0D1H;
+	PROCEDURE [code] FSWax 0DFH, 0E0H;
+	PROCEDURE [code] SAHF 09EH;
+	PROCEDURE [code] JBE4 076H, 004H;
+	PROCEDURE [code] JAE4 073H, 004H;
+
+	PROCEDURE [code] FRNDINT 0D9H, 0FCH;
+	PROCEDURE [code] FSCALE 0D9H, 0FDH;	(* st[0] * 2^FLOOR(st[1]) *)
+	PROCEDURE [code] FXTRACT 0D9H, 0F4H;	(* exp -> st[1]; mant -> st[0] *)
+	PROCEDURE [code] FXAM 0D9H, 0E5H;
+
+	PROCEDURE [code] FSQRT 0D9H, 0FAH;	(* st[0] >= 0 *)
+	PROCEDURE [code] FSIN 0D9H, 0FEH;	(* |st[0]| < 2^63 *)
+	PROCEDURE [code] FCOS 0D9H, 0FFH;	(* |st[0]| < 2^63 *)
+	PROCEDURE [code] FSINCOS 0D9H, 0FBH;	(* |st[0]| < 2^63 *)
+	PROCEDURE [code] FTAN 0D9H, 0F2H;	(* |st[0]| < 2^63 *)
+	PROCEDURE [code] FATAN 0D9H, 0F3H;	(* atan2(st[1], st[0]) *)
+	PROCEDURE [code] FYL2X 0D9H, 0F1H;	(* st[1] * log2(st[0]), st[0] > 0 *)
+	PROCEDURE [code] FYL2XP1 0D9H, 0F9H;	(* st[1] * log2(1 + st[0]), |st[0]| < 1-sqrt(2)/2 *)
+	PROCEDURE [code] F2XM1 0D9H, 0F0H;	(* 2^st[0] - 1, |st[0]| <= 1 *)
+
+
+	PROCEDURE IsNaN* (x: REAL): BOOLEAN;
+	BEGIN
+		FLD(x); FXAM; FSTPst0; WAIT; RETURN FSWs() * {8, 10} = {8}
+	END IsNaN;
+
+
+	(** REAL precision **)
+
+	PROCEDURE Pi* (): REAL;
+	BEGIN
+		FLDPI; RETURN TOP()
+	END Pi;
+
+	PROCEDURE Eps* (): REAL;
+	BEGIN
+		RETURN eps
+	END Eps;
+
+
+	PROCEDURE Sqrt* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, argument of Sqrt must not be negative *)
+		FLD(x); FSQRT; WAIT; RETURN TOP()
+	END Sqrt;
+
+
+	PROCEDURE Exp* (x: REAL): REAL;
+	BEGIN
+		(* 2 ^ (x * 1/ln(2)) *)
+		FLD(x); FLDL2E; FMUL;
+		IF ABS(ST0()) = INF THEN FLD1
+		ELSE FLDst0; FRNDINT; FXCH; FSUBst1; FNOP; F2XM1; FLD1; FADD
+		END;
+		FSCALE; FSTPst1; RETURN TOP()
+	END Exp;
+
+	PROCEDURE Ln* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, argument of Ln must not be negative *)
+		(* ln(2) * ld(x) *)
+		FLDLN2; FLD(x); FYL2X; WAIT; RETURN TOP()
+	END Ln;
+
+	PROCEDURE Log* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, argument of Log must not be negative *)
+		(* log(2) * ld(x) *)
+		FLDLG2; FLD(x); FYL2X; WAIT; RETURN TOP()
+	END Log;
+
+	PROCEDURE Power* (x, y: REAL): REAL;
+	BEGIN
+		ASSERT(x >= 0, 20);
+		ASSERT((x # 0.0)  OR  (y # 0.0), 21);
+		ASSERT((x # INF)  OR  (y # 0.0), 22);
+		ASSERT((x # 1.0)  OR  (ABS(y) # INF), 23);
+		(* 2 ^ (y * ld(x)) *)
+		FLD(y); FLD(x); FYL2X;
+		IF ABS(ST0()) = INF THEN FLD1
+		ELSE FLDst0; FRNDINT; FXCH; FSUBst1; FNOP; F2XM1; FLD1; FADD
+		END;
+		FSCALE; FSTPst1; WAIT; RETURN TOP()
+	END Power;
+
+	PROCEDURE IntPower* (x: REAL; n: INTEGER): REAL;
+	BEGIN 
+		FLD1; FLD(x);
+		IF n = MIN(INTEGER) THEN RETURN IntPower(x, n + 1) / x END;
+		IF n <= 0 THEN FDIVRst1; (* 1 / x *) n := -n END;
+		WHILE n > 0 DO
+			IF ODD(n) THEN FMULst1st0; (* y := y * x *) DEC(n)
+			ELSE FMULst0; (* x := x * x *) n := n DIV 2
+			END
+		END;
+		FSTPst0; RETURN TOP()
+	END IntPower;
+
+
+	PROCEDURE Sin* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, ABS(x) # INF *)
+		FLD(x); FSIN; WAIT;
+		IF 10 IN FSWs() THEN FSTPst0; RETURN 0.  END;
+		RETURN TOP()
+	END Sin;
+
+	PROCEDURE Cos* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, ABS(x) # INF *)
+		FLD(x); FCOS; WAIT;
+		IF 10 IN FSWs() THEN FSTPst0; RETURN 1. END;
+		RETURN TOP()
+	END Cos;
+
+	PROCEDURE Tan* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, ABS(x) # INF *)
+		FLD(x); FTAN; FSTPst0; WAIT;
+		IF 10 IN FSWs() THEN RETURN 0. END;
+		RETURN TOP()
+	END Tan;
+
+	PROCEDURE SinCos* (x: REAL; OUT s, c: REAL);
+	BEGIN
+		(* Kernel error #143, ABS(x) # INF *)
+		FLD(x); FSINCOS; WAIT;
+		IF 10 IN FSWs() THEN FSTPst0; s := 0.; c := 1. ELSE c := TOP(); s := TOP() END
+	END SinCos;
+
+	PROCEDURE ArcSin* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, -1.0 <= x <= 1.0 *)
+		(* atan2(x, sqrt(1 - x*x)) *)
+		FLD(x); FLDst0; FMULst0; FLD1; FSUBR; FSQRT; FNOP; FATAN; WAIT; RETURN TOP()
+	END ArcSin;
+
+	PROCEDURE ArcCos* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, -1.0 <= x <= 1.0 *)
+		(* atan2(sqrt(1 - x*x), x) *)
+		FLD(x); FMULst0; FLD1; FSUBR; FSQRT; FLD(x); FATAN; WAIT; RETURN TOP()
+	END ArcCos;
+
+	PROCEDURE ArcTan* (x: REAL): REAL;
+	BEGIN
+		(* atan2(x, 1) *)
+		FLD(x); FLD1; FATAN; RETURN TOP()
+	END ArcTan;
+
+	PROCEDURE ArcTan2* (y, x: REAL): REAL;
+	BEGIN
+		FLD(y); FLD(x); FATAN; WAIT; RETURN TOP()
+	END ArcTan2;
+
+
+	PROCEDURE Sinh* (x: REAL): REAL;
+	BEGIN
+		(* IF IsNaN(x) THEN RETURN x END; *)
+		IF x = 0 THEN RETURN x (* +/- zero *) END;
+		(* abs(x) * 1/ln(2) *)
+		FLD(ABS(x)); FLDL2E; FMUL;
+		IF ST0() < 0.5 THEN
+			(* (2^z - 1) + (2^z - 1) / ((2^z - 1) + 1) *)
+			F2XM1; FLDst0; FLDst0; FLD1; FADD; FDIV; FADD
+		ELSIF ST0() # INF THEN
+			(* 2^z - 1 / 2^z *)
+			FLDst0; FRNDINT; FXCH; FSUBst1; FNOP; F2XM1; FLD1; FADD; FSCALE;
+			FSTPst1; FLDst0; FLD1; FDIVR; FSUB
+		END;
+		IF x < 0 THEN FCHS END;
+		RETURN TOP() * 0.5
+	END Sinh;
+
+	PROCEDURE Cosh* (x: REAL): REAL;
+	BEGIN
+		(* IF IsNaN(x) THEN RETURN x END; *)
+		(* 2^(abs(x) * 1/ln(2)) *)
+		FLD(ABS(x));
+		IF ST0() # INF THEN 
+			FLDL2E; FMUL; FLDst0; FRNDINT; FXCH; FSUBst1; FNOP; F2XM1; FLD1; FADD; FSCALE;
+			FSTPst1;
+			(* z + 1/z *)
+			FLDst0; FLD1; FDIVR; FADD
+		END;
+		RETURN TOP() * 0.5
+	END Cosh;
+
+	PROCEDURE Tanh* (x: REAL): REAL;
+	BEGIN
+		(* IF IsNaN(x) THEN RETURN x END; *)
+		IF x = 0 THEN RETURN x (* +/- zero *) END;
+		(* abs(x) * 1/ln(2) * 2 *)
+		FLD(ABS(x)); FLDL2E; FMUL; FADDst0;
+		IF ST0() < 0.5 THEN
+			(* (2^z - 1) / (2^z + 1) *)
+			F2XM1; FLDst0; FLD(2); FADD; FDIV
+		ELSIF ST0() < 65 THEN
+			(* 1 - 2 / (2^z + 1) *)
+			FLDst0; FRNDINT; FXCH; FSUBst1; FNOP; F2XM1; FLD1; FADD; FSCALE;
+			FSTPst1; FLD1; FADD; FLD(2); FDIVR; FLD1; FSUBR
+		ELSE
+			FSTPst0; FLD1
+		END;
+		IF x < 0 THEN FCHS END;
+		RETURN TOP()
+	END Tanh;
+
+	PROCEDURE ArcSinh* (x: REAL): REAL;
+	BEGIN
+		(* IF IsNaN(x) THEN RETURN x END; *)
+		IF x = 0 THEN RETURN x (* +/- zero *) END;
+		(* x*x *)
+		FLDLN2; FLD(ABS(x)); FLDst0; FMULst0;
+		IF ST0() < 0.067 THEN
+			(* ln(2) * ld(1 + x*x / (sqrt(x*x + 1) + 1) + x) *)
+			FLDst0; FLD1; FADD; FSQRT; FLD1; FADD; FDIV; FADD; FYL2XP1
+		ELSE
+			(* ln(2) * ld(x + sqrt(x*x + 1)) *)
+			FLD1; FADD; FSQRT; FADD; FYL2X
+		END;
+		IF x < 0 THEN FCHS END;
+		RETURN TOP()
+	END ArcSinh;
+
+	PROCEDURE ArcCosh* (x: REAL): REAL;
+	BEGIN
+		(* 20, x >= 1.0 *)
+		(* IF IsNaN(x) THEN RETURN x END; *)
+		(* ln(2) * ld(x + sqrt(x*x - 1)) *)
+		FLDLN2; FLD(x); FLDst0; FMULst0; FLD1; FSUB; FSQRT; FADD; FYL2X; WAIT; RETURN TOP()
+	END ArcCosh;
+
+	PROCEDURE ArcTanh* (x: REAL): REAL;
+	BEGIN
+		(* 20, -1.0 <= x <= 1.0 *)
+		(* IF IsNaN(x) THEN RETURN x END; *)
+		IF x = 0 THEN RETURN x (* +/- zero *) END;
+		(* |x| *)
+		FLDLN2; FLD(ABS(x)); 
+		IF ST0() < 0.12 THEN
+			(* ln(2) * ld(1 + 2*x / (1 - x)) *)
+			FLDst0; FLD1; FSUBR; FDIV; FADDst0; FYL2XP1
+		ELSE
+			(* ln(2) * ld((1 + x) / (1 - x)) *)
+			FLDst0; FLD1; FADD; FXCH; FLD1; FSUBR; FDIV; FNOP; FYL2X
+		END;
+		IF x < 0 THEN FCHS END;
+		WAIT;
+		RETURN TOP() * 0.5
+	END ArcTanh;
+
+
+	PROCEDURE Floor* (x: REAL): REAL;
+	BEGIN
+		FLD(x); FLDst0; FRNDINT; FCOM; FSWax; FSTPst1; SAHF; JBE4; FLD1; FSUB; RETURN TOP()
+	END Floor;
+
+	PROCEDURE Ceiling* (x: REAL): REAL;
+	BEGIN
+		FLD(x); FLDst0; FRNDINT; FCOM; FSWax; FSTPst1; SAHF; JAE4; FLD1; FADD; RETURN TOP()
+	END Ceiling;
+
+	PROCEDURE Round* (x: REAL): REAL;
+	BEGIN
+		FLD(x); 
+		IF ABS(ST0()) = INF THEN RETURN TOP() END;
+		FLDst0; FRNDINT; FSUBn; FXCH;
+		IF TOP() = 0.5 THEN FLD1; FADD END;
+		RETURN TOP()
+	END Round;
+
+	PROCEDURE Trunc* (x: REAL): REAL;
+	BEGIN 
+		FLD(x); FLDst0; FRNDINT;
+		IF ST1() >= 0 THEN
+			FCOM; FSWax; FSTPst1; SAHF; JBE4; FLD1; FSUB
+		ELSE
+			FCOM; FSWax; FSTPst1; SAHF; JAE4; FLD1; FADD
+		END;
+		RETURN TOP()
+	END Trunc;
+
+	PROCEDURE Frac* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, x # INF  &  x # -INF *)
+		FLD(x); FLDst0; FRNDINT;
+		IF ST1() >= 0 THEN
+			FCOM; FSWax; SAHF; JBE4; FLD1; FSUB
+		ELSE
+			FCOM; FSWax; SAHF; JAE4; FLD1; FADD
+		END;
+		FSUB; WAIT; RETURN TOP()
+	END Frac;
+
+	PROCEDURE Mod1* (x: REAL): REAL;
+	BEGIN
+		(* Kernel error #143, x # INF  &  x # -INF *)
+		FLD(x); FLDst0; FRNDINT;
+		FCOM; FSWax; SAHF; JBE4; FLD1; FSUB;
+		FSUB; WAIT; RETURN TOP()
+	END Mod1;
+
+	PROCEDURE Sign* (x: REAL): REAL;
+	BEGIN
+		FLD(x); FXAM; WAIT;
+		CASE FSW() DIV 256 MOD 8 OF
+		| 0, 2: FSTPst0; RETURN x	(* +/- zero *)
+		| 1, 4, 5: FSTPst0; RETURN 1.0
+		| 3, 6, 7: FSTPst0; RETURN -1.0
+		END
+	END Sign;
+
+	PROCEDURE SignBit* (x: REAL): BOOLEAN;	(*  IEEE 754-2008, section 5.7.2  *)
+		VAR s: SET; a: LONGINT;
+	BEGIN
+		a := SYSTEM.ADR(x); a := a + 4;	(* ADR+смещение только через LONGINT-времянку: adr-узел в арифметике ломает бэкенд *)
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, a), s);
+		RETURN 31 IN s
+	END SignBit;
+
+	PROCEDURE CopySign* (x, y: REAL): REAL;	(*  IEEE 754-2008, section 5.5.1  *)
+		VAR s: SET; a: LONGINT;
+	BEGIN
+		a := SYSTEM.ADR(y); a := a + 4;
+		SYSTEM.GET(SYSTEM.VAL(ANYPTR, a), s);
+		IF 31 IN s THEN RETURN -ABS(x) ELSE RETURN ABS(x) END
+	END CopySign;
+
+	PROCEDURE Mantissa* (x: REAL): REAL;
+	BEGIN
+		FLD(x); FXAM; WAIT;
+		CASE FSW() DIV 256 MOD 8 OF
+		| 4, 6: FXTRACT; FSTPst1; RETURN TOP()
+		| 0, 2: FSTPst0; RETURN x	(* +/- zero *)
+		| 5: FSTPst0; RETURN 1.0	(* inf *)
+		| 7: FSTPst0; RETURN -1.0	(* -inf *)
+		| 1: FSTPst0; RETURN 1.5	(* nan *)
+		| 3: FSTPst0; RETURN -1.5	(* -nan *)
+		END
+	END Mantissa;
+
+	PROCEDURE Exponent* (x: REAL): INTEGER;	(* COMPILER DEPENDENT *)
+		VAR e: INTEGER;	(* e is set by FSTPDe! *)
+	BEGIN
+		FLD(x); FXAM; WAIT;
+		CASE FSW() DIV 256 MOD 8 OF
+		| 4, 6: FXTRACT; FSTPst0; FSTPDe; WAIT; RETURN e
+		| 0, 2: FSTPst0; RETURN 0	(* zero *)
+		| 1, 3, 5, 7: FSTPst0; RETURN MAX(INTEGER)	(* inf or nan*)
+		END
+	END Exponent;
+
+	PROCEDURE Real* (m: REAL; e: INTEGER): REAL;
+		VAR s: SET; a: LONGINT;
+	BEGIN
+		IF (m = 0) THEN RETURN m (* +/- zero *) END;
+		ASSERT(~IsNaN(m) & (1 <= ABS(m)) & (ABS(m) < 2), 20);
+		IF e = MAX(INTEGER) THEN
+			a := SYSTEM.ADR(m); a := a + 4;
+			SYSTEM.GET(SYSTEM.VAL(ANYPTR, a), s);
+			SYSTEM.PUT(SYSTEM.VAL(ANYPTR, a), s + {20..30});
+			RETURN m
+		ELSE
+			FLD(e); FLD(m); FSCALE; FSTPst1; RETURN TOP()
+		END
+	END Real;
+
+BEGIN
+	eps := 1.0E+0; e := 2.0E+0;
+	WHILE e > 1.0E+0 DO eps := eps/2.0E+0; e := 1.0E+0 + eps END; eps := 2.0E+0 * eps;
+END Math.
+
+
+The following code shows how to implement a large part of this module
+on top of a small set of basic functions (Ln, Exp, Sin, Cos, ArcTan, Sqrt, and CopySign)
+and Component Pascal language features, i.e. without any code procedures.
+This may for example help to port the module to another platform.
+In earlier versions of BlackBox, up to and including version 1.7.1, these suggestions were generally simpler than the suggestions below. However those versions did not all give the correct (IEEE 754 mandated) values for inputs from the set {-INF, -0., +INF}.
+These suggestions are believed to be correct for such inputs. They have not been designed to operate correctly if the input is a NaN, although most of them could be extended by adding a first line:
+"IF IsNaN (x) THEN RETURN x END;"
+These are only suggestions; there may be faster or more accurate alternatives.
+
+	CONST
+		pi  =  3.141592653589793115997963468544185161590576171875;	(*  ? to 64-bits  *)
+		piBy2  =  1.5707963267948965579989817342720925807952880859375;
+		piBy4  =  0.78539816339744827899949086713604629039764404296875;
+		ln2  =  0.69314718055994528622676398299518041312694549560546875;
+		ln10  =  2.30258509299404590109361379290930926799774169921875;
+		lneps  =  -36.0436533891171535515240975655615329742431640625;	(*  eps = 2^-52  *)
+
+	PROCEDURE Pi* (): REAL;
+	BEGIN
+		RETURN pi
+	END Pi;
+
+	PROCEDURE Sign* (x: REAL): REAL;
+	BEGIN
+		IF x > 0. THEN RETURN 1.
+		ELSIF x < 0. THEN RETURN -1.
+		ELSE RETURN x
+		END
+	END Sign;
+	
+	PROCEDURE SignBit* (x: REAL): BOOLEAN;
+	BEGIN
+		RETURN CopySign(1., x) > 0.
+	END SignBit;
+
+	PROCEDURE Log* (x: REAL): REAL;
+	BEGIN
+		RETURN Ln(x)/ln10
+	END Log;
+	
+	PROCEDURE Power* (x, y: REAL): REAL;
+	BEGIN
+		ASSERT(x >= 0, 20);
+		ASSERT((x # 0.0)  OR  (y # 0.0), 21);
+		ASSERT((x # INF)  OR  (y # 0.0), 22);
+		ASSERT((x # 1.0)  OR  (ABS(y) # INF), 23);
+		RETURN Exp(y * Ln(x))
+	END Power;
+	
+	PROCEDURE IntPower* (x: REAL; n: INTEGER): REAL;
+		VAR y: REAL;
+	BEGIN
+		IF n = MIN(INTEGER) THEN RETURN IntPower(x, n + 1) / x END;
+		y := 1.;
+		IF n < 0 THEN x := 1./x; n := -n END;
+		WHILE n > 0 DO
+			IF ODD(n) THEN y := y*x; DEC(n)
+			ELSE x := x * x; n := n DIV 2
+			END
+		END;
+		RETURN y
+	END IntPower;
+
+	PROCEDURE Tan* (x: REAL): REAL;
+	BEGIN
+		RETURN Sin(x)/Cos(x)
+	END Tan;
+	
+	PROCEDURE ArcSin* (x: REAL): REAL;
+	BEGIN
+		ASSERT(ABS(x) <= 1., 20);
+		RETURN ArcTan(x / Sqrt(1. - x * x))
+	END ArcSin;
+	
+	PROCEDURE ArcCos* (x: REAL): REAL;
+	BEGIN
+		ASSERT(ABS(x) <= 1., 20);
+		RETURN ArcTan(Sqrt(1. - x * x) / x)
+	END ArcCos;
+
+	PROCEDURE ArcTan2* (y, x: REAL): REAL;
+	BEGIN
+		IF x = 0. THEN
+			IF ~SignBit(x) THEN RETURN Sign(y) * piBy2
+			ELSIF y = 0. THEN RETURN CopySign(pi, y)
+			ELSE RETURN CopySign(piBy2, y)  END
+		(* ELSIF y = 0. THEN														(*  Optional "speedup"  *)
+			RETURN (1. - Sign(x)) * CopySign(piBy2, y) *)
+		ELSIF (ABS(x) = INF) & (ABS(y) = INF) THEN
+			RETURN  (2. - Sign(x)) * CopySign(piBy4, y)
+		ELSE
+			RETURN ArcTan(y / x) + (1. - Sign(x)) * CopySign(piBy2, y)
+		END 
+	END ArcTan2;
+
+	PROCEDURE Sinh* (x: REAL): REAL;
+	BEGIN
+		IF x = 0. THEN RETURN x
+		ELSIF ABS(x) < -lneps THEN RETURN (Exp(x) - Exp(-x)) / 2.
+		ELSE RETURN Sign(x) * Exp(ABS(x)) / 2.
+		END
+	END Sinh;
+
+	PROCEDURE Cosh* (x: REAL): REAL;
+		VAR expx: REAL;
+	BEGIN
+		IF ABS(x) < -lneps THEN RETURN (Exp(x) + Exp(-x)) / 2.
+		ELSE RETURN Exp(ABS(x)) / 2.
+		END
+	END Cosh;
+
+	PROCEDURE Tanh* (x: REAL): REAL;
+		VAR e1, e2: REAL;
+	BEGIN 
+		IF x = 0. THEN RETURN x
+		ELSIF ABS(x) < -lneps THEN
+			e1 := Exp(x); e2 := 1. / e1;
+			RETURN (e1 - e2) / (e1 + e2)
+		ELSE
+			RETURN Sign(x)
+		END
+	END Tanh;
+
+	PROCEDURE ArcSinh* (x: REAL): REAL;
+	BEGIN
+		RETURN Sign (x) * Ln(ABS(x) + Sqrt(x * x + 1.))
+	END ArcSinh;
+
+	PROCEDURE ArcCosh* (x: REAL): REAL;
+	BEGIN
+		RETURN Ln(x + Sqrt(x * x - 1.))
+	END ArcCosh;
+
+	PROCEDURE ArcTanh* (x: REAL): REAL;
+	BEGIN
+		ASSERT(ABS(x) <= 1., 20);
+		IF x = 0. THEN RETURN x ELSE RETURN Ln((1. + x) / (1. - x)) / 2. END
+	END ArcTanh;
+
+	PROCEDURE Floor* (x: REAL): REAL;
+	BEGIN
+		IF ABS(x) >= xInt THEN RETURN x
+		ELSE RETURN ENTIER(x)
+		END
+	END Floor;
+
+	PROCEDURE Ceiling* (x: REAL): REAL;
+	BEGIN
+		IF ABS(x) >= xInt THEN RETURN x
+		ELSE RETURN -ENTIER(-x)
+		END
+	END Ceiling;
+
+	PROCEDURE Round* (x: REAL): REAL;
+	BEGIN
+		IF ABS(x) >= xInt THEN RETURN x
+		ELSE RETURN ENTIER(x + 0.5)
+		END
+	END Round;
+
+	PROCEDURE Trunc* (x: REAL): REAL;
+	BEGIN 
+		IF ABS(x) >= xInt THEN RETURN x
+		ELSIF x >= 0 THEN RETURN ENTIER(x)
+		ELSE RETURN -ENTIER(-x)
+		END
+	END Trunc;
+
+	PROCEDURE Frac* (x: REAL): REAL;
+	BEGIN
+		IF ABS(x) >= xInt THEN RETURN 0.
+		ELSIF x >= 0 THEN RETURN x - ENTIER(x)
+		ELSE RETURN x + ENTIER(-x)
+		END
+	END Frac;
+
+	PROCEDURE Mod1* (x: REAL): REAL;
+	BEGIN
+		IF ABS(x) >= xInt THEN RETURN 0.
+		ELSE RETURN x - ENTIER(x)
+		END
+	END Mod1;

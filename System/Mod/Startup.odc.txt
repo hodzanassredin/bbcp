@@ -1,7 +1,10 @@
 MODULE Startup;
 
+	IMPORT Console;
+
 	PROCEDURE Setup*;
 	BEGIN	(* no-op: стартап консоли делает LinIntInit (ConsInterp.Run), GUI — LinInit *)
+		Console.WriteStr("*** STARTUP SETUP CALLED ***"); Console.WriteLn
 	END Setup;
 
 END Startup.

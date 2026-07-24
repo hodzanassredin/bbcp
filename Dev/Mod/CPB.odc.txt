@@ -891,7 +891,9 @@ MODULE DevCPB;
 					z := NewOp(op, typ, z)
 				ELSE err(127)
 				END ;
-				z.typ := DevCPT.int32typ
+				IF DevCPT.processor = 12 THEN z.typ := DevCPT.int64typ	(* amd64: ADR = полный 64-битный адрес (стек >4ГБ!) *)
+				ELSE z.typ := DevCPT.int32typ
+				END
 			| typfn, size: (*TYP, SIZE*)
 				z := NewOp(op, typ, z);
 				z.typ := DevCPT.int32typ
@@ -1467,7 +1469,8 @@ MODULE DevCPB;
 					CheckOldType(x);
 					IF x.typ.form = Pointer THEN x := NewLeaf(x.typ.BaseTyp.strobj) END;
 					IF x.typ.comp # Record THEN err(111) END;
-					MOp(adr, x)
+					MOp(adr, x);
+					IF DevCPT.processor = 12 THEN Convert(x, DevCPT.int32typ) END	(* TYP = дескриптор в арене <4ГБ, остаётся Int32 *)
 				ELSE
 					IF x.typ.form = Pointer THEN DeRef(x) END;
 					IF x.typ.comp # Record THEN err(111) END;
@@ -1488,7 +1491,7 @@ MODULE DevCPB;
 		  thisarrfn: (*THISARRAY*)
 				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
 				ELSIF f IN {Int8, Int16} THEN Convert(x, DevCPT.int32typ)
-				ELSIF f # Int32 THEN err(111)
+				ELSIF (f # Int32) & ~((f = Int64) & (DevCPT.processor = 12)) THEN err(111)	(* amd64: адрес может быть Int64 *)
 				END
 		| ccfn: (*SYSTEM.CC*)
 				MOp(cc, x)

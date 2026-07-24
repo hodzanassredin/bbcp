@@ -771,10 +771,11 @@ out:
        по умолчанию GUI (LinLoader). */
     {
         static const char* infra[] = {"Utf", "LinKernel", "Files", "LinEnv",
-            "LinFiles", "LinPackedFiles", "StdLoader", NULL};
+            "LinFiles", "LinPackedFiles", "StdLoader", "StdInterpreter", NULL};
         for (int j = 0; infra[j] != NULL; j++) {
             Module* m = ThisModule((char*)infra[j]);
-            if (m == NULL || (m->opts & init)) continue;
+            if (m == NULL) { printf("infra %s: NOT FOUND\n", infra[j]); continue; }
+            if (m->opts & init) { printf("infra %s: already init\n", infra[j]); continue; }
             m->opts = m->opts | init;
             BodyProc body = (BodyProc) m->code;
             printf("init %s (infra)...\n", m->name);

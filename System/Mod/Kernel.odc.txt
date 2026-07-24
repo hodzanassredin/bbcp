@@ -990,7 +990,7 @@ MODULE Kernel;
 			l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
 			l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 			l.blk := b; l.iptr := TRUE; l.next := finalizers; finalizers := l;
-			RETURN S.ADR(b.last)
+			RETURN SHORT(S.ADR(b.last))
 		ELSE
 			tag := S.VAL(Type, typ);
 			b := NewBlock(tag.size);
@@ -1001,7 +1001,7 @@ MODULE Kernel;
 				l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 				l.blk := b; l.next := finalizers; finalizers := l
 			END;
-			RETURN S.ADR(b.last)
+			RETURN SHORT(S.ADR(b.last))
 		END
 	END NewRec;
 
@@ -1036,14 +1036,14 @@ MODULE Kernel;
 		b := NewBlock(size);
 		IF b = NIL THEN RETURN 0 END;
 		b.tag := S.VAL(Type, eltyp + 2);	(* tag + array mark *)
-		b.last := S.ADR(b.last) + size - t.size;	(* pointer to last elem *)
-		b.first := S.ADR(b.last) + headSize;	(* pointer to first elem *)
+		b.last := SHORT(S.ADR(b.last) + size - t.size);	(* pointer to last elem *)
+		b.first := SHORT(S.ADR(b.last) + headSize);	(* pointer to first elem *)
 		IF fin THEN
 			l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
 			l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 			l.blk := b; l.aiptr := TRUE; l.next := finalizers; finalizers := l
 		END;
-		RETURN S.ADR(b.last)
+		RETURN SHORT(S.ADR(b.last))
 	END NewArr;
 
 
@@ -1370,23 +1370,23 @@ MODULE Kernel;
 
 	(* -------------------- dynamic procedure call  --------------------- *)	(* COMPILER DEPENDENT *)
 
-	PROCEDURE [code] PUSH (p: INTEGER) 050H;	(* push AX *)
-	PROCEDURE [code] CALL (a: INTEGER) 0FFH, 0D0H;	(* call AX *)
+	PROCEDURE [code] PUSH (p: LONGINT) 050H;	(* push AX *)
+	PROCEDURE [code] CALL (a: LONGINT) 0FFH, 0D0H;	(* call AX *)
 	PROCEDURE [code] RETI (): LONGINT;
 	PROCEDURE [code] RETR (): REAL;
 	
 	(*
+		64-бит: каждый слот par = 8 байт (один push).
 		type				par
-		32 bit scalar	value
-		64 bit scalar	low hi
+		scalar			value (64-битные — одним слотом)
 		var scalar		address
 		record			address tag
 		array			  address size
 		open array	   length_N-1 .. length_0
 	*)
 	
-	PROCEDURE Call* (adr: INTEGER; sig: Signature; IN par: ARRAY OF INTEGER; n: INTEGER): LONGINT;
-		VAR p, kind, sp, size: INTEGER; typ: Type; r: REAL;
+	PROCEDURE Call* (adr: LONGINT; sig: Signature; IN par: ARRAY OF LONGINT; n: INTEGER): LONGINT;
+		VAR p, kind, size: INTEGER; sp, src: LONGINT; typ: Type; r: REAL;
 	BEGIN
 		p := sig.num;
 		WHILE p > 0 DO	(* push parameters from right to left *)
@@ -1394,9 +1394,7 @@ MODULE Kernel;
 			typ := sig.par[p].struct;
 			kind := sig.par[p].id MOD 16;
 			IF (S.VAL(INTEGER, typ) DIV 256 = 0) OR (typ.id MOD 4 IN {0, 3}) THEN	(* scalar, ANYREC *)
-				IF (kind = 10) & ((S.VAL(INTEGER, typ) = 8) OR (S.VAL(INTEGER, typ) = 10)) THEN	(* 64 bit *)
-					DEC(n); PUSH(par[n])	(* push hi word *)
-				ELSIF S.VAL(INTEGER, typ) = 11 THEN   (* ANYREC *)
+				IF S.VAL(INTEGER, typ) = 11 THEN   (* ANYREC *)
 					ASSERT(kind # 10); (* not a value par, also checked by compiler *)
 					DEC(n); PUSH(par[n]) (* push tag *)
 				END;
@@ -1407,8 +1405,9 @@ MODULE Kernel;
 					DEC(n); PUSH(par[n])	(* push address *)
 				ELSE
 					DEC(n, 2);	(* skip tag *)
-					S.GETREG(SP, sp); sp := (sp - typ.size) DIV 4 * 4; S.PUTREG(SP, sp);	(* allocate space *)
-					S.MOVE(par[n], sp, typ.size)	(* copy to stack *)
+					src := par[n];
+					S.GETREG(SP, sp); sp := (sp - typ.size) DIV 8 * 8; S.PUTREG(SP, sp);	(* allocate space *)
+					S.MOVE(S.VAL(ANYPTR, src), S.VAL(ANYPTR, sp), typ.size)	(* copy to stack *)
 				END
 			ELSIF typ.size = 0 THEN	(* open array *)
 				size := typ.id DIV 16 MOD 16;	(* number of open dimensions *)
@@ -1420,9 +1419,10 @@ MODULE Kernel;
 				IF kind # 10 THEN	(* var par *)
 					DEC(n, 2); PUSH(par[n])	(* push address *)
 				ELSE
-					DEC(n); size := par[n]; DEC(n);
-					S.GETREG(SP, sp); sp := (sp - size) DIV 4 * 4; S.PUTREG(SP, sp);	(* allocate space *)
-					S.MOVE(par[n], sp, size)	(* copy to stack *)
+					DEC(n); size := SHORT(par[n]); DEC(n);
+					src := par[n];
+					S.GETREG(SP, sp); sp := (sp - size) DIV 8 * 8; S.PUTREG(SP, sp);	(* allocate space *)
+					S.MOVE(S.VAL(ANYPTR, src), S.VAL(ANYPTR, sp), size)	(* copy to stack *)
 				END
 			END
 		END;
@@ -1652,7 +1652,7 @@ MODULE Kernel;
 				flag := S.VAL(INTEGER, this.tag) MOD 4;
 				tag := S.VAL(Type, S.VAL(INTEGER, this.tag) - flag);
 				IF flag >= 2 THEN actual := this.first; this.actual := actual
-				ELSE actual := S.ADR(this.last)
+				ELSE actual := SHORT(S.ADR(this.last))
 				END;
 				LOOP
 					offset := tag.ptroffs[0];
@@ -1667,7 +1667,7 @@ MODULE Kernel;
 							flag := S.VAL(INTEGER, this.tag) MOD 4;
 							tag := S.VAL(Type, S.VAL(INTEGER, this.tag) - flag);
 							offset := tag.ptroffs[0];
-							IF flag >= 2 THEN actual := this.actual ELSE actual := S.ADR(this.last) END;
+							IF flag >= 2 THEN actual := this.actual ELSE actual := SHORT(S.ADR(this.last)) END;
 							ap := S.VAL(AnyRef, actual + offset); father := S.VAL(Block, ap.p); ap.p := S.VAL(ANYPTR, S.ADR(son.last));
 							INC(S.VAL(INTEGER, tag), 4)
 						END

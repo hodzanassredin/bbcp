@@ -4,7 +4,7 @@
 BBCP="$HOME/sources/bbcp"
 BB2="$HOME/sources/bbcb2-2.0~a1.build332"
 cmds=""
-for txt in "$BBCP"/Dev/Mod/*.odc.txt "$BBCP"/Mod64/*.odc.txt "$BBCP"/System/Mod/*.odc.txt "$BBCP"/Lin/Mod/*.odc.txt "$BBCP"/Std/Mod/*.odc.txt "$BBCP"/Text/Mod/*.odc.txt "$BBCP"/Form/Mod/*.odc.txt "$BBCP"/Cons/Mod/*.odc.txt; do
+for txt in "$BBCP"/Dev/Mod/*.odc.txt "$BBCP"/Mod64/*.odc.txt "$BBCP"/System/Mod/*.odc.txt "$BBCP"/Lin/Mod/*.odc.txt "$BBCP"/Std/Mod/*.odc.txt "$BBCP"/Text/Mod/*.odc.txt "$BBCP"/Form/Mod/*.odc.txt "$BBCP"/Cons/Mod/*.odc.txt "$BBCP"/Obx/Mod/*.odc.txt; do
 	[ -e "$txt" ] || continue
 	odc="${txt%.txt}"
 	if [ ! -e "$odc" ] || [ "$txt" -nt "$odc" ]; then

@@ -1,0 +1,237 @@
+MODULE LinGui;
+	(**
+		Version for Linux 
+		This module initializes the Gtk environment, makes sure that all libraries are loaded in the correct order, and installes a message box hook in Kernel to allow graphical message boxes.
+		Any application using the graphical user interface on Linux must have this module linked.
+	**)
+
+	IMPORT SYSTEM, Kernel, Utf, 
+		Dl := LinDl, Libc := LinLibc, HostKernel := LinKernel, HostFiles := LinFiles;
+	
+	CONST
+		(* constants for the message boxes *)
+		mbClose = -1; mbOk = 0; mbCancel =1;
+		mbRetry = 2; mbIgnore = 3; mbYes = 4; mbNo = 5;
+		
+	TYPE
+		(* Gtk2 calls are implemented with procedure variables instead of interface modules to
+				be able to guarantee that libraries are loaded in the correct order. *)
+		BeepType = PROCEDURE [ccall];
+		
+		InitCheckType = PROCEDURE [ccall] (argc, argv: INTEGER): INTEGER;
+		
+		GtkMessageDialogNewType = PROCEDURE [ccall] (parent: POINTER TO RECORD END; flags:SET; type, buttons: INTEGER; IN message_format: ARRAY [untagged] OF SHORTCHAR; str: POINTER TO ARRAY [untagged] OF SHORTCHAR): LONGINT;
+		
+		GtkDialogRunType = PROCEDURE [ccall] (dlg: LONGINT): INTEGER;
+		
+		GtkWidgetDestroyType = PROCEDURE [ccall] (dlg: LONGINT);
+		
+		GtkWindowSetTitleType = PROCEDURE [ccall] (window: LONGINT; title: POINTER TO ARRAY [untagged] OF SHORTCHAR);
+		
+	VAR
+		gdk_beep: BeepType;
+		gtk_init_check, gdk_init_check: InitCheckType;
+		gtk_dialog_run: GtkDialogRunType;
+		gtk_widget_destroy: GtkWidgetDestroyType;
+		gtk_message_dialog_new: GtkMessageDialogNewType;
+		gtk_window_set_title: GtkWindowSetTitleType;
+		(* dialogIsOpen*: BOOLEAN; *)
+
+	(* debugging functions *)
+	
+		errString: PROCEDURE (IN string: ARRAY OF CHAR);
+		errLn: PROCEDURE;
+	
+	PROCEDURE SetErr* (string: PROCEDURE(IN msg: ARRAY OF CHAR); ln: PROCEDURE);
+	BEGIN errString := string; errLn := ln
+	END SetErr;
+
+	PROCEDURE ErrString (IN msg: ARRAY OF CHAR);
+	BEGIN IF errString # NIL THEN errString(msg) END;
+	END ErrString;
+
+	PROCEDURE ErrLn;
+	BEGIN IF errLn # NIL THEN errLn END;
+	END ErrLn;
+
+	PROCEDURE Msg (IN msg: ARRAY OF CHAR);
+	BEGIN ErrString(msg); ErrLn
+	END Msg;
+	
+	PROCEDURE DefErrLn;
+		VAR res_: INTEGER;
+	BEGIN
+		res_ := Libc.printf0(0AX);
+		res_ := Libc.fflush(0)
+	END DefErrLn;
+
+	PROCEDURE DefErrString (IN str: ARRAY OF CHAR);
+		CONST max = 1024;
+		VAR ss: ARRAY max + 2 OF SHORTCHAR; i, j, res_, len: INTEGER;
+	BEGIN
+		len := LEN(str); ss[max + 1] := 0X;
+		i := 0; j := 0;
+		WHILE (i < len) & (str[i] # 0X) DO ss[j] := SHORT(str[i]); INC(i);
+			IF j = max THEN res_ := Libc.printfs("%s", ss); j := 0 ELSE INC(j) END
+		END;
+		IF j > 0 THEN ss[j] := 0X; res_ := Libc.printfs("%s", ss) END
+	END DefErrString;
+	
+	PROCEDURE IntToString (x: LONGINT; OUT a: ARRAY OF CHAR);
+		CONST max = 25;
+		VAR b: ARRAY max OF CHAR; i, j: INTEGER; y: LONGINT;
+	BEGIN
+		IF x < 0 THEN x := -x; a[0] := '-'; j := 1 ELSIF x > 0 THEN j := 0 ELSE j := 1; a[0] := '0' END;
+		i := 0;
+		WHILE x # 0 DO y := x MOD 10; b[i] := SHORT(CHR(y + ORD('0'))); x := x DIV 10; INC(i) END;
+		DEC(i); WHILE (i >= 0) & (j < max) DO a[j] := b[i]; INC(j); DEC(i) END;
+		ASSERT(j < max, 20);
+		a[j] := 0X; 
+	END IntToString;
+	
+	PROCEDURE Int (x: LONGINT);
+		VAR buf: ARRAY 16 OF CHAR;
+	BEGIN
+		IntToString(x, buf); ErrString(buf)
+	END Int;
+
+	(* end of debugging functions *)
+	
+	
+	PROCEDURE MessageBox* (title, msg: ARRAY OF CHAR; buttons: SET): INTEGER;
+		VAR
+			res, bt: INTEGER; dlg: LONGINT;
+			uTitle, uMsg: ARRAY 1024 OF SHORTCHAR;
+	BEGIN
+		Utf.StringToUtf8(title, uTitle, res);
+		Utf.StringToUtf8(msg, uMsg, res);
+		
+		(*
+		GTK_BUTTONS_NONE* =0;
+		GTK_BUTTONS_OK*=1;
+		GTK_BUTTONS_CLOSE*=2;
+		GTK_BUTTONS_CANCEL*=3;
+		GTK_BUTTONS_YES_NO*=4;
+		GTK_BUTTONS_OK_CANCEL*=5;
+		*)
+		
+		bt := 2; (* close default *)
+		IF (mbOk IN buttons) & (mbCancel IN buttons) THEN
+			bt := 5 
+		ELSIF mbOk IN buttons THEN
+			bt := 1
+		ELSIF mbCancel IN buttons THEN
+			bt := 3
+		ELSIF (mbYes IN buttons) & (mbNo IN buttons) THEN
+			bt := 4
+		END;
+		
+		
+		dlg := gtk_message_dialog_new (NIL, {0, 1}, 1, bt, "%s", uMsg);
+		gtk_window_set_title(dlg, uTitle);
+		(* dialogIsOpen := TRUE; *)
+		res := gtk_dialog_run(dlg);
+		(* dialogIsOpen := FALSE; *)
+		gtk_widget_destroy(dlg);
+		
+		(*
+		GTK_RESPONSE_NONE* = -1;
+		GTK_RESPONSE_REJECT* = -2;
+		GTK_RESPONSE_ACCEPT* = -3;
+		GTK_RESPONSE_DELETE_EVENT* = -4;
+		GTK_RESPONSE_OK*     = -5;
+		GTK_RESPONSE_CANCEL* = -6;
+		GTK_RESPONSE_CLOSE*  = -7;
+		GTK_RESPONSE_YES*    = -8;
+		GTK_RESPONSE_NO*     = -9;
+		GTK_RESPONSE_APPLY  = -10;
+		GTK_RESPONSE_HELP   = -11;
+		*)
+		
+		CASE res OF
+			| -5: res := mbOk
+			| -6: res := mbCancel
+			| -7: res := mbClose
+			| -8: res := mbYes
+			| -9: res := mbNo
+		ELSE
+			res := mbClose
+		END;
+		RETURN res
+	END MessageBox;
+
+	PROCEDURE Beep*;
+	BEGIN
+		IF gdk_beep # NIL THEN gdk_beep() END
+	END Beep;
+
+	PROCEDURE Init;
+		VAR res: INTEGER; adr: LONGINT; ok: BOOLEAN; h1, h2, h3: Dl.HANDLE;
+	BEGIN
+		h1 := Dl.dlopen("libgtk-x11-2.0.so.0", Dl.RTLD_LAZY+Dl.RTLD_GLOBAL);
+		h2 := Dl.dlopen("libgdk-x11-2.0.so.0", Dl.RTLD_LAZY+Dl.RTLD_GLOBAL);
+		h3 := Dl.dlopen("libglib-2.0.so.0", Dl.RTLD_LAZY+Dl.RTLD_GLOBAL);
+		IF h1 = 0 THEN Msg("LinGui: can not load libgtk-x11-2.0.so.0")
+		ELSIF h2 = 0 THEN Msg("LinGui: can not load libgtk-x11-2.0.so.0")
+		ELSIF h3 = 0 THEN Msg("LinGui: can not load libglib-2.0.so.0")
+		ELSE
+			adr := Dl.dlsym(h1, "gtk_init_check");
+			IF adr # 0 THEN
+				gtk_init_check := SYSTEM.VAL(InitCheckType, adr)
+			END;
+			adr := Dl.dlsym(h1, "gtk_message_dialog_new");
+			IF adr # 0 THEN
+				gtk_message_dialog_new := SYSTEM.VAL(GtkMessageDialogNewType, adr) 
+			END;
+			adr := Dl.dlsym(h1, "gtk_dialog_run");
+			IF adr # 0 THEN
+				gtk_dialog_run := SYSTEM.VAL(GtkDialogRunType, adr)
+			END;
+			adr := Dl.dlsym(h1, "gtk_widget_destroy");
+			IF adr # 0 THEN
+				gtk_widget_destroy := SYSTEM.VAL(GtkWidgetDestroyType, adr)
+			END;
+			adr := Dl.dlsym(h1, "gtk_window_set_title");
+			IF adr # 0 THEN
+				gtk_window_set_title := SYSTEM.VAL(GtkWindowSetTitleType, adr)
+			END;
+			adr := Dl.dlsym(h2, "gdk_beep");
+			IF adr # 0 THEN
+				gdk_beep := SYSTEM.VAL(BeepType, adr)
+			END;
+			adr := Dl.dlsym(h2, "gdk_init_check");
+			IF adr # 0 THEN
+				gdk_init_check := SYSTEM.VAL(InitCheckType, adr)
+			END;
+			
+			IF (gtk_init_check # NIL) & (gdk_init_check # NIL) THEN
+				res := gtk_init_check(SYSTEM.ADR(HostKernel.argc), SYSTEM.ADR(HostKernel.argv));
+				IF res = 0 THEN
+					Msg("LinGui: gtk init error")
+				END;
+				res := gdk_init_check(SYSTEM.ADR(HostKernel.argc), SYSTEM.ADR(HostKernel.argv));
+				IF res = 0 THEN
+					Msg("LinGui: gdk init error")
+				END;
+				
+				HostFiles.MessageBox := NIL;
+				(*
+					use this code, if you want framework
+						ask confirmation from user for creation of new directories
+					HostFiles.MessageBox := MessageBox;
+				*)
+				
+				HostKernel.SetMsgBoxProc(MessageBox);
+				
+				(* re-install signals *)
+				HostKernel.InstallSignals
+			ELSE
+				Msg("LinGui: init procedures did not found in gtk and gdk libraries")
+			END
+		END
+	END Init;
+	
+BEGIN
+	SetErr(DefErrString, DefErrLn); (* set debug out *)
+	Init
+END LinGui.

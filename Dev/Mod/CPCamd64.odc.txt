@@ -2011,12 +2011,34 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		RETURN n
 	END CCallSlots;
 
-	PROCEDURE SysVPreCall (nslots: INTEGER);
-		VAR i, src, tail, t2, nreg: INTEGER;
+	PROCEDURE SysVPreCall (proc: DevCPT.Object; typ: DevCPT.Struct; nslots: INTEGER);
+		VAR p: DevCPT.Object; i, src, t2, gi, fi, nstk, psz, slot, si: INTEGER;
+			cls: ARRAY 64 OF INTEGER;	(* 0=GP 1=xmm 2=stack *)
 	BEGIN
-		tail := nslots - 6; IF tail < 0 THEN tail := 0 END;
-		nreg := nslots - tail;
-		t2 := (tail * 8 + 15) DIV 16 * 16;
+		IF proc # NIL THEN p := proc.link ELSE p := typ.link END;
+		gi := 0; fi := 0; slot := 0;
+		WHILE p # NIL DO	(* классификация слотов: real64 -> xmm, int -> GP, остальное -> стек *)
+			IF p.mode = VarPar THEN
+				IF (p.typ.comp = DynArr) & ~p.typ.untagged THEN psz := p.typ.n + 1
+				ELSIF (p.typ.comp = Record) & ~p.typ.untagged THEN psz := 2
+				ELSE psz := 1
+				END
+			ELSIF (p.typ.comp IN {Array, Record}) & (p.typ.size > 8) THEN psz := (p.typ.size + 7) DIV 8
+			ELSE psz := 1
+			END;
+			i := 0;
+			WHILE (i < psz) & (slot < 64) DO
+				IF (p.mode # VarPar) & (psz = 1) & (p.typ.form = Real64) & (fi < 8) THEN cls[slot] := 1; INC(fi)
+				ELSIF gi < 6 THEN cls[slot] := 0; INC(gi)
+				ELSE cls[slot] := 2
+				END;
+				INC(slot); INC(i)
+			END;
+			p := p.link
+		END;
+		nstk := 0; i := 0;
+		WHILE i < slot DO IF cls[i] = 2 THEN INC(nstk) END; INC(i) END;
+		t2 := (nstk * 8 + 15) DIV 16 * 16;
 		GenB(41H); GenB(54H);					(* push r12 *)
 		GenB(49H); GenB(89H); GenB(0E4H);		(* mov r12, rsp *)
 		GenB(48H); GenB(83H); GenB(0E4H); GenB(0F0H);	(* and rsp, -16 *)
@@ -2025,25 +2047,34 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 			ELSE GenB(48H); GenB(81H); GenB(0ECH); GenD(t2)	(* sub rsp, imm32 *)
 			END
 		END;
-		i := 0;	(* копируем стековый хвост: src = r12+8+nreg*8+i*8, dst = rsp+i*8 *)
-		WHILE i < tail DO
-			src := 8 + nreg * 8 + i * 8;
-			GenB(49H); GenB(8BH); GenB(84H); GenB(24H); GenD(src);	(* mov rax, [r12+src] *)
-			GenB(48H); GenB(89H); GenB(84H); GenB(24H); GenD(i * 8);	(* mov [rsp+i*8], rax *)
+		si := 0; i := 0;	(* стековые аргументы в порядке слотов *)
+		WHILE i < slot DO
+			IF cls[i] = 2 THEN
+				src := 8 + i * 8;
+				GenB(49H); GenB(8BH); GenB(84H); GenB(24H); GenD(src);	(* mov rax, [r12+src] *)
+				GenB(48H); GenB(89H); GenB(84H); GenB(24H); GenD(si * 8);	(* mov [rsp+si*8], rax *)
+				INC(si)
+			END;
 			INC(i)
 		END;
-		i := 0;	(* регистровые аргументы из исходной области: r12+8+i*8 *)
-		WHILE i < nreg DO
+		gi := 0; fi := 0; i := 0;	(* регистровые аргументы из исходной области *)
+		WHILE i < slot DO
 			src := 8 + i * 8;
-			CASE i OF
-			| 0: GenB(49H); GenB(8BH); GenB(7CH); GenB(24H)	(* mov rdi, [r12+d8] *)
-			| 1: GenB(49H); GenB(8BH); GenB(74H); GenB(24H)	(* mov rsi, [r12+d8] *)
-			| 2: GenB(49H); GenB(8BH); GenB(54H); GenB(24H)	(* mov rdx, [r12+d8] *)
-			| 3: GenB(49H); GenB(8BH); GenB(4CH); GenB(24H)	(* mov rcx, [r12+d8] *)
-			| 4: GenB(4DH); GenB(8BH); GenB(44H); GenB(24H)	(* mov r8, [r12+d8] *)
-			| 5: GenB(4DH); GenB(8BH); GenB(4CH); GenB(24H)	(* mov r9, [r12+d8] *)
+			IF cls[i] = 0 THEN
+				CASE gi OF
+				| 0: GenB(49H); GenB(8BH); GenB(7CH); GenB(24H)	(* mov rdi, [r12+d8] *)
+				| 1: GenB(49H); GenB(8BH); GenB(74H); GenB(24H)	(* mov rsi, [r12+d8] *)
+				| 2: GenB(49H); GenB(8BH); GenB(54H); GenB(24H)	(* mov rdx, [r12+d8] *)
+				| 3: GenB(49H); GenB(8BH); GenB(4CH); GenB(24H)	(* mov rcx, [r12+d8] *)
+				| 4: GenB(4DH); GenB(8BH); GenB(44H); GenB(24H)	(* mov r8, [r12+d8] *)
+				| 5: GenB(4DH); GenB(8BH); GenB(4CH); GenB(24H)	(* mov r9, [r12+d8] *)
+				END;
+				GenB(src);	(* disp8: 8..48 *)
+				INC(gi)
+			ELSIF cls[i] = 1 THEN
+				GenB(0F2H); GenB(49H); GenB(0FH); GenB(10H); GenB(44H + fi * 8); GenB(24H); GenB(src);	(* movsd xmmF, [r12+d8] *)
+				INC(fi)
 			END;
-			GenB(src);	(* disp8: 8..48 *)
 			INC(i)
 		END;
 		GenB(31H); GenB(0C0H)	(* xor eax, eax: AL = 0 vector regs для variadic *)
@@ -2072,7 +2103,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					WHILE n > 0 DO DevCPLamd64.GenMove(y, r); DEC(n) END
 				END
 			END;
-			IF x.obj.sysflag = ccall THEN cc := TRUE; SysVPreCall(CCallSlots(x.obj, NIL)) END;
+			IF x.obj.sysflag = ccall THEN cc := TRUE; SysVPreCall(x.obj, NIL, CCallSlots(x.obj, NIL)) END;
 			DevCPLamd64.GenCall(x);
 			IF (x.obj.sysflag = ccall) OR (x.obj.sysflag = ccall16) THEN
 				IF (x.obj.sysflag = ccall) THEN 
@@ -2128,7 +2159,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				WHILE i < n DO DevCPLamd64.GenCode(ORD(x.obj.conval.ext^[i])); INC(i) END
 			END
 		ELSE	(* proc var *)
-			IF x.typ.sysflag = ccall THEN cc := TRUE; SysVPreCall(CCallSlots(NIL, x.typ)) END;
+			IF x.typ.sysflag = ccall THEN cc := TRUE; SysVPreCall(NIL, x.typ, CCallSlots(NIL, x.typ)) END;
 			DevCPLamd64.GenCall(x); Free(x);
 			IF (x.typ.sysflag = ccall) OR (x.typ.sysflag = ccall16) THEN	
 				IF x.typ.sysflag = ccall THEN 

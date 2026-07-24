@@ -2241,7 +2241,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		VAR x, y, c, len: DevCPLamd64.Item; lbl: DevCPLamd64.Label; size, s: INTEGER; bt: DevCPT.Struct;
 	BEGIN
 		x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; x.offset := par.adr;
-		DevCPLamd64.MakeReg(y, DI, Int32);
+		DevCPLamd64.MakeReg(y, DI, Pointer);
 		IF par.typ.comp # DynArr THEN
 			DevCPLamd64.GenMove(x, y);
 			lbl := DevCPLamd64.NewLbl;
@@ -2299,7 +2299,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				WHILE size > 0 DO DevCPLamd64.GenPush(z); DEC(size, 8) END
 			ELSE	(* use string store *)
 				AdjustStack(-size);
-				DevCPLamd64.MakeReg(x, SP, Int32); DevCPLamd64.MakeReg(y, DI, Int32); DevCPLamd64.GenMove(x, y);
+				DevCPLamd64.MakeReg(x, SP, Pointer); DevCPLamd64.MakeReg(y, DI, Pointer); DevCPLamd64.GenMove(x, y);
 				DevCPLamd64.GenBlockStore(1, size)
 			END;
 			IF op > 0 THEN
@@ -2365,7 +2365,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 			IF nofptrs > MaxPtrs THEN
 				DevCPLamd64.MakeReg(z, AX, Int32); DevCPLamd64.GenMove(zero, z); zeroed := TRUE;
 				x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; x.offset := adr;
-				DevCPLamd64.MakeReg(y, DI, Int32); DevCPLamd64.GenLoadAdr(x, y);
+				DevCPLamd64.MakeReg(y, DI, Pointer); DevCPLamd64.GenLoadAdr(x, y);
 				DevCPLamd64.GenStrStore(size)
 			END;
 			obj := proc.link;	(* parameters *)
@@ -2380,7 +2380,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 							DevCPLamd64.MakeReg(z, AX, Int32); DevCPLamd64.GenMove(zero, z); zeroed := TRUE
 						END;
 						x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer; x.offset := obj.adr;
-						DevCPLamd64.MakeReg(y, DI, Int32); DevCPLamd64.GenMove(x, y);
+						DevCPLamd64.MakeReg(y, DI, Pointer); DevCPLamd64.GenMove(x, y);
 						IF ODD(obj.sysflag DIV nilBit) THEN
 							DevCPLamd64.GenComp(zero, y);
 							lbl := DevCPLamd64.NewLbl; DevCPLamd64.GenJump(ccE, lbl, TRUE)
@@ -2430,6 +2430,16 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		IF proc # NIL THEN (* enter proc *)
 			DevCPLamd64.SetLabel(proc.adr);
 			IF (~empty OR NeedOutPtrInit(proc)) & (proc.sysflag # noframe) THEN
+				IF proc.sysflag = ccall THEN	(* SysV Enter: регистровые аргументы (C->BB) -> cdecl-стек *)
+					GenB(41H); GenB(5BH);	(* pop r11 (ret) *)
+					GenB(41H); GenB(51H);	(* push r9 *)
+					GenB(41H); GenB(50H);	(* push r8 *)
+					GenB(51H);	(* push rcx *)
+					GenB(52H);	(* push rdx *)
+					GenB(56H);	(* push rsi *)
+					GenB(57H);	(* push rdi *)
+					GenB(41H); GenB(53H)	(* push r11 (ret) *)
+				END;
 				DevCPLamd64.GenPush(fp);
 				DevCPLamd64.GenMove(sp, fp);
 				adr := proc.conval.intval2; size := -adr;

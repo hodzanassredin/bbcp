@@ -220,3 +220,10 @@ CP-записей. Плюс calling convention полностью 32-битна�
   Code/ под Dev/Rsrc). bbrun64 сам инжектит bootInfo (argc/argv).
 - Kernel.processor должен быть 12 (amd64), иначе StdLoader: syntax error.
 - Инструмент: tools64/crash.sh — краш → Module+offset+регистры+стек+дизасм.
+- SysV Enter (этап exceptions/callbacks): [ccall]-процедуры, вызываемые ИЗ C
+  (HandleTrap, GTK-колбэки), раньше читали аргументы со стека — а C кладёт их
+  в регистры. В Enter* (CPCamd64) для sysflag=ccall: pop r11; push r9..rdi;
+  push r11 → тело видит cdecl-раскладку, эпилог (leave; ret 0) менять не нужно.
+  CP→CP вызовы ccall (SysVPreCall кладёт аргументы и в регистры, и в стек)
+  остаются совместимы. Ограничение: >6 аргументов и xmm не покрыты (KB).
+- tools64/subs64.sh — инкрементальная пересборка подсистемы без вайпа.

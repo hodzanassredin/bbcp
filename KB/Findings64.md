@@ -238,3 +238,22 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     Надо: явная инициализация или разобрать interface-init (TDinit).
 39. Открыто: StdLoader.Fixup 32-битный (SHORT-заглушки) — ленивая загрузка
     модулей внутри BB64 сломана. Эталон: bbrun64.c Fixup (6 групп, 8-байт).
+
+## Сессия 2026-07-24 (ночь, продолжение): StdLoader, MAP_32BIT, LinDl, LinGui
+40. **StdLoader.Fixup портирован** по bbrun64.c: 8-байтные слоты (4 метаданных
+    + 4 sentinel 11223344H), типы absolute=100/relative=101/copy=102/
+    table=103/tableend=104/ripBased=106..114 (immLen=typ-106). ModSpec и
+    Kernel.AllocModMem — INTEGER-капы (<4 ГБ). KB/StdLoader64.md.
+41. **MAP_32BIT обязателен** для AllocateModMem/AllocateClusterMem: адреса
+    уходят в INTEGER-интерфейсы и GC Mark читает теги 32-битно. Без него
+    mmap>4ГБ + SHORT = разрушение. Libc.MAP_32BIT* = {6} (0x40).
+42. **LinDl/LinGui 64-бит**: PtrVoid/HANDLE=LONGINT, [ccall16]→[ccall] (SysV);
+    GTK-хэндлы и dlsym-адреса LONGINT. [ccall16] — старая конвенция с багами
+    (mov esp/pop esp усечение) — мигрировать везде на [ccall].
+43. **Dev-пайплайн в BB64**: DevCP* + DevCompiler64 + ConsCompiler64 собираются
+    build-dev64.sh (rm bbcp64use/Dev + пересборка; dev0 не видит 64-битных
+    DevCP* иначе "corrupted code file"). test64.sh зовёт его в конце.
+    ConsCompiler64 = ConsCompiler поверх DevCompiler64.
+44. GTK-аудит: KB/Gtk64-Audit.md — алиасы, GdkEvent×8, 31 double-функция,
+    varargs (только строки, AL=0 хватает), колбэки (ждут SysV Enter),
+    минимальный путь до окна A→B→C→D.

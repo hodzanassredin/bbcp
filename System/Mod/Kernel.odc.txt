@@ -2100,7 +2100,8 @@ MODULE Kernel;
 	BEGIN
 		ASSERT(size >= 0, 20);
 		IF size > MAX(INTEGER) - 19 THEN RETURN NIL END;
-		tsize := (size + 19) DIV 16 * 16;	(* tsize is at least 4 bytes greater than size, and always a quotient of 16. 19 = 16 - 1 + 4 *)
+		tsize := (size + 23) DIV 16 * 16;	(* 64-бит: тег 8 байт + запас; минимум для Erase от b+8 *)
+	IF tsize < 24 THEN tsize := 24 END;	(* FreeDesc = 24 байта (tag@0, size@8, next@16) *)
 		GetOldFreeBlock(tsize, b);	(* 1) search for free block *)
 		IF (b = NIL) & ~dontCollect THEN
 			FastCollect; GetOldFreeBlock(tsize, b);	(* 2) collect *)

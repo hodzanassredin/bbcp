@@ -640,6 +640,10 @@ MODULE Kernel;
 
 	PROCEDURE BReset; BEGIN blog.pos := 0 END BReset;
 
+	PROCEDURE SetErr* (string: PROCEDURE(IN msg: ARRAY OF CHAR); ln: PROCEDURE);
+	BEGIN blog.string := string; blog.ln := ln
+	END SetErr;
+
 	PROCEDURE BInt (x: LONGINT);
 		VAR a: ARRAY 25 OF CHAR;
 		CONST max = 25;

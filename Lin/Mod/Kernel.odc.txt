@@ -623,6 +623,7 @@ MODULE LinKernel;
 		trap.depth := 0; trap.top := -1; pc := 0;
 		platform.tag := S.VAL(LONGINT, S.TYP(Platform));
 		Kernel.SetPlatform(S.VAL(S.PTR, S.ADR(platform.p)));
+		Kernel.SetErr(ErrString, ErrLn);
 	END Init;
 
 BEGIN Init

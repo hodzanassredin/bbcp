@@ -231,6 +231,7 @@ MODULE LinGui;
 		END
 	END Init;
 	
+
 BEGIN
 	SetErr(DefErrString, DefErrLn); (* set debug out *)
 	Init

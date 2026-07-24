@@ -425,13 +425,17 @@ MODULE LinKernel;
 	END HandleTrap;
 
 	PROCEDURE InstallSignals*;	(* Called from LinGui, I don't understand why it needs to be called a second time *)
-		VAR sa, old: Libc.sigaction_t; res, i: INTEGER; <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAkQAAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAAAAAAALAAAAAAAAAAAAAQAAAP8="/>sigstk: Libc.stack_t; errno: INTEGER;<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
+		VAR sa, old: Libc.sigaction_t; res, res2, i: INTEGER; <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAkQAAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAAAAAAALAAAAAAAAAAAAAQAAAP8="/>sigstk, oldstk: Libc.stack_t; errno: INTEGER;<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
 	BEGIN
 		<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAkQAAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAAAAAAALAAAAAAAAAAAAAQAAAP8="/>(* Alexander Shiryaev: Set alternative stack on which signals are to be processed *)
 		sigstk.ss_sp := sigStack;
 		sigstk.ss_size := sigStackSize;
 		sigstk.ss_flags := {};
 		res := Libc.sigaltstack(sigstk, NIL);
+		IF res # 0 THEN	(* повторный вызов (LinGui.Init): alt stack уже активен → EPERM *)
+			res2 := Libc.sigaltstack(NIL, oldstk);
+			IF (res2 = 0) & (oldstk.ss_sp = sigStack) THEN res := 0 END
+		END;
 		IF res # 0 THEN log.String("ERROR: LinKernel.InstallSignals: sigaltstack failed!"); log.Ln;
 			S.GET( SHORT(Libc.__errno_location()), errno);
 			log.Int(errno);

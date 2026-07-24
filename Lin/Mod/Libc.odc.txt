@@ -364,9 +364,7 @@ MODULE LinLibc ["libc.so.6"];
 
 		tm* = POINTER TO tmDesc;
 		tmDesc* = RECORD [untagged]
-			(* NOTE: check record size *)
-			(* tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec, tm_wday [ , tm_gmtoff ] *)
-			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/types/struct_tm.h: *)
+			(* x86-64: проверено по bits/types/struct_tm.h — tm_gmtoff@40, tm_zone@48, size = 56 *)
 				tm_sec*: int; (* Seconds.     [0-60] (1 leap second) *)
 				tm_min*: int; (* Minutes.     [0-59] *)
 				tm_hour*: int; (* Hours.       [0-23] *)
@@ -377,6 +375,7 @@ MODULE LinLibc ["libc.so.6"];
 				tm_yday*: int; (* Days in year.[0-365] *)
 				tm_isdst*: int; (* DST.         [-1/0/1] *)
 
+				pad0: int;	(* x86-64: явный паддинг — tm_gmtoff@40, tm_zone@48 (компилятор выравнивает на 4) *)
 				tm_gmtoff*: long; (* Seconds east of UTC *)
 				tm_zone*: PtrSTR; (* Timezone abbreviation *)
 		END;
@@ -384,13 +383,14 @@ MODULE LinLibc ["libc.so.6"];
 		Ptrsiginfo_t* = POINTER TO siginfo_t;
 		siginfo_t = RECORD [untagged]
 			(* si_code, fault address *)
-			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/types/siginfo_t.h: *)
+			(* x86-64 /usr/include/x86_64-linux-gnu/bits/types/siginfo_t.h: *)
 				si_signo*: int; 	(* Signal number *)
 				si_errno*: int;  	(* An errno value *)
 				si_code*: int;   	(* Signal code *)
+				pad0: int;	(* x86-64 glibc: int __pad0@12; _sifields@16, size = 128 (компилятор выравнивает на 4) *)
 
 				_sifields*: RECORD [union]
-					_pad: ARRAY [untagged] 29 OF int;
+					_pad: ARRAY [untagged] 28 OF int;	(* __SI_PAD_SIZE = 28 на x86-64 *)
 					_kill*: RECORD [untagged]
 						si_pid*: pid_t;
 						si_uid*: uid_t
@@ -409,12 +409,14 @@ MODULE LinLibc ["libc.so.6"];
 						si_pid: pid_t;
 						si_uid*: uid_t;
 						si_status*: int;
+						pad0: int;	(* x86-64: явный паддинг — si_utime@16, si_stime@24 (компилятор выравнивает на 4) *)
 						si_utime*: clock_t;
 						si_stime*: clock_t
 					END;
 					_sigfault*: RECORD [untagged]
 						si_addr*: PtrVoid;
 						si_addr_lsb*: SHORTINT;
+						pad0: int;	(* x86-64: явный паддинг — _bounds@16 (компилятор выравнивает на 4) *)
 						_bounds*: RECORD [union]
 							_addr_bnd*: RECORD [untagged]
 								_lower*: PtrVoid;
@@ -424,7 +426,7 @@ MODULE LinLibc ["libc.so.6"];
 						END
 					END;
 					_sigpoll: RECORD [untagged]
-						si_band*: int; (* long int *);
+						si_band*: long; (* x86-64: long int @0, si_fd@8 *)
 						si_fd*: int
 					END;
 					_sigsys*: RECORD [untagged]
@@ -454,10 +456,11 @@ MODULE LinLibc ["libc.so.6"];
 			sa_sigaction*: sa_sigaction_t,
 			sa_flags*: intFlags, sa_mask*: sigset_t
 *)
-			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/asm/signal.h, /usr/include/i386-linux-gnu/bits/sigaction.h *)
+			(* x86-64: sa_sigaction@0, sa_mask@8(128), sa_flags@136, sa_restorer@144 *)
 				sa_sigaction*: sa_sigaction_t; (* union with sa_handler*: PtrProc;*)
 				sa_mask*: sigset_t;
 				sa_flags*: intFlags;
+				pad0*: INTEGER;	(* явный паддинг: sa_restorer должен быть по +144, компилятор выравнивает на 4 *)
 				sa_restorer*: PROCEDURE [ccall];
 		END;
 
@@ -465,9 +468,10 @@ MODULE LinLibc ["libc.so.6"];
 (*
 			ss_sp*: PtrVoid, ss_size*: size_t, ss_flags*: intFlags
 *)
-			(* Ubuntu 17.10 /usr/include/i386-linux-gnu/bits/types/stack_t.h: *)
+			(* x86-64 /usr/include/bits/types/stack_t.h: ss_sp@0, ss_flags@8, ss_size@16 *)
 				ss_sp*: PtrVoid;
 				ss_flags*: intFlags;
+				pad0*: INTEGER;	(* компилятор выравнивает LONGINT на 4 — явный паддинг до 16 *)
 				ss_size*: size_t;
 		END;
 

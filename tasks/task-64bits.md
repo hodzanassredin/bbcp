@@ -168,3 +168,45 @@ CP-записей. Плюс calling convention полностью 32-битна�
   trap number виден в репорте. HALT принимает только константу.
 - Микро-репродукции: модуль SystemTestT1 (OdcText.Import + CompileThis) —
   секунды на итерацию отладки codegen. Удалять после!
+
+## 2026-07-24 (сеанс 2): бут дошёл до цикла тел модулей
+- LinFiles.ReadBytes/WriteBytes: `SYSTEM.ADR(x) + beg` компилировался в 32-битный
+  add + cdq (Int64-сложение в бэкенде) → стековый адрес усекался и знакорасширялся
+  (rdi=0xffffffffffffc7a8). Фикс: `SYSTEM.ADR(x[beg])` — без арифметики.
+- Порядок инициализации в bbrun64 был неправильный: LinIntLoader вызывался как
+  инфра ДО тел остальных модулей; InitModule-рекурсия останавливается на первом
+  init-модуле → Dialog тело шло раньше Librarian → Librarian.lib=NIL → краш в
+  LoadModStringTab. Фикс: цикл тел по loadOrder, лоадер последним;
+  LinInit/LinIntInit исключены из статического скана (грузятся StdLoader'ом).
+- Раскладка dyn array приведена к консенсусу (KB/ArrayHeader64.md):
+  4-полевой Block (tag,last,actual,first), len[0] по x+0x18, headSize=4n+24.
+  Были рассинхронизированы: Kernel64.NewArr (заглушка nofelem*8),
+  System Kernel (8n+24), LenDesc (+8), SetDim (x+12), DeRef.
+  LenDesc: VarPar (стек) +8, Ind (heap) +16 — ветки РАЗНЫЕ, единый INC ломает.
+- Kernel64.NewBlock: +8 под тег (было переполнение на 8 байт).
+- Kernel64.NewArr: полноценный (elsize по коду типа, last/first, headSize).
+- GenCaseJump (CPLamd64): REX.X (42H) вместо REX.B (41H) → jmp [rbx+r8*8]
+  вместо [r11+rax*8] → прыжок на стек в Kernel64.NewArr (CASE eltyp).
+- sigaltstack: EPERM + мусорный ss_size. ДВЕ причины: (1) компилятор
+  выравнивает поля RECORD максимум на 4 → LONGINT-поля после 4-байтных встают
+  по +12 вместо +16 → ВСЕ libc-структуры со смешанными полями требуют явных
+  pad-полей (stack_t, sigaction_t исправлены; полный аудит — агент-7,
+  KB/LibcLayout64-Audit.md); (2) InstallSignals зовётся дважды (тело LinKernel +
+  LinGui.Init даже в консоли) → второй вызов EPERM (alt stack активен) →
+  сделан идемпотентным (запрос состояния, ss_sp = sigStack → ok).
+- Assign Con→Int64 в DevCPCamd64 корректен (два movl: lo+hi dword) — НЕ баг.
+- GenCaseJump: REX.X вместо REX.B — любой CASE с таблицей прыгал по
+  [rbx+r8*8] вместо [r11+rax*8].
+- go64.sh НЕ делает sync-odc (правки .txt не попадают в .odc!) — порядок:
+  sync-odc.sh → go64.sh. Модуль называется ПОЛНЫМ именем (LinFiles, не Files).
+- bbcp64use/System/Mod — пофайловые симлинки: новый модуль надо линковать руками.
+- DevOnce.Go64 компилирует без sys-опций → [untagged] и др. дают err 225
+  (pos врёт). Для микро-тестов использовать модули без sys-флагов.
+- LinGui.Init грузит GTK и зовёт gtk_init_check даже в консоли; при argc=0/argv=NIL
+  (bootInfo=NIL) gtk_init_check падал и Msg() открывал МОДАЛЬНЫЙ gtk_dialog_run
+  (процесс вис в poll на X). Фикс: bbrun64 заполняет Kernel.bootInfo
+  (modList/argc/argv; раскладка CP: argv@12).
+- Агент-7 (аудит libc-раскладок): siginfo_t — АКТИВНЫЙ баг (si_addr по +12 вместо
+  +16, HandleTrap читал мусор), tmDesc, _pad 28, si_band: long — исправлено;
+  GTK-записи (GtkSelectionData, GdkEvent×17, GObject-иерархия и др.) съезжают —
+  отдельный список в KB/LibcLayout64-Audit.md для GUI-этапа.

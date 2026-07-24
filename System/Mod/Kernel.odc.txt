@@ -42,7 +42,7 @@ MODULE Kernel;
 		littleEndian* = TRUE;
 		timeResolution* = 1000;	(* ticks per second *)
 
-		processor* = 10;	(* i386 *)
+		processor* = 12;	(* amd64 *)
 
 		(* loader constants *)
 		done* = 0;
@@ -988,7 +988,7 @@ MODULE Kernel;
 			IF b = NIL THEN RETURN 0 END;
 			b.tag := tag;
 			l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
-			l := S.VAL(FList, NewRec(SHORT(S.TYP(FList))));	(* NEW(l) *)
+			l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 			l.blk := b; l.iptr := TRUE; l.next := finalizers; finalizers := l;
 			RETURN SHORT(S.ADR(b.last))
 		ELSE
@@ -998,7 +998,7 @@ MODULE Kernel;
 			b.tag := tag; S.GET(typ - 8, size);
 			IF size # 0 THEN	(* record uses a finalizer *)
 				l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
-				l := S.VAL(FList, NewRec(SHORT(S.TYP(FList))));	(* NEW(l) *)
+				l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 				l.blk := b; l.next := finalizers; finalizers := l
 			END;
 			RETURN SHORT(S.ADR(b.last))
@@ -1008,8 +1008,8 @@ MODULE Kernel;
 	PROCEDURE NewArr* (eltyp, nofelem, nofdim: INTEGER): INTEGER;	(* impl. of NEW(ptr, dim0, dim1, ...) *)
 		VAR b: Block; size, headSize: INTEGER; t: Type; fin: BOOLEAN; l: FList;
 	BEGIN
-		IF (nofdim < 0) OR (nofdim > (MAX(INTEGER) - 24) DIV 8) THEN RETURN 0 END;
-		headSize := 8 * nofdim + 24; 
+		IF (nofdim < 0) OR (nofdim > (MAX(INTEGER) - 24) DIV 4) THEN RETURN 0 END;
+		headSize := 4 * nofdim + 24;	(* len[0] по +0x18 от b.last, данные по +0x18+4*nofdim (4-полевой Block: tag,last,actual,first) *)
 		fin := FALSE;
 		CASE eltyp OF
 		| -1: eltyp := SHORT(S.ADR(IntPtrType)); fin := TRUE
@@ -1040,7 +1040,7 @@ MODULE Kernel;
 		b.first := S.ADR(b.last) + headSize;	(* pointer to first elem *)
 		IF fin THEN
 			l := S.VAL(FList, S.ADR(b.last));	(* anchor new object! *)
-			l := S.VAL(FList, NewRec(SHORT(S.TYP(FList))));	(* NEW(l) *)
+			l := S.VAL(FList, NewRec(S.TYP(FList)));	(* NEW(l) *)
 			l.blk := b; l.aiptr := TRUE; l.next := finalizers; finalizers := l
 		END;
 		RETURN SHORT(S.ADR(b.last))
@@ -1099,7 +1099,7 @@ MODULE Kernel;
 	PROCEDURE InstallCleaner* (p: Command);
 		VAR c: CList;
 	BEGIN
-		c := S.VAL(CList, NewRec(SHORT(S.TYP(CList))));	(* NEW(c) *)
+		c := S.VAL(CList, NewRec(S.TYP(CList)));	(* NEW(c) *)
 		c.do := p; c.trapped := FALSE; c.next := cleaners; cleaners := c
 	END InstallCleaner;
 

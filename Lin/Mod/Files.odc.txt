@@ -841,7 +841,7 @@ MODULE LinFiles;
 				ELSE count := len
 				END;
 				al := SYSTEM.ADR(r.buf.data[r.offset]); from := SYSTEM.VAL(ByteArr, al);
-				al := SYSTEM.ADR(x) + beg; to := SYSTEM.VAL(ByteArr, al);
+				al := SYSTEM.ADR(x[beg]); to := SYSTEM.VAL(ByteArr, al);	(* не ADR(x)+beg: Int64-сложение усекает *)
 				SYSTEM.MOVE(from, to, count);
 				INC(r.offset, count); INC(beg, count); DEC(len, count)
 			END;
@@ -924,7 +924,7 @@ MODULE LinFiles;
 				IF (w.org # w.buf.org) OR (w.offset >= bufsize) THEN w.SetPos(w.org + w.offset) END;
 				restInBuf := bufsize - w.offset;
 				IF restInBuf <= len THEN count := restInBuf ELSE count := len END;
-				al := SYSTEM.ADR(x) + beg; from := SYSTEM.VAL(ByteArr, al);
+				al := SYSTEM.ADR(x[beg]); from := SYSTEM.VAL(ByteArr, al);	(* не ADR(x)+beg: Int64-сложение усекает *)
 				al := SYSTEM.ADR(w.buf.data[w.offset]); to := SYSTEM.VAL(ByteArr, al);
 				SYSTEM.MOVE(from, to, count);
 				INC(w.offset, count); INC(beg, count); DEC(len, count);

@@ -33,7 +33,7 @@ MODULE Kernel64;
 		END;
 
 		Cluster* = POINTER TO RECORD size: INTEGER; next: Cluster END;
-		Block* = POINTER TO RECORD tag: Type; last: LONGINT; first: LONGINT END;
+		Block* = POINTER TO RECORD tag: Type; last: LONGINT; actual: LONGINT; first: LONGINT END;
 		FreeBlk* = POINTER TO RECORD tag: Type; size: INTEGER; next: FreeBlk END;
 
 	VAR
@@ -48,7 +48,7 @@ MODULE Kernel64;
 	PROCEDURE NewBlock* (size: INTEGER): Block;
 		VAR p, sz: LONGINT;
 	BEGIN
-		sz := size;
+		sz := (S.VAL(LONGINT, size) + 8 + 15) DIV 16 * 16;	(* +8 под тег *)
 		IF sz < 24 THEN sz := 24 END;
 		p := S.ADR(heap) + heapPos;
 		p := (p + 15) DIV 16 * 16;
@@ -58,13 +58,27 @@ MODULE Kernel64;
 	END NewBlock;
 
 	PROCEDURE NewArr* (eltyp, nofelem, nofdim: INTEGER): LONGINT;
-		VAR b: Block; sz: LONGINT;
+		VAR b: Block; sz, headSize, elsize: INTEGER; t: Type;
 	BEGIN
-		sz := S.VAL(LONGINT, nofelem) * 8 + S.VAL(LONGINT, nofdim) * 8 + 24;
-		IF sz < 24 THEN sz := 24 END;
-		b := NewBlock(SHORT(sz));
+		IF (nofdim < 0) OR (nofdim > (MAX(INTEGER) - 24) DIV 4) THEN RETURN 0 END;
+		headSize := 4 * nofdim + 24;	(* как у codegen: [tag8][last8][actual8][first8][len0 4]... *)
+		IF (eltyp >= -1) & (eltyp <= 12) THEN	(* базовые типы: код -> размер *)
+			CASE eltyp OF
+			| -1, 0, 8, 10, 11, 12: elsize := 8
+			| 1, 3, 5: elsize := 1
+			| 2, 9: elsize := 2
+			| 4, 6, 7: elsize := 4
+			END
+		ELSE	(* eltyp — дескриптор записи (+1: финализация, здесь не поддерживается) *)
+			t := S.VAL(Type, eltyp - eltyp MOD 2); elsize := t.size
+		END;
+		IF (nofelem < 0) OR (nofelem > (MAX(INTEGER) - headSize) DIV elsize) THEN RETURN 0 END;
+		sz := headSize + nofelem * elsize;
+		b := NewBlock(sz);
 		IF b = NIL THEN RETURN 0 END;
 		b.tag := S.VAL(Type, S.VAL(LONGINT, eltyp));
+		b.last := S.ADR(b.last) + sz - elsize;	(* указатель на последний элемент *)
+		b.first := S.ADR(b.last) + headSize;	(* указатель на первый элемент *)
 		RETURN S.ADR(b.last)
 	END NewArr;
 

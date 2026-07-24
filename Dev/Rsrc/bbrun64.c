@@ -651,6 +651,13 @@ int main (int argc, char *argv[])
                     fclose(f);
                     continue;
                 }
+                /* главные модули НЕ грузим статически: LinLoader/LinIntLoader
+                   загружают их динамически через StdLoader (иначе Load()
+                   падает в FatalError "already loaded") */
+                if (strcmp(mod.name, "LinInit") == 0 || strcmp(mod.name, "LinIntInit") == 0) {
+                    fclose(f);
+                    continue;
+                }
                 specs[nSpecs] = mod;
                 strcpy(specs[nSpecs].path, path);
                 specs[nSpecs].loaded = false;
@@ -739,8 +746,23 @@ out:
         if (sk != NULL) {
             Object* ml = ThisObject(sk, "modList");
             if (ml != NULL) *(intptr_t*)(sk->varBase + ml->offs) = (intptr_t)modlist;
+            /* bootInfo для LinKernel.argc/argv (gtk_init_check, GetCmdLineArg).
+               Раскладка по правилу компилятора (выравнивание ≤ 4):
+               modList@0, argc@8, argv@12 */
+            Object* bi = ThisObject(sk, "bootInfo");
+            if (bi != NULL) {
+                static char bootInfoBuf[24];
+                *(intptr_t*)(bootInfoBuf + 0) = (intptr_t)modlist;
+                *(int*)(bootInfoBuf + 8) = argc;
+                *(intptr_t*)(bootInfoBuf + 12) = (intptr_t)argv;	/* CP: argv@+12, C struct дал бы +16! */
+                *(intptr_t*)(sk->varBase + bi->offs) = (intptr_t)bootInfoBuf;
+            }
         }
     }
+
+    int consoleMode = 0;
+    for (int a = 1; a < argc; a++) if (strcmp(argv[a], "--console") == 0) consoleMode = 1;
+    if (getenv("BB_CONSOLE") != NULL) consoleMode = 1;
 
     /* инфраструктура загрузчика — первой, в порядке 32-битного dev0 link:
        тела этих модулей устанавливают хуки (Files.dir, SetLoader...),
@@ -748,9 +770,6 @@ out:
        Режим: bbrun64 --console или BB_CONSOLE=1 — консоль (LinIntLoader);
        по умолчанию GUI (LinLoader). */
     {
-        int consoleMode = 0;
-        for (int a = 1; a < argc; a++) if (strcmp(argv[a], "--console") == 0) consoleMode = 1;
-        if (getenv("BB_CONSOLE") != NULL) consoleMode = 1;
         static const char* infra[] = {"Utf", "LinKernel", "Files", "LinEnv",
             "LinFiles", "LinPackedFiles", "StdLoader", NULL};
         for (int j = 0; infra[j] != NULL; j++) {
@@ -761,23 +780,32 @@ out:
             printf("init %s (infra)...\n", m->name);
             body();
         }
-        Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
-        if (m != NULL && !(m->opts & init)) {
-            m->opts = m->opts | init;
-            printf("init %s (infra, %s mode)...\n", m->name, consoleMode ? "console" : "gui");
-            ((BodyProc) m->code)();
-        }
     }
 
-    /* run all module bodies in load order (like Kernel.InitModule) */
+    /* run all module bodies in load order (like Kernel.InitModule);
+       лоадеры (LinLoader/LinIntLoader) — ПОСЛЕДНИМИ: их тела грузят
+       главный модуль через StdLoader, и к этому моменту все остальные
+       тела уже отработали (иначе InitModule-рекурсия бежит по неинициализи-
+       рованным модулям: Dialog требует Librarian.lib из тела Librarian) */
     for (i = 0; i < nLoaded; i++) {
         Module* m = loadOrder[i];
         if (m == k) continue;
         if (m->opts & init) continue;
+        if (strcmp(m->name, "LinLoader") == 0 || strcmp(m->name, "LinIntLoader") == 0) continue;
         m->opts = m->opts | init;
         BodyProc body = (BodyProc) m->code;
         printf("init %s...\n", m->name);
         body();
+    }
+
+    /* главный лоадер последним: загружает LinInit/LinIntInit и запускает среду */
+    {
+        Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
+        if (m != NULL && !(m->opts & init)) {
+            m->opts = m->opts | init;
+            printf("init %s (main loader, %s mode)...\n", m->name, consoleMode ? "console" : "gui");
+            ((BodyProc) m->code)();
+        }
     }
     printf("MAIN OK (all module bodies done)\n");
 

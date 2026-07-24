@@ -963,7 +963,8 @@ MODULE DevCPLamd64;
 		NEW(link); link.offset := tab; link.linkadr := DevCPE.pc;
 		link.next := DevCPE.CaseLinks; DevCPE.CaseLinks := link;
 		GenDbl(absolute * 1000000H + tab); GenDbl(0);
-		DevCPE.GenByte(42H); DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(0C3H + 8 * src.reg);	(* jmp [r11 + src*8] *)
+		IF src.reg >= 8 THEN DevCPE.GenByte(43H) ELSE DevCPE.GenByte(41H) END;	(* REX.B (+X при src>=8): база r11! *)
+		DevCPE.GenByte(0FFH); DevCPE.GenByte(24H); DevCPE.GenByte(0C3H + 8 * (src.reg MOD 8));	(* jmp [r11 + src*8] *)
 		WHILE DevCPE.pc < tab DO DevCPE.GenByte(90H) END
 	END GenCaseJump;
 

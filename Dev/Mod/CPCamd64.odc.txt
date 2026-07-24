@@ -552,11 +552,12 @@ MODULE DevCPCamd64;
 	BEGIN
 		IF x.tmode = VarPar THEN
 			LevelBase(len, x.obj.mnolev, {}, {}); len.offset := x.obj.adr; len.form := Int32;
-			len.typ := DevCPT.int32typ
+			len.typ := DevCPT.int32typ;
+			INC(len.offset, typ.n * 4 + 8);	(* стековый open-array: [adr8][len0 4]... *)
 		ELSE ASSERT((x.tmode = Ind) & (x.mode = Ind));
-			len := x; len.offset := ArrDOffs; len.scale := 0; len.form := Int32
+			len := x; len.offset := ArrDOffs; len.scale := 0; len.form := Int32;
+			INC(len.offset, typ.n * 4 + 16);	(* heap dyn array: [last8][actual8][first8][len0 4]... *)
 		END;
-		INC(len.offset, typ.n * 4 + 8);	(* 64-bit: [adr8][len0 4][len1 4]... *)
 		IF typ.sysflag = stackArray THEN len.offset := -4 END
 	END LenDesc;
 	
@@ -718,8 +719,8 @@ MODULE DevCPCamd64;
 		x.mode := Ind; x.tmode := Ind; x.scale := 0;
 		btyp := x.typ.BaseTyp;
 		IF btyp.untagged OR (btyp.sysflag = stackArray) THEN x.offset := 0
-		ELSIF btyp.comp = DynArr THEN x.offset := ArrDOffs + btyp.size
-		ELSIF btyp.comp = Array THEN x.offset := ArrDOffs + 4 
+		ELSIF btyp.comp = DynArr THEN x.offset := ArrDOffs + btyp.size + 8	(* +8: actual+first в 4-полевом Block *)
+		ELSIF btyp.comp = Array THEN x.offset := ArrDOffs + 16 	(* данные за 24-байтным хедером *)
 		ELSE x.offset := 0
 		END
 	END DeRef;
@@ -1647,7 +1648,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		VAR z: DevCPLamd64.Item; end: DevCPLamd64.Label;
 	BEGIN
 		ASSERT((x.mode = Reg) & (x.form = Pointer));
-		z.mode := Ind; z.reg := x.reg; z.offset := ArrDOffs + 4 + dimtyp.n * 4; z.scale := 0; z.form := Int32;
+		z.mode := Ind; z.reg := x.reg; z.offset := ArrDOffs + 16 + dimtyp.n * 4; z.scale := 0; z.form := Int32;
 		IF y.mode = Con THEN y.form := Int32
 		ELSE Pop(y, Int32, {}, {})
 		END;

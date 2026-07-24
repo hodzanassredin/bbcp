@@ -1760,8 +1760,13 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					GenB(50H)	(* push rax *)
 				END;
 				Free(ap)
-			ELSE
+			ELSIF ap.form = Int64 THEN
 				DevCPLamd64.GenPush(ap); Free(ap)	(* push qword [mem] *)
+			ELSE	(* 32-битный источник: через Load в регистр, затем movsxd (иначе 4 байта мусора в старшем dword) *)
+				Load(ap, {}, {});	(* materialize to register *)
+				ASSERT(ap.mode = Reg, 98);
+				GenB(48H); GenB(63H); GenB(0C0H + ap.reg);	(* movsxd rax, r32 *)
+				GenB(50H); Free(ap)	(* push rax *)
 			END;
 			RETURN
 		END;

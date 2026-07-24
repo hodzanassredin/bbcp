@@ -138,7 +138,7 @@ MODULE LinKernel;
 	BEGIN
 		res := Rt.clock_gettime(Rt.CLOCK_MONOTONIC, tp);
 		ASSERT(res = 0);
-		RETURN LONG(tp.tv_sec) * 1000 + tp.tv_nsec DIV 1000000
+		RETURN tp.tv_sec * 1000 + tp.tv_nsec DIV 1000000
 	END Time;
 
 	PROCEDURE (VAR p: Platform) PageSize (): INTEGER;

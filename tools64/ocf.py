@@ -59,9 +59,13 @@ def parse_refs(d, h):
 
 def owner(procs, off):
     best = None
+    # NB: ref entries are END offsets (CPE.OutRefName writes pc AFTER the proc
+    # body), so proc i spans (procs[i-1].adr, procs[i].adr]; start of proc 0 = 0
+    start = 0
     for adr, nm in procs:
-        if adr <= off and (best is None or adr > best[0]):
-            best = (adr, nm)
+        if start <= off < adr:
+            return (start, nm)
+        start = adr
     return best
 
 def main():

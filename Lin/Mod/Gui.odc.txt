@@ -18,7 +18,7 @@ MODULE LinGui;
 				be able to guarantee that libraries are loaded in the correct order. *)
 		BeepType = PROCEDURE [ccall];
 		
-		InitCheckType = PROCEDURE [ccall] (argc, argv: INTEGER): INTEGER;
+		InitCheckType = PROCEDURE [ccall] (argc, argv: LONGINT): INTEGER;
 		
 		GtkMessageDialogNewType = PROCEDURE [ccall] (parent: POINTER TO RECORD END; flags:SET; type, buttons: INTEGER; IN message_format: ARRAY [untagged] OF SHORTCHAR; str: POINTER TO ARRAY [untagged] OF SHORTCHAR): LONGINT;
 		

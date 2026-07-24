@@ -79,7 +79,11 @@ target processor=12. LogMarks печатает позиции ошибок в к
   внутри BB64). Правило выше («Dev там быть не должно») ОТМЕНЕНО для Code/Sym,
   но из-за этого dev0 из bbcp64use падает с "corrupted code file for DevCP*" —
   поэтому build-dev64.sh прячет Dev на время компиляции (stash/restore).
-- tools64/ocf.py — парсер ocf: refs/dis/bytes/hdr.
+- tools64/ocf.py — парсер ocf: refs/dis/bytes/hdr. ВАЖНО: refs = смещения КОНЦА
+  процедур (OutRefName пишет pc после тела); owner() это учитывает. См.
+  KB/MethodTableNumbering.md.
+- tools64/desc.py — статический дамп дескрипторов типов из ocf: маркер, n слотов,
+  резолв метод-таблиц через fixup-группы (без загрузки).
 - tools64/errpos.sh Sub Mod pos — позиция ошибки → строка исходника.
 - tools64/c64.sh Mod [off] — один модуль: sync+compile+disasm.
 - tools64/build-dev64.sh — Dev-пайплайн (Markers,CPM..CPVamd64,Selectors,

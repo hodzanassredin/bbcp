@@ -243,7 +243,7 @@ MODULE Kernel;
 		Real32Type = RECORD v: SHORTREAL END;
 		Real64Type = RECORD v: REAL END;
 		ProcType = RECORD v: PROCEDURE END;
-		UPtrType = RECORD v: INTEGER END;
+		UPtrType = RECORD v: LONGINT END;	(* 64-бит: eltyp 12 = untagged pointer *)
 		IntPtrType = RECORD p: ANYPTR END;	(* used for array of interface pointer *)
 
 		StrPtr = POINTER TO ARRAY [untagged] OF SHORTCHAR;

@@ -264,6 +264,17 @@ static int LoadDll (char* name)
     return 1;
 }
 
+/* trampolines: ripBased disp32 не дотягивается из арены (<4 ГБ) до libc (~140 ТБ).
+   Создаём в арене стаб mov rax,imm64; jmp rax и отдаём его адрес — он в ±2 ГБ. */
+static intptr_t StubFor (intptr_t target)
+{
+    char* p = AllocMem(16);
+    p[0] = 0x48; p[1] = 0xB8;              /* mov rax, imm64 */
+    memcpy(p + 2, &target, 8);
+    p[10] = 0xFF; p[11] = 0xE0;            /* jmp rax */
+    return (intptr_t)p;
+}
+
 static intptr_t ThisDllObj (int mode, int fprint, char* dll, char* name)
 {
     void *handle;
@@ -372,7 +383,7 @@ static void Fixup (intptr_t adr)
             default:
                 if ((t >= ripBased) && (t <= ripBased + 8)) {
                     immLen = t - ripBased;
-                    *(int*)linkadr = (int)(adr + offset - (linkadr + 4 + immLen));
+                                        *(int*)linkadr = (int)(adr + offset - (linkadr + 4 + immLen));
                 } else {
                     printf("fixup: unknown type %d at link=%ld\n", t, link);
                     exit(1);
@@ -553,7 +564,7 @@ static bool ReadModule ()
                     im = imp->name;
                     im++;
                     a = ThisDllObj(x, fp, im, name);
-                    if (a != 0) Fixup(a);
+                    if (a != 0) Fixup(StubFor(a));
                     else {
                         printf("ReadModule: Object not found: %s\n", name);
                         return false;

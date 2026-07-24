@@ -124,6 +124,7 @@ MODULE LinGtk2Gtk ["libgtk-x11-2.0.so.0"];
 		GtkSelectionData* = RECORD [untagged]
 			selection*, target*, type*: Gdk.GdkAtom;
 			format*: INTEGER;
+			sdpad0*: INTEGER;	(* data по +32 (C) *)
 			data*: PString;
 			length*: INTEGER;
 			display: Gdk.GdkDisplay;

@@ -1,0 +1,7 @@
+MODULE Startup;
+
+	PROCEDURE Setup*;
+	BEGIN	(* no-op: стартап консоли делает LinIntInit (ConsInterp.Run), GUI — LinInit *)
+	END Setup;
+
+END Startup.

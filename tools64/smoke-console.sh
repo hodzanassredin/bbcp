@@ -18,7 +18,8 @@ END ObxHello.
 SRC
 
 # 2. команды REPL: компилируем и запускаем
+cd "$USE"
 {
 	echo 'ConsCompiler64.Compile("", "Hello.cp")'
 	echo 'ObxHello.Do'
-} | timeout 60 "$BB/Dev/Rsrc/bbrun64" --console 2>&1 | tail -30
+} | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" timeout 60 "$BB/Dev/Rsrc/bbrun64" --console 2>&1 | tail -30

@@ -11,7 +11,7 @@ MARK=$(mktemp)
 for m in "$@"; do
 	case "$m" in
 		Dev*) echo "go64.sh: для Dev* используйте build-dev64.sh" >&2; exit 1;;
-		System*|Std*|Text*|Form*|Lin*|Cons*|Obx*|Sql*|Xhtml*|Crypto*|Keep*|Lists*|Async*|Http*|Json*|Mcp*|Llm*|Hr*|Fjson*|Hyper*|Eds*|Fig*|Babel*|Coco*|Comm*|Cpc*|Aos*|Co_*|Kernel64) ;;
+		System*|Std*|Text*|Form*|Lin*|Cons*|Obx*|Sql*|Xhtml*|Crypto*|Keep*|Lists*|Async*|Http*|Json*|Mcp*|Llm*|Hr*|Fjson*|Hyper*|Eds*|Fig*|Babel*|Coco*|Comm*|Cpc*|Aos*|Co_*|Kernel64|Kernel|Utf|Files|Stores|Sequencers|Converters|Integers|Loop|Dialog|Ports|Services|Printers|Librarian|Meta|Startup) ;;
 		*) echo "go64.sh: '$m' — имя должно быть ПОЛНЫМ (LinFiles, не Files)" >&2; exit 1;;
 	esac
 done
@@ -28,7 +28,9 @@ fail=0
 for m in "$@"; do
 	ocf=$(ls "$USE"/*/Code/*.ocf 2>/dev/null | while read -r f; do
 		b=$(basename "$f" .ocf); sub=$(basename "$(dirname "$(dirname "$f")")")
-		[ "$sub$b" = "$m" ] && echo "$f" && break; done | head -1)
+		if [ "$sub$b" = "$m" ]; then echo "$f"; break; fi
+		if [ "$sub" = "System" ] && [ "$b" = "$m" ]; then echo "$f"; break; fi
+	done | head -1)
 	if [ -z "$ocf" ]; then echo "go64.sh: $m — ocf не найден" >&2; fail=1
 	elif [ ! "$ocf" -nt "$MARK" ]; then echo "go64.sh: $m — ocf НЕ обновился!" >&2; fail=1; fi
 done

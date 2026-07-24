@@ -796,18 +796,20 @@ out:
         BodyProc body = (BodyProc) m->code;
         printf("init %s...\n", m->name);
         body();
+        fprintf(stderr, "done %s\n", m->name);
     }
+    fprintf(stderr, "body loop finished\n");
 
     /* главный лоадер последним: загружает LinInit/LinIntInit и запускает среду */
     {
         Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
         if (m != NULL && !(m->opts & init)) {
             m->opts = m->opts | init;
-            printf("init %s (main loader, %s mode)...\n", m->name, consoleMode ? "console" : "gui");
+            fprintf(stderr, "init %s (main loader, %s mode)...\n", m->name, consoleMode ? "console" : "gui");
             ((BodyProc) m->code)();
         }
     }
-    printf("MAIN OK (all module bodies done)\n");
+    fprintf(stderr, "MAIN OK (all module bodies done)\n");
 
     /* call main module body if present (usually already run above) */
     {

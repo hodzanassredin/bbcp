@@ -42,7 +42,7 @@ MODULE StdLoader;
 			file: Files.File;
 			mod: Kernel.Module;
 			hs, ds, ms, cs, vs: INTEGER; (* headSize, descSize, metaSize, codeSize, dataSize *)
-			dad, mad, cad, vad: INTEGER (* descAdr, metaAdr, codeAdr, varAdr *)
+			dad, mad, cad, vad: LONGINT (* descAdr, metaAdr, codeAdr, varAdr *)
 		END;
 		
 		Hook = POINTER TO RECORD (Kernel.LoaderHook) END;
@@ -178,7 +178,7 @@ MODULE StdLoader;
 	END RName;
 
 	PROCEDURE Fixup (adr: LONGINT; mod: ModSpec);	(* OCF v2 (amd64), cf. bbrun64.c *)
-		VAR link, alink, offset, linkadr, t, n, x, immLen: INTEGER;
+		VAR link, alink, offset, t, n, x, immLen: INTEGER; linkadr: LONGINT;
 			ir: IntRef; ar, sr: AdrRef;
 	BEGIN
 		RNum(link);
@@ -252,15 +252,15 @@ MODULE StdLoader;
 	
 	PROCEDURE ReadModule (mod: ModSpec);
 		TYPE BlockPtr = POINTER TO ARRAY [untagged] 1000000H OF BYTE;
-		VAR i, x, fp, ofp, opt, a: INTEGER;
+		VAR i, x, fp, ofp, opt, a, di, mi, ci, vi: INTEGER;
 			name: Name; dp, mp, cp: BlockPtr; imp: ModSpec; obj: Kernel.Object;
 	BEGIN
 		IF mod.file = NIL THEN mod.file := ThisObjFile(mod.name) END;
 		inp := mod.file.NewReader(inp);
 		IF inp # NIL THEN
 			inp.SetPos(mod.hs);
-			IF Kernel.AllocModMem(mod.ds, mod.ms, mod.cs, mod.vs,
-					mod.dad, mod.mad, mod.cad, mod.vad) THEN
+			IF Kernel.AllocModMem(mod.ds, mod.ms, mod.cs, mod.vs, di, mi, ci, vi) THEN
+				mod.dad := di; mod.mad := mi; mod.cad := ci; mod.vad := vi;	(* INTEGER -> LONGINT *)
 				dp := S.VAL(BlockPtr, mod.dad);
 				mp := S.VAL(BlockPtr, mod.mad);
 				cp := S.VAL(BlockPtr, mod.cad);
@@ -326,13 +326,13 @@ MODULE StdLoader;
 					mod.mod.imports[i] := imp.mod; INC(i); imp := imp.next
 				END;
 				IF res = done THEN
-					IF ~Kernel.ProtectModMem(mod.ms, mod.cs, mod.mad, mod.cad) THEN
+					IF ~Kernel.ProtectModMem(mod.ms, mod.cs, SHORT(mod.mad), SHORT(mod.cad)) THEN
 						res := noMem
 					END
 				END;
 				IF res # done THEN
 					Kernel.DeallocModMem(mod.ds, mod.ms, mod.cs, mod.vs,
-						mod.dad, mod.mad, mod.cad, mod.vad);
+						SHORT(mod.dad), SHORT(mod.mad), SHORT(mod.cad), SHORT(mod.vad));
 					mod.mod := NIL
 				END
 			ELSE Error(noMem, mod, NIL)

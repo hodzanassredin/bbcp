@@ -1646,10 +1646,14 @@ MODULE Kernel;
 
 	(* -------------------- garbage collector (portable) --------------------- *)
 
+	PROCEDURE^ InHeap (p: LONGINT): BOOLEAN;
+
 	PROCEDURE Mark (this: Block);
 		VAR father, son: Block; tag: Type; flag, offset: INTEGER; actual: LONGINT; ap: AnyRef;
 	BEGIN
-		IF ~ODD(S.VAL(INTEGER, this.tag)) THEN
+		(* InHeap: НЕ спускаться вне кластеров — bump-heap Kernel64 (арена модулей)
+		   не покрывается Sweep, mark-бит там остался бы навсегда (краш dispatch) *)
+		IF (this # NIL) & InHeap(S.VAL(LONGINT, this)) & ~ODD(S.VAL(INTEGER, this.tag)) THEN
 			father := NIL;
 			LOOP
 				INC(S.VAL(INTEGER, this.tag));
@@ -1677,7 +1681,7 @@ MODULE Kernel;
 						END
 					ELSE
 						ap := S.VAL(AnyRef, actual + offset); son := S.VAL(Block, ap.p);
-						IF son # NIL THEN
+						IF (son # NIL) & InHeap(S.VAL(LONGINT, son) - 8) THEN	(* не спускаться в bump-heap (арену) *)
 							DEC(S.VAL(LONGINT, son), 8);
 							IF ~ODD(S.VAL(INTEGER, son.tag)) THEN	(* down *)
 								this.tag := S.VAL(Type, S.VAL(INTEGER, tag) + flag);

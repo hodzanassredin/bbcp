@@ -21,8 +21,13 @@
   ConsCompiler64 снова собирается.
 
 ### Где остановились
-- Краш в TextModels.WriteSChar при ConsCompiler64.Compile внутри BB64:
-  spill.writer → объект с тегом desc|1 (mark-бит). Findings64 п.58.
+- РЕШЕНО: GC Mark спускался в bump-heap арены → mark-бит навсегда → краш
+  dispatch (WriteSChar). InHeap-охраны на входе и спуске (Findings64 п.58).
+- REPL выполняет команды без параметров (Startup.Setup, Kernel.Collect).
+- Краш DevMarkers.SizePref+0xa9 на команде с параметрами: результат
+  Fonts.dir.Default() читается как 0x0000000f00000000 (Findings64 п.60).
+  Подозрения: pvfp-рассинхрон Fonts (два отпечатка в одной сборке),
+  выравнивание pointer-полей.
 - GUI: ни одно окно не открывается на старте → event loop сразу выходит.
   Нужно открытие первого окна (Log?) — смотреть 32-битный LinInit/StdCmds.
 - Убрать debug-принты разработчика из LinRegistry.Init ([LR] ...) когда

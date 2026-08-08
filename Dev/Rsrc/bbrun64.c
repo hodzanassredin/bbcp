@@ -130,8 +130,11 @@ static size_t arenaPos;
 static void ArenaInit() {
     /* MAP_32BIT: refs-курсоры и ModSpec в CP-коде INTEGER-капнуты (<4 ГБ),
        GC Mark читает теги 32-битно — вся арена должна быть < 4 ГБ */
-    arena = mmap(NULL, ARENA_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC,
-                 MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);
+    void* hint = NULL;
+    const char* ab = getenv("BB_ARENA_BASE");	/* hex — фикс. база для детерминизма под gdb */
+    if (ab != NULL) hint = (void*)strtoull(ab, NULL, 0);
+    arena = mmap(hint, ARENA_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC,
+                 MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT | (hint ? MAP_FIXED_NOREPLACE : 0), -1, 0);
     if (arena == MAP_FAILED) { perror("arena mmap"); exit(1); }
     arenaPos = 0;
 }

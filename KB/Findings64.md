@@ -309,6 +309,28 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
 57. **GUI-бут доходит до event loop**: LinInit отрабатывает, Loop.Start
     крутится, Dialog.RequestExit(exitWithoutWindows) → чистый exit(0), т.к.
     ни одно окно не открылось. Открытие первого окна — следующий шаг.
-58. Открытый баг: краш в TextModels.WriteSChar (+0x26a) при компиляции
-    внутри BB64 (ConsCompiler64.Compile): spill.writer указывает на объект
-    с тегом desc|1 (бит 0 = mark!). Расследование не завершено.
+58. РЕШЕНО: краш WriteSChar — GC Mark СПУСКАЛСЯ в bump-heap Kernel64
+    (арена модулей): объекты арены получали mark-бит (INC(this.tag)), а
+    Sweep ходит только по кластерам root → mark оставался навсегда →
+    dispatch по тегу desc|1 → SIGSEGV. Фикс: InHeap-проверка и на входе
+    Mark, и в точке спуска (son) — вход НЕ покрывает спуск (INC в outer
+    LOOP). Поймано watchpoint'ом: чистая запись тега в Kernel64.NewRec,
+    затем +1 от Mark. Ограничение: ссылки bump→cluster не маркируются
+    (bump-объекты бессмертны; риск задокументирован).
+59. bbrun64: BB_ARENA_BASE=0x... — MAP_FIXED_NOREPLACE, детерминированная
+    арена под gdb (ASLR/MAP_32BIT иначе плавает даже под gdb). BB_TRAP=1 —
+    int3 после загрузки модулей. Поздние bp через
+    `break fprintf if strcmp((char*)$rdi, "init %s (main loader, %s mode)...\n")==0`.
+60. Открытый баг (следующий): краш DevMarkers.SizePref+0xa9 при REPL-
+    команде с параметрами (Call1 строит TextModel): сохранённый результат
+    Fonts.dir.Default() читается как 0x0000000f_00000000 (hi dword = 0xF).
+    Default() доказанно возвращает валидный rax — слот [rbp-0x18] портится
+    или читается не тот; heap-layout недетерминирован (GTK-треды) —
+    watchpoint-форензика затруднена. Подозрения: (a) pvfp-рассинхрон Font
+    (в одной сборке два отпечатка Fonts — см. "PVFP mismatch" в логе
+    test64; раскладки совпадают 144=144, но fp разные), (b) 4-vs-8
+    выравнивание pointer-полей после 4-байтных.
+61. REPL РАБОТАЕТ для команд без параметров и без StdLog-вывода:
+    'Startup.Setup' и 'Kernel.Collect' выполняются (Console.WriteStr идёт
+    в stdout). Падает только путь TextModels/Views (Call1 param text,
+    ShowStdLog).

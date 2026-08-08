@@ -1,0 +1,116 @@
+MODULE LinInit;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="153751" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0"
+	organization	= "www.oberon.ch blackbox.oberon.org"
+	contributors	= "Oberon microsystems, Anton Dmitriev, Ivan Denisov"
+	version	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABhAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAGAAAA@w0JLSANCQ=="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABhAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAGAAAA@w0JLSANCQ=="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	(** the first dynamically-loaded module *)
+
+	IMPORT
+		SYSTEM, Kernel, Services, Log, Dialog, Converters, Loop, Meta, 
+		
+	(* platform specific modules *)
+		GLib := LinGtk2GLib,
+		Gtk := LinGtk2Gtk,
+		LinGui,	(* provides Kernel.GuiHook *)
+		LinConsole,
+		
+	(* Loading order *)
+		
+		Windows, StdWindows,
+		StdInterpreter,	(* provides Dialog.CallHook *)
+		LinRegistry, (* provides StdRegistry.Hook *)
+		LinFonts, StdStdCFrames, LinDates, LinMechanisms,
+		LinBackends, (* provides StdWindows.WindowBackend *)
+		LinClipboard, (* registers smth for the clipboard to work in Gtk *)
+		LinLang, (* provides Dialog.LanguageHook *)
+		StdCmds, 
+		
+		LinDialog (* provides  Dialog.DialogHook, .GetSpecHook, .ExtCallHook *)
+		
+	(* END loading order *)
+		;
+
+	PROCEDURE [ccall] Fake (_: GLib.gpointer): GLib.gboolean;
+	BEGIN
+		RETURN 1
+	END Fake;
+
+	PROCEDURE FetchEvent;
+		VAR res_: INTEGER;
+	BEGIN
+		res_ := Gtk.gtk_main_iteration();
+	END FetchEvent;
+
+	PROCEDURE ValidateWindows;
+	BEGIN
+		StdWindows.Validate(NIL);
+	END ValidateWindows;
+
+	PROCEDURE ExitCondition(): BOOLEAN;
+	BEGIN
+		RETURN (Windows.dir.First() = NIL) & Dialog.exit
+	END ExitCondition;
+
+	PROCEDURE SearchVar (IN name: Kernel.Name; OUT cmd: Kernel.Name): BOOLEAN;
+		VAR m: Kernel.Module; module, variable: Meta.Item; ok: BOOLEAN;
+			var: RECORD (Meta.Value) cmd: Kernel.Name END;
+	BEGIN
+		m := Kernel.modList;
+		ok := FALSE;
+		WHILE (m # NIL) & ~ ok DO
+			IF ~ (m.refcnt < 0) THEN
+				Meta.Lookup(m.name$, module);
+				IF module.obj = Meta.modObj THEN
+					module.Lookup(name, variable);
+					IF variable.obj = Meta.varObj THEN
+						variable.GetVal(var, ok);
+						IF ok THEN
+							cmd := var.cmd
+						END
+					END
+				END
+			END;
+			m := m.next
+		END;
+		RETURN ok
+	END SearchVar;
+
+	PROCEDURE Init;
+		VAR res_: INTEGER; m: Kernel.Module; configCmd: Kernel.Name;
+	BEGIN
+		LinClipboard.Install;
+		
+		m := Kernel.ThisMod("DevDebug");
+		IF m = NIL THEN Kernel.LoadMod("StdDebug") END;
+		StdWindows.guardedCloseHook := StdCmds.CloseThis;
+		
+		IF ~ SearchVar("appConfigProcedure", configCmd) THEN
+			configCmd := "StdConfig.Setup"
+		END;
+		
+		Dialog.Call("LinConfig.SetupBefore", "Failed to call LinConfig.SetupBefore", res_);
+		Dialog.Call(configCmd, "Failed to call " + configCmd, res_);
+		Dialog.Call("LinConfig.SetupAfter", "Failed to call LinConfig.SetupAfter", res_);
+		
+		res_ := GLib.g_timeout_add(Dialog.idlePeriod, Fake, 0);
+		
+		(* makes a GDK timeout event occur every idlePeriod (first param) milliseconds, which makes an iteration of the GTK main loop take place. Fake does nothing, actual processing is in the Loop below *)
+		
+		Dialog.RequestExit(Dialog.exitWithoutWindows);
+		Loop.quantum := Dialog.idlePeriod;
+		Loop.Start(FetchEvent, ValidateWindows, ExitCondition);
+		
+	END Init;
+
+BEGIN
+	Init;
+	Kernel.Quit(0)
+END LinInit.

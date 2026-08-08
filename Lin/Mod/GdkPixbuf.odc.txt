@@ -1,0 +1,55 @@
+MODULE LinGdkPixbuf ["libgdk_pixbuf-2.0.so.0"];
+	
+	IMPORT SYSTEM,
+		Glib := LinGtk2GLib, Gdk := LinGtk2Gdk, GObject := LinGtk2GObject;
+	
+	CONST 
+		(* GdkInterpType *)
+		GDK_INTERP_NEAREST* = 0;
+		GDK_INTERP_TILES* = 1;
+		GDK_INTERP_BILINEAR* = 2;
+		GDK_INTERP_HYPER* = 3;
+	
+	TYPE
+		UPointer* = POINTER TO RECORD [untagged] END;
+		PString* = POINTER TO ARRAY [untagged] OF SHORTCHAR;
+		
+		GInputStream* = POINTER TO ABSTRACT RECORD [untagged] (GObject.GObject) END;
+		GBytes* = POINTER TO RECORD [untagged] END;
+		
+		GDestroyNotify* = PROCEDURE (user_data: SYSTEM.PTR);
+		
+		(*GHashTable* = Pointer;
+		GHashTableIter* = Pointer;*)
+	
+	PROCEDURE [ccall] get_option* ["gdk_pixbuf_get_option"] (pixbuf: Gdk.GdkPixbuf; key: PString): PString;
+	PROCEDURE [ccall] new_from_stream* ["gdk_pixbuf_new_from_stream"] (stream: GInputStream; cancellable: UPointer; VAR error: Glib.GError): Gdk.GdkPixbuf;
+	PROCEDURE [ccall] get_width* ["gdk_pixbuf_get_width"] (pixbuf: Gdk.GdkPixbuf): INTEGER;
+	PROCEDURE [ccall] get_height* ["gdk_pixbuf_get_height"] (pixbuf: Gdk.GdkPixbuf): INTEGER;
+	PROCEDURE [ccall] scale_simple* ["gdk_pixbuf_scale_simple"] (src: Gdk.GdkPixbuf; w, h, interp_type: INTEGER): Gdk.GdkPixbuf;
+	PROCEDURE [ccall] g_memory_input_stream_new_from_bytes* (bytes: GBytes): GInputStream;
+
+	PROCEDURE [ccall] g_bytes_new_with_free_func* (IN data: ARRAY [untagged] OF BYTE; size: Glib.gsize; free_func: GDestroyNotify; user_data: SYSTEM.PTR): GBytes;
+	PROCEDURE [ccall] g_bytes_unref* (bytes: GBytes);
+	
+	(*PROCEDURE [ccall] g_hash_table_iter_init* (iter: GHashTableIter; hash_table: GHashTable);
+	PROCEDURE [ccall] g_hash_table_iter_next* (iter: GHashTableIter; key, value: Pointer): INTEGER;*)
+
+
+END LinGdkPixbuf.
+
+
+
+
+GHashTableIter iter;
+gpointer key, value;
+
+g_hash_table_iter_init (&iter, hash_table);
+while (g_hash_table_iter_next (&iter, &key, &value))
+  {
+    // do something with key and value
+  }
+
+
+GHashTable *
+gdk_pixbuf_get_options (GdkPixbuf *pixbuf);

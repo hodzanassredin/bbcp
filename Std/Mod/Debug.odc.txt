@@ -394,7 +394,7 @@ MODULE StdDebug;
 					IF c # NIL THEN
 						ptr := SYSTEM.VAL(ArrayPtr, adr);
 						IF (f = 13X) & (FormOf(btyp) = 12X) THEN	(* array *)
-							adr := SYSTEM.ADR(ptr.len[btyp.id DIV 16 MOD 16]) 
+							adr := SHORT(SYSTEM.ADR(ptr.len[btyp.id DIV 16 MOD 16]))	(* TODO64: SHORT — куча <4ГБ (MAP_32BIT) *)
 						END
 					ELSE OutString("#Dev:IllegalPointer")
 					END

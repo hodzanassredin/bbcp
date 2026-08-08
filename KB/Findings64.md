@@ -257,3 +257,58 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
 44. GTK-аудит: KB/Gtk64-Audit.md — алиасы, GdkEvent×8, 31 double-функция,
     varargs (только строки, AL=0 хватает), колбэки (ждут SysV Enter),
     минимальный путь до окна A→B→C→D.
+
+## Сессия 2026-08-08: бут до MAIN OK, GC, первая компиляция внутри BB64
+
+45. **S.ADR = Int64 (processor=12)** — п.16 ПЕРЕПИСАН: ADR возвращает int64typ
+    (стек >4ГБ!), TYP остаётся Int32 (дескрипторы в арене <4ГБ). Fallout:
+    `x: INTEGER; x := S.ADR(...)` → err 113 по всему legacy-коду. Лечение:
+    LONGINT-поля/локали или SHORT() с комментом TODO64 (куча <4ГБ → SHORT
+    безопасен для heap-адресов, НЕ для стека).
+46. **VAL(LONGINT, int32-значение) молча ломалось**: ConvMove sysval-ветка
+    (CPCamd64 ~949) делала PtrToLong только для Pointer/ProcTyp; Int32/Set
+    проваливались дальше и hi-dword пары брался из stale item.index →
+    `platform.tag := S.VAL(LONGINT, S.TYP(Platform))` писал lo в оба dword
+    (0x428a4498428a4498) → краш в SetPlatform на методе. Фикс: Int32/Set →
+    LoadLong (sign-extend в пару).
+47. **Kernel.Module.ptrs = ARRAY OF INTEGER** (4-байтные offsets, CPE.FindPtrs
+    = Out4). Было LONGINT → MarkGlobals читал пары записей как одно число
+    (0x22c_42da5484) → краш в Mark. Любая смена публичной раскладки Kernel =
+    новый fingerprint → полная пересборка (test64).
+48. **MarkGlobals: глобалы могут указывать в АРЕНУ МОДУЛЕЙ** (modList и др.;
+    bbrun64 грузит модули в mmap-арену БЕЗ heap-тегов, в отличие от 32-бит
+    AllocateModMem). Mark по такому указателю = чтение мусора как тега.
+    Фикс: Kernel.InHeap(p) — проверка по кластерам (root) перед Mark.
+49. **CompileSubs продолжает после ошибок** (DevCompiler64.CompileSubs:
+    счётчик failed/total + "== CompileSubs FAILED: X" вместо RETURN). Иначе
+    один сломанный модуль (StdDebug) обрезал сборку Lin → бут без LinFiles.
+50. **BB_USE_DIR = cwd у run-BlackBoxInterp/run-dev0**: запуск из bbcp или
+    bbcp64use подхватывает чужие Sym → "illegal foot print"/"corrupted code
+    file" и МОЛЧА не пишет .odc. sync-odc.sh и build-dev64.sh теперь сами
+    делают cd в хост-каталог; вывод ошибок не глушим.
+51. **32-бит мир bbcp тоже надо пересобирать согласованно**: разработчик
+    пересобрал System/Sym и TextModels.osf, но не остальной Text/Std →
+    DevCompiler64 не компилировался ("inconsistent import"). Цепочка:
+    TextModels→Rulers→Mappers→Setters→Views→Controllers→StdLog, затем
+    `echo 'DevCompiler.CompileThis DevCompiler64' | ./run-dev0`.
+52. **ConsCompiler64 в списке build-dev64.sh** — без него REPL падает с
+    "command error: code file for ConsCompiler64 not found" (GUI-диалог даже
+    в console-режиме: LinGui.Init грузит GTK всегда).
+53. **errpos.sh**: ODC line-end = один 0DX → CRLF в .txt нормализуем
+    (`\r\n`→1 char); cp1251 fallback для комментариев разработчика.
+54. **Тест-модули (TestT*, TA6x, SystemTestT1, TestK) НЕ коммитить в
+    System/Mod** — CompileSubs их сканирует, bbrun64 ГРУЗИТ при буте.
+    bbcp64use/*/Mod — пофайловые симлинки; build-dev64.sh копирует .txt →
+    там появляются реальные файлы-копии, чистить при удалении в bbcp.
+55. **Std/Mod/StdCFrames.odc = MODULE StdStdCFrames — НЕ дубликат**: его
+    импортирует LinInit. Удалять нельзя.
+56. **StdRasters: Q0/Q1-блиттеры переписаны** с ADDRESS-арифметики
+    (GET/PUT по вычисленному Int64-адресу = err 220, backend так не умеет)
+    на индексацию RasterData (IN src/VAR dst: RasterData) — портативно 32/64.
+    Идиома для буферов: ADR(x[i]) + SYSTEM.VAL(PtrType, al) (LinFiles).
+57. **GUI-бут доходит до event loop**: LinInit отрабатывает, Loop.Start
+    крутится, Dialog.RequestExit(exitWithoutWindows) → чистый exit(0), т.к.
+    ни одно окно не открылось. Открытие первого окна — следующий шаг.
+58. Открытый баг: краш в TextModels.WriteSChar (+0x26a) при компиляции
+    внутри BB64 (ConsCompiler64.Compile): spill.writer указывает на объект
+    с тегом desc|1 (бит 0 = mark!). Расследование не завершено.

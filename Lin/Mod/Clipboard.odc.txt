@@ -1,0 +1,319 @@
+MODULE LinClipboard;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="194550" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0"
+	organization	= "www.oberon.ch, blackbox.oberon.org"
+	contributors	= "Oberon microsystems, Ivan Denisov"
+	version	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAFQEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACPAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAA0AAAA@w0JLSAyMDI2MDcxMCwgZGlhLCBiZXR0ZXIgc3VwcG9ydCBvZiB2YXJpb3VzIG1vZGVzDQk="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABkAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAJAAAA@w0JLSAuLi4NCQ=="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT
+		SYSTEM, Utf, 
+		Gdk := LinGtk2Gdk, Gtk := LinGtk2Gtk, GtkU := LinGtk2Util,
+		HostWindows := LinBackends, 
+		Log, Strings, Dialog, Views, Controllers,
+		TextModels, TextViews, Services,
+		StdCmds;
+
+	TYPE
+		Clip = POINTER TO RECORD
+			view: Views.View;
+			w, h: INTEGER;
+			isSingle: BOOLEAN;
+			type: ARRAY 256 OF CHAR;
+		END;
+		
+		ClipboardHook = POINTER TO RECORD (StdCmds.ClipboardHook) END;
+		
+	VAR
+		bbAtom-, targetUTF8_STRING, targetTEXT: Gdk.GdkAtom;
+		curClip: Clip;
+		
+	PROCEDURE ExportText (v: TextViews.View): POINTER TO ARRAY OF CHAR;
+		VAR rd: TextModels.Reader; str: POINTER TO ARRAY OF CHAR; i, len: INTEGER;
+	BEGIN
+		rd := v.ThisModel().NewReader(NIL);
+		len := v.ThisModel().Length();
+		IF len > 0 THEN
+			NEW(str, len + 1);
+			i := 0;
+			rd.SetPos(0);
+			REPEAT
+				rd.Read;
+				IF rd.view = NIL THEN
+					IF (rd.char = TextModels.line) OR (rd.char = TextModels.para) THEN
+						str[i] := 0AX
+					ELSE
+						str[i] := rd.char
+					END;
+					INC(i)
+				END
+			UNTIL rd.eot OR (i >= len);
+			str[i] := 0X
+		ELSE
+			NEW(str, 1); str[0] := 0X
+		END;
+		RETURN str
+	END ExportText;
+	
+	PROCEDURE ExportUtf8 (IN s: ARRAY OF CHAR): POINTER TO ARRAY OF SHORTCHAR;
+		VAR ustr: POINTER TO ARRAY OF SHORTCHAR; res: INTEGER;
+	BEGIN
+		NEW(ustr, 4 * LEN(s$) + 1);
+		Utf.StringToUtf8(s, ustr, res);
+		IF res = 0 THEN
+			RETURN ustr
+		ELSE
+			RETURN NIL
+		END
+	END ExportUtf8;
+	
+	PROCEDURE Register* (v: Views.View; w, h: INTEGER; isSingle: BOOLEAN);
+		VAR c: Gtk.GtkClipboard; str: POINTER TO ARRAY OF CHAR; 
+			utf: POINTER TO ARRAY OF SHORTCHAR; res: INTEGER;
+	BEGIN
+		(* text view can be converted to global clipboard *)
+		WITH v: TextViews.View DO
+			str := ExportText(v);
+			utf := ExportUtf8(str);
+			IF utf # NIL THEN
+				c :=Gtk.gtk_clipboard_get(Gdk.GDK_SELECTION_CLIPBOARD);
+				Gtk.gtk_clipboard_set_text(c, utf^, LEN(utf$));
+				Gtk.gtk_clipboard_store(c)
+			ELSE
+				Dialog.ShowMsg("utf8 conversion failed: " + str$)
+			END
+		ELSE END;
+		
+		(* local clipboard *)
+		NEW(curClip);
+		curClip.view := Views.CopyOf(v, Views.deep);
+		curClip.w := w; curClip.h := h; curClip.isSingle := isSingle;
+		Services.GetTypeName(v, curClip.type);
+		
+		res := Gtk.gtk_selection_owner_set(
+			HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD, Gdk.GDK_CURRENT_TIME);
+		IF res = 0 THEN
+			Dialog.ShowMsg("HostClipboard.Register CLIPBOARD failed")
+		END
+	END Register;
+
+	PROCEDURE (hook: ClipboardHook) Register* (v: Views.View; w, h: INTEGER; isSingle: BOOLEAN);
+	BEGIN Register(v, w, h, isSingle)
+	END Register;
+
+	(* "selection-clear-event" *)
+	PROCEDURE [ccall] Clear* (w_: Gtk.GtkWidget; event_, user_data_: INTEGER);
+	BEGIN
+		curClip := NIL
+	END Clear;
+
+	(* "selection-get" *)
+	PROCEDURE [ccall] ConvertCopy* (widget_: Gtk.GtkWidget; VAR selection_data: Gtk.GtkSelectionData; info_, time_: INTEGER; data_: INTEGER);
+		VAR
+			bbViewString: ARRAY 256 OF SHORTCHAR; v: Views.View;
+			utf: POINTER TO ARRAY OF SHORTCHAR;
+	BEGIN
+		IF curClip # NIL THEN
+			bbViewString := "BlackBox View: " + SHORT(curClip.type);
+			IF (selection_data.target = targetUTF8_STRING)
+			OR (selection_data.target = targetTEXT) 
+			OR (selection_data.target = Gdk.GDK_SELECTION_TYPE_STRING) THEN
+				v := curClip.view;
+				WITH v: TextViews.View DO
+					utf := ExportUtf8(ExportText(v));
+					IF utf # NIL THEN
+						Gtk.gtk_selection_data_set(
+							selection_data, selection_data.target, 8, utf^, LEN(utf$))
+					ELSE
+						Dialog.ShowMsg("UTF-8 conversion failed")
+					END
+				ELSE
+					Gtk.gtk_selection_data_set(selection_data, selection_data.target, 8, bbViewString, LEN(bbViewString$))
+				END
+			ELSIF selection_data.target = bbAtom THEN
+				Gtk.gtk_selection_data_set(selection_data, selection_data.target, 8, bbViewString, LEN(bbViewString$))
+			ELSE
+				Dialog.ShowMsg("HostClipboard.ConvertCopy: Unknown type")
+			END
+		END
+	END ConvertCopy;
+	
+
+	PROCEDURE AtoD (IN ss: ARRAY OF SHORTCHAR; type: Gdk.GdkAtom): POINTER TO ARRAY OF CHAR;
+		VAR s: POINTER TO ARRAY OF CHAR; letter: ARRAY 6 OF CHAR; res, i, j, len: INTEGER; ch: CHAR;
+		
+		PROCEDURE ReadUnicode (p_: INTEGER; OUT ch: CHAR): BOOLEAN;
+		VAR int: INTEGER;
+		BEGIN
+			IF (len - i > 5) & (ss[i] = "\") & (ss[i+1] = "u") &
+				(((ss[i+2] >= "0") & (ss[i+2] <= "9")) OR ((ss[i+2] >= "a") & (ss[i+2] <= "f"))) &
+				(((ss[i+3] >= "0") & (ss[i+3] <= "9")) OR ((ss[i+3] >= "a") & (ss[i+3] <= "f"))) &
+				(((ss[i+4] >= "0") & (ss[i+4] <= "9")) OR ((ss[i+4] >= "a") & (ss[i+4] <= "f"))) &
+				(((ss[i+5] >= "0") & (ss[i+5] <= "9")) OR ((ss[i+5] >= "a") & (ss[i+5] <= "f"))) THEN
+				letter[0] := Strings.Upper(ss[i+2]);
+				letter[1] := Strings.Upper(ss[i+3]);
+				letter[2] := Strings.Upper(ss[i+4]);
+				letter[3] := Strings.Upper(ss[i+5]);
+				letter[4] := "H";
+				letter[5] := 0X;
+				Strings.StringToInt(letter, int, res);
+				IF res = 0 THEN
+					ch := CHR(int)
+				ELSE
+					ch := "?"
+				END;
+				RETURN TRUE
+			ELSE
+				ch := ss[i];
+				RETURN FALSE
+			END
+		END ReadUnicode;
+
+	BEGIN
+		(* count unicode symbols *)
+		len := LEN(ss$);
+		i := 0; j := 0;
+		WHILE ss[i] # 0X DO
+			IF ReadUnicode(i, ch) THEN
+				INC(i, 6); INC(j)
+			ELSE
+				INC(i); INC(j)
+			END
+		END;
+		IF (type = targetUTF8_STRING) OR (type = targetTEXT) OR (i = j) THEN
+			NEW(s, LEN(ss$) * 4);
+			Utf.Utf8ToString(ss, s, res);
+			IF res = 0 THEN
+				i := 0;
+				WHILE s[i] # 0X DO 
+					IF s[i] = 0AX THEN
+						s[i] := 0DX
+					END; INC(i)
+				END;
+			ELSE
+				s^ := ss$
+			END
+		ELSE
+			(* create new string and convert *)
+			NEW(s, j + 1);
+			i := 0; j := 0;
+			WHILE ss[i] # 0X DO 
+				IF ss[i] = 0AX THEN
+					s[j] := 0DX
+				ELSE
+					IF ReadUnicode(i, ch) THEN
+						INC(i, 5);
+						s[j] := ch
+					ELSE
+						s[j] := ss[i]
+					END
+				END;
+				INC(i); INC(j)
+			END;
+			s[j] := 0X;
+		END;
+		RETURN s
+	END AtoD;
+	
+	(* Must be connected to signal "selection-received" for HostWindows.main. This is done in HostMenus. *)
+	
+	PROCEDURE [ccall] DoPaste* (widget_: Gtk.GtkWidget; 
+					VAR selection_data: Gtk.GtkSelectionData; time_: INTEGER; data_: INTEGER);
+		VAR ops: Controllers.PollOpsMsg; msg: Controllers.EditMsg;
+	BEGIN
+		IF selection_data.length <= 0 THEN RETURN END;
+		
+		IF (selection_data.type = bbAtom)
+		OR (selection_data.type = Gdk.GDK_SELECTION_TYPE_STRING)
+		OR (selection_data.type = targetUTF8_STRING)
+		OR (selection_data.type = targetTEXT)
+		THEN
+		
+			Controllers.PollOps(ops);
+			IF Controllers.paste IN ops.valid THEN
+				msg.clipboard := TRUE;
+				IF curClip = NIL THEN 
+					(* TODO: Is this a valid way to figure out if the current copy is a BB view or not? *)
+					
+					msg.view := TextViews.dir.New(
+												TextModels.dir.NewFromString(
+														AtoD(selection_data.data$, selection_data.type)));
+					msg.isSingle := FALSE; 
+					msg.w := 0; msg.h := 0
+				ELSE
+					msg.view := Views.CopyOf(curClip.view, Views.deep);
+					msg.isSingle := curClip.isSingle; 
+					msg.w := curClip.w; msg.h := curClip.h
+				END;
+				IF msg.view # NIL THEN
+					msg.op := Controllers.paste; Controllers.Forward(msg)
+				END
+			END
+		ELSE
+			Dialog.ShowMsg("unknown selection type");
+		END
+	END DoPaste;
+
+	PROCEDURE (hook: ClipboardHook) Paste;
+	BEGIN
+		IF ~Gtk.gtk_selection_convert(
+					HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+					targetUTF8_STRING, Gdk.GDK_CURRENT_TIME) 
+			& ~ Gtk.gtk_selection_convert(
+				HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+				targetTEXT, Gdk.GDK_CURRENT_TIME)
+			& ~ Gtk.gtk_selection_convert(
+				HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+				Gdk.GDK_TARGET_STRING, Gdk.GDK_CURRENT_TIME) THEN
+			Log.String("can't paste"); Log.Ln;
+		END
+	END Paste;
+
+	PROCEDURE Init;
+	BEGIN
+		bbAtom := Gdk.gdk_atom_intern("application/x-blackbox-view", 0);
+		targetUTF8_STRING := Gdk.gdk_atom_intern("UTF8_STRING", 0);
+		targetTEXT := Gdk.gdk_atom_intern("TEXT", 0);
+	END Init;
+
+	PROCEDURE SetSignals*;
+		VAR res_: INTEGER;
+	BEGIN
+		IF HostWindows.first = NIL THEN
+			Log.String("can't install Clipboard signals: LinWindows.last = NIL"); Log.Ln;
+			RETURN;
+		END;
+		
+		Gtk.gtk_selection_add_target(
+			HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+			Gdk.GDK_TARGET_STRING, Gdk.GDK_SELECTION_TYPE_STRING);
+		Gtk.gtk_selection_add_target(
+			HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+			targetUTF8_STRING, 1);
+		Gtk.gtk_selection_add_target(
+			HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+			targetTEXT, 2);
+		Gtk.gtk_selection_add_target(
+			HostWindows.first, Gdk.GDK_SELECTION_CLIPBOARD,
+			bbAtom, 3);
+		
+		res_ := GtkU.gtk_signal_connect(HostWindows.first, "selection-received", SYSTEM.ADR(DoPaste), 0);
+		res_ := GtkU.gtk_signal_connect(HostWindows.first, "selection-get", SYSTEM.ADR(ConvertCopy), 0);
+		res_ := GtkU.gtk_signal_connect(HostWindows.first, "selection-clear-event", SYSTEM.ADR(Clear), 0);
+	END SetSignals;
+
+	PROCEDURE Install*; 
+		VAR h: ClipboardHook;
+	BEGIN
+		NEW(h);
+		StdCmds.clipboardHook := h
+	END Install;
+
+BEGIN
+	Init
+END LinClipboard.

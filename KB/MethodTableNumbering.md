@@ -51,8 +51,7 @@
 
 ## Микро-репродукция (работает корректно)
 
-`System/Mod/TestT2.odc.txt` (ABSTRACT запись A, 8 методов, один объявлен поздно)
-+ `System/Mod/TestT3.odc.txt` (B(A) + ErrLog с методом, как в LinKernel).
-`tools64/c64.sh SystemTestT2/SystemTestT3`, затем `tools64/desc.py` на OCF —
-таблицы алфавитные и консистентные с call-site'ами (UseIt: `call *-0x20(tag)`
-= num 3 = M1).
+Модули System/Mod/TestT2/TestT3 (ABSTRACT запись, 8 методов) подтвердили
+конвенцию; 2026-08-08 УДАЛЕНЫ из System/Mod — тест-модули в боевых каталогах
+грузятся при буте и мусорят в CompileSubs (Findings64 п.54). При надобности
+создавать заново вне System/Mod.

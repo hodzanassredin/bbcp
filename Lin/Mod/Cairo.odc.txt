@@ -1,0 +1,46 @@
+MODULE LinCairo ["libcairo.so.2"];
+
+IMPORT SYSTEM, LinGtk2Pango;
+
+CONST
+    CAIRO_FORMAT_ARGB32* = 0;
+
+TYPE
+    cairo_t* = POINTER TO LIMITED RECORD [untagged] END;
+    cairo_surface_t* = POINTER TO RECORD [untagged] END;
+
+    cairo_format_t* = INTEGER;
+
+PROCEDURE [ccall] cairo_create* (surface: cairo_surface_t): cairo_t;
+
+PROCEDURE [ccall] cairo_destroy* (cr: cairo_t);
+
+PROCEDURE [ccall] cairo_save* (cr: cairo_t);
+
+PROCEDURE [ccall] cairo_restore* (cr: cairo_t);
+
+PROCEDURE [ccall] cairo_image_surface_create* (format: cairo_format_t;
+                                       width, height: INTEGER): cairo_surface_t;
+
+PROCEDURE [ccall] cairo_surface_destroy* (s: cairo_surface_t);
+
+PROCEDURE [ccall] cairo_translate* (cr: cairo_t; tx, ty: REAL);
+
+PROCEDURE [ccall] cairo_rotate* (cr: cairo_t; angle: REAL);
+
+PROCEDURE [ccall] cairo_scale* (cr: cairo_t; sx, sy: REAL);
+
+PROCEDURE [ccall] cairo_rectangle* (cr: cairo_t; x, y, w, h: REAL);
+
+PROCEDURE [ccall] cairo_clip* (cr: cairo_t);
+
+PROCEDURE [ccall] cairo_set_source_rgb* (cr: cairo_t; r, g, b: REAL);
+
+PROCEDURE [ccall] cairo_move_to* (cr: cairo_t; x, y: REAL);
+
+PROCEDURE [ccall] cairo_line_to* (cr: cairo_t; x, y: REAL);
+
+PROCEDURE [ccall] cairo_stroke* (cr: cairo_t);
+
+END LinCairo.
+

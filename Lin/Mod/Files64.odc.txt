@@ -780,7 +780,8 @@ MODULE LinFiles64;
 	END ReadByte;
 
 	PROCEDURE (r: Reader) ReadBytes (VAR x: ARRAY OF BYTE; beg, len: INTEGER);
-		VAR from, to, count, restInBuf: INTEGER;
+		TYPE ByteArr = POINTER TO ARRAY [untagged] OF BYTE;
+		VAR from, to: ByteArr; al: LONGINT; count, restInBuf: INTEGER;	(* 64-бит: адреса через pointer *)
 	BEGIN	(* portable *)
 		ASSERT(beg >= 0, 21);
 		IF len > 0 THEN
@@ -792,7 +793,8 @@ MODULE LinFiles64;
 				ELSIF restInBuf <= len THEN count := restInBuf
 				ELSE count := len
 				END;
-				from := SYSTEM.ADR(r.buf.data[r.offset]); to := SYSTEM.ADR(x) + beg;
+				al := SYSTEM.ADR(r.buf.data[r.offset]); from := SYSTEM.VAL(ByteArr, al);
+				al := SYSTEM.ADR(x[beg]); to := SYSTEM.VAL(ByteArr, al);	(* не ADR(x)+beg: Int64-сложение усекает *)
 				SYSTEM.MOVE(from, to, count);
 				INC(r.offset, count); INC(beg, count); DEC(len, count)
 			END;
@@ -865,7 +867,8 @@ MODULE LinFiles64;
 	END WriteByte;
 
 	PROCEDURE (w: Writer) WriteBytes (IN x: ARRAY OF BYTE; beg, len: INTEGER);
-		VAR from, to, count, restInBuf: INTEGER;
+		TYPE ByteArr = POINTER TO ARRAY [untagged] OF BYTE;
+		VAR from, to: ByteArr; al: LONGINT; count, restInBuf: INTEGER;	(* 64-бит: адреса через pointer *)
 	BEGIN	(* portable *)
 		ASSERT(beg >= 0, 21); ASSERT(w.base.state # closed, 25);
 		IF len > 0 THEN
@@ -874,7 +877,8 @@ MODULE LinFiles64;
 				IF (w.org # w.buf.org) OR (w.offset >= bufsize) THEN w.SetPos(w.org + w.offset) END;
 				restInBuf := bufsize - w.offset;
 				IF restInBuf <= len THEN count := restInBuf ELSE count := len END;
-				from := SYSTEM.ADR(x) + beg; to := SYSTEM.ADR(w.buf.data[w.offset]);
+				al := SYSTEM.ADR(x[beg]); from := SYSTEM.VAL(ByteArr, al);	(* не ADR(x)+beg: Int64-сложение усекает *)
+				al := SYSTEM.ADR(w.buf.data[w.offset]); to := SYSTEM.VAL(ByteArr, al);
 				SYSTEM.MOVE(from, to, count);
 				INC(w.offset, count); INC(beg, count); DEC(len, count);
 				IF w.offset > w.buf.len THEN INC(w.base.len, w.offset - w.buf.len); w.buf.len := w.offset END;

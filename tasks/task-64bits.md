@@ -4,6 +4,39 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-08)
+
+### Что работает
+- Полная сборка `System Std Text Form Lin Cons` + Dev-пайплайн: **142 модуля,
+  0 ошибок** (CompileSubs теперь не стопается на первой ошибке, печатает сводку).
+- **Бут до MAIN OK**: все тела модулей проходят ("body loop finished"),
+  LinRegistry.Init работает (Startup.Setup-заглушка вызывается), console-REPL
+  (LinIntLoader → LinIntInit → ConsInterp) принимает команды; GUI-режим доходит
+  до Loop.Start и чисто выходит (нет открытых окон — exitWithoutWindows).
+- **GC Mark/MarkGlobals работают** (InHeap-охрана, ptrs 4-байт).
+- Исправлены: VAL Int32→Int64 (ConvMove sysval), CPM WordPair (err 113 —
+  селектор от VAL-результата не designator), LinFiles64 Read/WriteBytes
+  (pointer-идиома), StdTables/StdDebug (SHORT(ADR)), StdRasters (Q0/Q1
+  переписаны на индексацию RasterData), LinRegistry.odc (был текстом!),
+  ConsCompiler64 снова собирается.
+
+### Где остановились
+- Краш в TextModels.WriteSChar при ConsCompiler64.Compile внутри BB64:
+  spill.writer → объект с тегом desc|1 (mark-бит). Findings64 п.58.
+- GUI: ни одно окно не открывается на старте → event loop сразу выходит.
+  Нужно открытие первого окна (Log?) — смотреть 32-битный LinInit/StdCmds.
+- Убрать debug-принты разработчика из LinRegistry.Init ([LR] ...) когда
+  SearchVar будет починен (TODO64: Meta.Lookup виснет — заглушка RETURN FALSE).
+
+### Проверка коммита разработчика (3d9a06e7, 2026-07-24)
+Вердикт: направление верное (VAL-оверлеи, SetErr, LinRegistry typed GetVal),
+но дерево осталось сломанным: CPM не компилировался (err 113 → каскад 249 в
+DevCompiler64), Lin/Mod/Registry.odc перезаписан текстом, ConsCompiler64
+выкинут из build-dev64 (REPL: CodeFileNotFound), 32-бит Sym рассинхронирован
+(Text/Std протухли → DevCompiler64 не пересобирался), тест-модули
+закоммичены в System/Mod (TA6 грузился при буте). Всё разобрано, Findings64
+п.45-58.
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (на конец сессии 2026-07-24, вечер)
 
 ### Что работает

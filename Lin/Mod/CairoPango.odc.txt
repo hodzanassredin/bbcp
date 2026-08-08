@@ -1,0 +1,9 @@
+MODULE LinCairoPango ["libpangocairo-1.0.so.0"];
+
+IMPORT SYSTEM, LinGtk2Pango, LinCairo;
+
+PROCEDURE [ccall] pango_cairo_create_layout* (cr: LinCairo.cairo_t): LinGtk2Pango.PangoLayout;
+
+PROCEDURE [ccall] pango_cairo_show_layout* (cr: LinCairo.cairo_t; layout: LinGtk2Pango.PangoLayout);
+
+END LinCairoPango.

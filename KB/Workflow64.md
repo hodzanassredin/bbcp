@@ -126,3 +126,24 @@ target processor=12. LogMarks печатает позиции ошибок в к
    для CP-читателей — ТОЛЬКО byte-buffer с явными смещениями (bootInfo: argv@+12,
    C struct дал бы +16 из-за natural alignment!).
 5. CASE-таблицы/фиксапы: верить сырым байтам, не objdump.
+
+## 2026-08-08: уроки
+
+- run-BlackBoxInterp/run-dev0 ставят BB_USE_DIR=cwd: ЗАПУСКАТЬ ТОЛЬКО из дома
+  хоста (bbcb2 / bbcp соответственно). sync-odc.sh и build-dev64.sh теперь
+  делают это сами; глушение вывода (`>/dev/null`) убрано — молчаливые фейлы
+  импорта стоили расследования.
+- .odc.txt частично в .gitignore (правило `*.odc.txt`): новые/меняемые .txt
+  коммитим через `git add -f` — иначе источник истины теряется.
+- `tools64/errors64.sh Sub...` — компилирует каждый модуль отдельно
+  (CompileThis не стопается) и собирает ВСЕ err-позиции разом.
+- CompileSubs (DevCompiler64) продолжает после ошибок, печатает
+  "== CompileSubs done, failed = N of M".
+- 32-бит пересборка цепочки для DevCompiler64 (после рассинхрона Sym):
+  TextModels→TextRulers→TextMappers→TextSetters→TextViews→TextControllers→
+  StdLog через DevCompiler.CompileThis, затем сам DevCompiler64.
+- bbrun64: `BB_TRAP=1` → int3 ПОСЛЕ загрузки модулей, до главного лоадера —
+  точка для установки брейкпоинтов в коде модулей под gdb.
+- GUI-прогоны без Xvfb открывают окна на дисплее пользователя (Dialog.ShowMsg
+  = GTK-диалог даже в console-режиме). DISPLAY= пустой — краш в Pango.
+  Оконные прогоны — осознанно и редко.

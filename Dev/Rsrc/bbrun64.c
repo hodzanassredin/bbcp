@@ -802,6 +802,7 @@ out:
     fprintf(stderr, "body loop finished\n");
 
     /* главный лоадер последним: загружает LinInit/LinIntInit и запускает среду */
+    if (getenv("BB_TRAP") != NULL) __builtin_trap();	/* gdb hook: модули загружены, можно ставить bp в коде модулей */
     {
         Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
         if (m != NULL && !(m->opts & init)) {

@@ -1,0 +1,736 @@
+MODULE StdRasters;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="172797" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0, new module"
+	organization	= "<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly93d3cub2Jlcm9uLmNoJykA"/>Oberon microsystems<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAPQAAAAAAAAE1AAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9ibGFja2JveGZyYW1ld29yay5vcmcnKQA="/>BBWFC<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9vYmVyb25jb3JlLnJ1JykA"/>OberonCore<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANwAAAAAAAAEvAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9naXRodWIuY29tL2JiY2InKQA="/>BBCP Team<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	contributors	= "Oberon microsystems, Anton Dmitriev, Ketmar Dark, Ivan Denisov"
+	version	= "<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="176052" h="109709" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="129229" h="109709" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEAEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACKAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAvAAAA@w0JLSAyMDIzMTEzMCwgaXZhbiwgYWRkIHNjYWxlIGJ5IEtldG1hciBEYXJrIA0J"/><odc-view type="StdFolds.Fold" w="129229" h="109709" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="129229" h="109709" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABkAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAJAAAA@w0JLSAuLi4NCQ=="/><odc-view type="StdFolds.Fold" w="129229" h="109709" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+	
+	IMPORT SYSTEM, Ports, Files, Models, Views, Stores, Properties;
+	
+	CONST
+		minVersion = 0; maxVersion = 0;
+		cBadModel = 1;
+		
+		(* InitFromFileRange: copy *)
+		shallow* = FALSE; deep* = TRUE;
+		
+		(* NewFromFile, NewModelFromFile: reference *)
+		reference* = TRUE;
+
+		(** source color swapping *)
+		swap* = TRUE; noSwap* = FALSE;
+		(* drawable raster scaling quality *)
+		nearest* = 0; bilinear* = 1;
+
+
+	TYPE
+		ADDRESS = LONGINT;	(* TODO64: был INTEGER; GET/PUT по Int64-адресу поддержаны (processor=12) *)
+		SIZET = INTEGER;
+	
+	TYPE
+		ImageLoader* = POINTER TO ABSTRACT RECORD END;
+		
+		RasterData* = ARRAY OF Ports.Color;
+		Image* = POINTER TO RECORD
+			width*, height*: INTEGER;
+			dpiX*, dpiY*: INTEGER;	(* can be 0 if unknown; if one is 0, then the other is 0 too *)
+			data*: POINTER TO RasterData;
+		END;
+		
+		Raster* = POINTER TO ABSTRACT RECORD (Ports.Raster) 
+			(** StdRaster's storage presentation is:
+				.rd.Base()[.beg, .end). .rd = NIL => uninitialized *)
+			rd-: Files.Reader;
+			beg-, end-: INTEGER;
+		END;
+		
+		Model* = POINTER TO RECORD (Models.Model)
+			raster-: Raster;
+			type-: Files.Type;
+			filepath: Files.Name;	(* # '' => .raster references external file filepath, = '' => Model carries file data for .raster, normally in the same file as Model itself *)
+		END;
+		
+		View* = POINTER TO RECORD (Views.View)
+			model: Model;
+		END;
+		
+		Directory* = POINTER TO ABSTRACT RECORD
+			type-: Files.Type;
+			loader: ImageLoader;
+			next: Directory;
+		END;
+	
+	VAR
+		list: Directory;
+		buffer: ARRAY 10 * 1024 OF BYTE;
+
+	PROCEDURE (ldr: ImageLoader) Detect* (rd: Files.Reader): BOOLEAN, NEW, ABSTRACT;
+	PROCEDURE (ldr: ImageLoader) Load* (rd: Files.Reader): Image, NEW, ABSTRACT;
+	PROCEDURE (ldr: ImageLoader) GetInfo* (rd: Files.Reader): Image, NEW, ABSTRACT;
+	
+	PROCEDURE Load* (r: Raster): Image;
+	VAR pos: INTEGER; img: Image; ok: BOOLEAN; d: Directory; rd: Files.Reader;
+	BEGIN
+		rd := r.rd;
+		img := NIL;
+		IF ~rd.eof THEN
+			pos := r.beg;
+			d := list;
+			WHILE (d # NIL) & (img = NIL) DO
+				IF d.loader # NIL THEN
+					ok := d.loader.Detect(rd);
+					rd.SetPos(pos);
+					IF ok THEN
+						img := d.loader.Load(rd);
+						IF img = NIL THEN
+							rd.SetPos(pos);
+						END
+					END
+				END;
+				d := d.next
+			END
+		END;
+		RETURN img
+	END Load;
+	
+	PROCEDURE (d: Directory) New* (): Raster, NEW, ABSTRACT;
+	PROCEDURE (d: Directory) HandlesFType* (IN type: Files.Type): BOOLEAN, NEW, ABSTRACT;
+	
+	PROCEDURE CanHandle* (IN ftype: Files.Type): BOOLEAN;
+		VAR d: Directory;
+	BEGIN
+		d := list; WHILE (d # NIL) & ~d.HandlesFType(ftype) DO d := d.next END;
+		RETURN d # NIL
+	END CanHandle;
+	
+	PROCEDURE AddDirectory* (d: Directory; type: Files.Type; loader: ImageLoader);
+		VAR tmp: Directory;
+	BEGIN
+		ASSERT(d # NIL, 20);
+		d.type := type;
+		d.loader := loader;
+		IF list = NIL THEN
+			list := d;
+		ELSE
+			tmp := list;
+			ASSERT(tmp.type # type, 22);
+			WHILE tmp.next # NIL DO
+				tmp := tmp.next;
+				ASSERT(tmp.type # type, 22);
+			END;
+			tmp.next := d
+		END
+	END AddDirectory;
+	
+	PROCEDURE ThisDirectory (ftype: Files.Type): Directory;
+	(** Fetch the first directory that handles file type ftype *)
+		VAR d: Directory;
+	BEGIN
+		d := list;
+		WHILE (d # NIL) & ~d.HandlesFType(ftype) DO
+			d := d.next
+		END;
+		RETURN d
+	END ThisDirectory;
+	
+	PROCEDURE New* (type: Files.Type): Raster;
+		VAR dir: Directory;
+	BEGIN
+		dir := ThisDirectory(type); ASSERT(dir # NIL, 20);
+		RETURN dir.New()
+	END New;
+	
+	PROCEDURE CopyFileRange (from: Files.Reader; beg, end: INTEGER; to: Files.Writer);
+	(** Make a copy of from.Base()[beg, end) into to *)
+		VAR len, chunk: INTEGER; 
+	BEGIN
+		len := end - beg; 
+		from.SetPos(beg);
+		WHILE len > 0 DO
+			chunk := MIN(len, LEN(buffer));
+			from.ReadBytes(buffer, 0, chunk);
+			to.WriteBytes(buffer, 0, chunk);
+			DEC(len, chunk)
+		END
+	END CopyFileRange;
+	
+	PROCEDURE (r: Raster) InitFileRange-, NEW, EMPTY;
+	
+	PROCEDURE InitFromFileRange* (r: Raster; rd: Files.Reader; beg, end: INTEGER; copy: BOOLEAN);
+	(** ~copy => r will reference rd.Base(); copy => a copy of rd.Base[beg, end) is made to be referenced by r *)
+		VAR f: Files.File;
+	BEGIN 
+		ASSERT(r # NIL, 20); ASSERT(r.rd = NIL, 21); ASSERT(rd # NIL, 22);
+		IF ~copy THEN 
+			r.rd := rd.Base().NewReader(NIL); r.beg := beg; r.end := end
+		ELSE
+			f := Files.dir.Temp(); r.rd := f.NewReader(NIL); 
+			r.beg := 0; r.end := end - beg;
+			CopyFileRange(rd, beg, end, f.NewWriter(NIL))
+		END;
+		r.InitFileRange
+	END InitFromFileRange;
+	
+	PROCEDURE NewModel* (r: Raster; IN type: Files.Type): Model;
+		VAR m: Model;
+	BEGIN
+		ASSERT(r # NIL, 20); NEW(m); m.raster := r; m.type := type$; m.filepath := ''; RETURN m
+	END NewModel;
+	
+	PROCEDURE NewModelFromSpec* (loc: Files.Locator; IN fname: Files.Name; reference: BOOLEAN): Model;
+	(** reference => the model is to hold a reference to the file rather than the file content; ~reference => the model is to hold a copy of the file's content *)
+		VAR m: Model; f: Files.File; r: Raster; d: Directory;
+	BEGIN
+		ASSERT(loc # NIL, 20); ASSERT(loc.res = 0, 21); ASSERT(fname # '', 22);
+		IF reference THEN HALT(126)
+		ELSE
+			f := Files.dir.Old(loc, fname, Files.shared);
+			ASSERT(f # NIL, 23);
+			d := ThisDirectory(f.type); ASSERT(d # NIL, 24);
+			r := d.New(); ASSERT(r # NIL, 60);
+			NEW(m); m.raster := r; m.type := d.type$; m.filepath := '';
+			InitFromFileRange(m.raster, f.NewReader(NIL), 0, f.Length(), deep)
+		END;
+		RETURN m
+	END NewModelFromSpec;
+	
+	PROCEDURE NewView* (m: Model): View;
+		VAR v: View;
+	BEGIN
+		ASSERT(m # NIL, 20); NEW(v); v.model := m; Stores.Join(v, m); RETURN v
+	END NewView;
+		
+	PROCEDURE (m: Model) Externalize- (VAR wr: Stores.Writer);
+	BEGIN
+		wr.WriteVersion(maxVersion);
+		wr.WriteString(m.filepath);
+		wr.WriteString(m.type);
+		IF m.filepath = '' THEN	(* Copy storage presentation of .raster into wr *)
+			wr.WriteInt(m.raster.end - m.raster.beg);
+			CopyFileRange(m.raster.rd, m.raster.beg, m.raster.end, wr.rider)
+		END;
+	END Externalize;
+	
+	PROCEDURE (m: Model) Internalize- (VAR rd: Stores.Reader);
+		VAR beg, len, _version: INTEGER; d: Directory;
+	BEGIN
+		rd.ReadVersion(minVersion, maxVersion, _version);
+		IF ~rd.cancelled THEN
+			rd.ReadString(m.filepath);
+			rd.ReadString(m.type);
+			IF m.filepath = '' THEN
+				rd.ReadInt(len); beg := rd.Pos();
+				d := ThisDirectory(m.type);
+				IF d # NIL THEN 
+					m.raster := d.New();
+					InitFromFileRange(m.raster, rd.rider, beg, beg + len, shallow);
+					rd.SetPos(beg +len)
+				ELSE
+					rd.SetPos(beg +len);
+					rd.TurnIntoAlien(Stores.alienComponent);
+				END
+			ELSE HALT(126)
+			END
+		END
+	END Internalize;
+	
+	PROCEDURE (m: Model) CopyFrom- (source: Stores.Store);
+		VAR r: Raster;
+	BEGIN
+		WITH source: Model DO
+			r := source.raster;
+			m.type := source.type;
+			m.raster := New(m.type); ASSERT(m.raster # NIL, 60);
+			InitFromFileRange(m.raster, r.rd, r.beg, r.end, deep)
+		END
+	END CopyFrom;
+	
+	
+	(* View *)
+	
+	PROCEDURE (v: View) Restore* (f: Views.Frame; _l, _t, _r, _b: INTEGER);
+	BEGIN ASSERT(v.model # NIL, 20);
+		f.DrawRaster(v.model.raster, 0, 0)
+	END Restore;
+	
+	PROCEDURE (v: View) HandlePropMsg- (VAR msg: Properties.Message);
+	BEGIN
+		WITH 
+		| msg: Properties.BoundsPref DO v.model.raster.GetSize(msg.w, msg.h)
+		| msg: Properties.SizePref DO 
+			IF (msg.w = Views.undefined) OR (msg.h = Views.undefined) THEN 
+				v.model.raster.GetSize(msg.w, msg.h)
+			END
+		| msg: Properties.ResizePref DO
+			msg.fixed := TRUE
+		ELSE
+		END
+	END HandlePropMsg;
+	
+	PROCEDURE (v: View) Externalize- (VAR wr: Stores.Writer);
+	BEGIN
+		wr.WriteVersion(maxVersion);
+		wr.WriteStore(v.model)
+	END Externalize;
+	
+	PROCEDURE (v: View) Internalize- (VAR rd: Stores.Reader);
+		VAR _version: INTEGER; s: Stores.Store;
+	BEGIN
+		rd.ReadVersion(minVersion, maxVersion, _version);
+		IF ~rd.cancelled THEN
+			rd.ReadStore(s);
+			WITH s: Model DO
+				v.model := s
+			ELSE
+				rd.TurnIntoAlien(cBadModel)
+			END
+		END
+	END Internalize;
+	
+	PROCEDURE (v: View) CopyFromModelView- (source: Views.View; model: Models.Model);
+	BEGIN 
+		IF model = NIL THEN v.model := Models.CopyOf(source(View).model)(Model)
+		ELSE v.model := model(Model)
+		END
+	END CopyFromModelView;
+	
+	
+	(* Converters *)
+	
+	PROCEDURE Import* (f: Files.File; OUT s: Stores.Store);
+		VAR r: Raster; d: Directory;
+	BEGIN
+		ASSERT(f # NIL, 20); ASSERT(f.type # '', 21); 
+		d := ThisDirectory(f.type); ASSERT(d # NIL, 22);
+		IF d # NIL THEN
+			r := d.New(); InitFromFileRange(r, f.NewReader(NIL), 0, f.Length(), deep);
+			s := NewView(NewModel(r, d.type))
+		END
+	END Import;
+	PROCEDURE Bounds (val, min, max: INTEGER): INTEGER;
+	BEGIN RETURN MAX(min, MIN(val, max))
+	END Bounds;
+
+
+	(* based on the code from A2 *)
+	
+	(* swap R and B components *)
+	PROCEDURE [code] SwapRB (c: Ports.Color): Ports.Color 0FH, 0C8H, 0C1H, 0C8H, 08H;
+
+	(* TODO64: Q-процедуры переписаны на индексацию RasterData вместо ADDRESS-арифметики:
+	   SYSTEM.GET/PUT по вычисленному Int64-адресу backend не поддерживает (err 220). *)
+	PROCEDURE Q0BGRA8888BGRA8888Copy (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, di, si, fx, fy: INTEGER;
+	BEGIN
+		fy := sy; di := dl + dt * dstw;
+		FOR y := dt TO db - 1 DO
+			fx := sx; si := (fy DIV 65536) * srcw;
+			FOR x := dl TO dr - 1 DO
+				dst[di] := src[si + fx DIV 65536];
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q0BGRA8888BGRA8888Copy;
+	PROCEDURE Q0BGRA8888BGRA8888CopySW (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, di, si, fx, fy: INTEGER;
+	BEGIN
+		fy := sy; di := dl + dt * dstw;
+		FOR y := dt TO db - 1 DO
+			fx := sx; si := (fy DIV 65536) * srcw;
+			FOR x := dl TO dr - 1 DO
+				dst[di] := SwapRB(src[si + fx DIV 65536]);
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q0BGRA8888BGRA8888CopySW;
+	PROCEDURE Q1BGRA8888BGRA8888Copy (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, xfleft, xfright, yftop, yfbottom: INTEGER;
+		di, si0, si1, xi0, xi1: INTEGER;
+		col0, col1, col2, col3: INTEGER;
+		b0, g0, r0, a0, b1, g1, r1, a1, cb, cg, cr, ca: INTEGER;
+		fx, fy: INTEGER;
+	BEGIN
+		di := dl + dt * dstw; fy := sy - 8000H; sx := sx - 8000H;
+		FOR y := dt TO db - 1 DO
+			fx := sx;
+			si0 := Bounds(fy DIV 65536, 0, sh - 1) * srcw;
+			si1 := Bounds(fy DIV 65536 + 1, 0, sh - 1) * srcw;
+			FOR x := dl TO dr - 1 DO
+				xi0 := Bounds(fx DIV 65536, 0, sw - 1); xi1 := Bounds(fx DIV 65536 + 1, 0, sw - 1);
+				col0 := src[si0 + xi0];
+				col1 := src[si0 + xi1];
+				col2 := src[si1 + xi0];
+				col3 := src[si1 + xi1];
+				xfleft := (65536 - fx MOD 65536); xfright := (fx MOD 65536);
+				yftop := (65536 - fy MOD 65536); yfbottom := (fy MOD 65536);
+				a0 := ((col0 DIV 1000000H MOD 100H) * xfleft + (col1 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				a1 := ((col2 DIV 1000000H MOD 100H) * xfleft + (col3 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				ca := (a0 * yftop + a1 * yfbottom) DIV 65536;
+				IF ca # 0 THEN
+					b0 := ((col0 MOD 100H) * xfleft + (col1 MOD 100H) * xfright) DIV 65536;
+					g0 := ((col0 DIV 100H MOD 100H) * xfleft + (col1 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r0 := ((col0 DIV 10000H MOD 100H) * xfleft + (col1 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					b1 := ((col2 MOD 100H) * xfleft + (col3 MOD 100H) * xfright) DIV 65536;
+					g1 := ((col2 DIV 100H MOD 100H) * xfleft + (col3 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r1 := ((col2 DIV 10000H MOD 100H) * xfleft + (col3 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					cb := (b0 * yftop + b1 * yfbottom) DIV 65536;
+					cg := (g0 * yftop + g1 * yfbottom) DIV 65536;
+					cr := (r0 * yftop + r1 * yfbottom) DIV 65536;
+					dst[di] := cb + ASH(cg, 8) + ASH(cr, 16) + ASH(ca, 24)
+				END;
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q1BGRA8888BGRA8888Copy;
+	PROCEDURE Q1BGRA8888BGRA8888CopySW (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, xfleft, xfright, yftop, yfbottom: INTEGER;
+		di, si0, si1, xi0, xi1: INTEGER;
+		col0, col1, col2, col3: INTEGER;
+		b0, g0, r0, a0, b1, g1, r1, a1, cb, cg, cr, ca: INTEGER;
+		fx, fy: INTEGER;
+	BEGIN
+		di := dl + dt * dstw; fy := sy - 8000H; sx := sx - 8000H;
+		FOR y := dt TO db - 1 DO
+			fx := sx;
+			si0 := Bounds(fy DIV 65536, 0, sh - 1) * srcw;
+			si1 := Bounds(fy DIV 65536 + 1, 0, sh - 1) * srcw;
+			FOR x := dl TO dr - 1 DO
+				xi0 := Bounds(fx DIV 65536, 0, sw - 1); xi1 := Bounds(fx DIV 65536 + 1, 0, sw - 1);
+				col0 := SwapRB(src[si0 + xi0]);
+				col1 := SwapRB(src[si0 + xi1]);
+				col2 := SwapRB(src[si1 + xi0]);
+				col3 := SwapRB(src[si1 + xi1]);
+				xfleft := (65536 - fx MOD 65536); xfright := (fx MOD 65536);
+				yftop := (65536 - fy MOD 65536); yfbottom := (fy MOD 65536);
+				a0 := ((col0 DIV 1000000H MOD 100H) * xfleft + (col1 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				a1 := ((col2 DIV 1000000H MOD 100H) * xfleft + (col3 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				ca := (a0 * yftop + a1 * yfbottom) DIV 65536;
+				IF ca # 0 THEN
+					b0 := ((col0 MOD 100H) * xfleft + (col1 MOD 100H) * xfright) DIV 65536;
+					g0 := ((col0 DIV 100H MOD 100H) * xfleft + (col1 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r0 := ((col0 DIV 10000H MOD 100H) * xfleft + (col1 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					b1 := ((col2 MOD 100H) * xfleft + (col3 MOD 100H) * xfright) DIV 65536;
+					g1 := ((col2 DIV 100H MOD 100H) * xfleft + (col3 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r1 := ((col2 DIV 10000H MOD 100H) * xfleft + (col3 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					cb := (b0 * yftop + b1 * yfbottom) DIV 65536;
+					cg := (g0 * yftop + g1 * yfbottom) DIV 65536;
+					cr := (r0 * yftop + r1 * yfbottom) DIV 65536;
+					dst[di] := cb + ASH(cg, 8) + ASH(cr, 16) + ASH(ca, 24)
+				END;
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q1BGRA8888BGRA8888CopySW;
+	(* blend *)
+	PROCEDURE Q0BGRA8888BGRA8888 (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, di, si, fx, fy: INTEGER;
+		col, col0: INTEGER;
+		cb, cg, cr, ca, dstb, dstg, dstr: INTEGER;
+	BEGIN
+		fy := sy; di := dl + dt * dstw;
+		FOR y := dt TO db - 1 DO
+			fx := sx; si := (fy DIV 65536) * srcw;
+			FOR x := dl TO dr - 1 DO
+				(* destination color *)
+				col := dst[di];
+				dstb := (col MOD 100H); dstg := (col DIV 100H) MOD 100H; dstr := (col DIV 10000H) MOD 100H;
+				col0 := src[si + fx DIV 65536];
+				ca := (col0 DIV 1000000H MOD 100H);
+				IF ca # 0 THEN
+					cb := (col0 MOD 100H); cg := (col0 DIV 100H MOD 100H); cr := (col0 DIV 10000H MOD 100H);
+					IF ca # 255 THEN
+						cb := MIN((cb * 256 + (256 - ca) * dstb) DIV 256, 255);
+						cg := MIN((cg * 256 + (256 - ca) * dstg) DIV 256, 255);
+						cr := MIN((cr * 256 + (256 - ca) * dstr) DIV 256, 255)
+					END;
+					dst[di] := cb + ASH(cg, 8) + ASH(cr, 16) + 0FF000000H
+				END;
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q0BGRA8888BGRA8888;
+	(* blend *)
+	PROCEDURE Q0BGRA8888BGRA8888SW (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, di, si, fx, fy: INTEGER;
+		col, col0: INTEGER;
+		cb, cg, cr, ca, dstb, dstg, dstr: INTEGER;
+	BEGIN
+		fy := sy; di := dl + dt * dstw;
+		FOR y := dt TO db - 1 DO
+			fx := sx; si := (fy DIV 65536) * srcw;
+			FOR x := dl TO dr - 1 DO
+				(* destination color *)
+				col := dst[di];
+				col := SwapRB(col);
+				dstb := (col MOD 100H); dstg := (col DIV 100H) MOD 100H; dstr := (col DIV 10000H) MOD 100H;
+				col0 := src[si + fx DIV 65536];
+				ca := (col0 DIV 1000000H MOD 100H);
+				IF ca # 0 THEN
+					cb := (col0 MOD 100H); cg := (col0 DIV 100H MOD 100H); cr := (col0 DIV 10000H MOD 100H);
+					IF ca # 255 THEN
+						cb := MIN((cb * 256 + (256 - ca) * dstb) DIV 256, 255);
+						cg := MIN((cg * 256 + (256 - ca) * dstg) DIV 256, 255);
+						cr := MIN((cr * 256 + (256 - ca) * dstr) DIV 256, 255)
+					END;
+					dst[di] := cb + ASH(cg, 8) + ASH(cr, 16) + 0FF000000H
+				END;
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q0BGRA8888BGRA8888SW;
+	(* blend *)
+	PROCEDURE Q1BGRA8888BGRA8888 (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, xfleft, xfright, yftop, yfbottom: INTEGER;
+		di, si0, si1, xi0, xi1: INTEGER;
+		col, col0, col1, col2, col3: INTEGER;
+		b0, g0, r0, a0, b1, g1, r1, a1, cb, cg, cr, ca, dstb, dstg, dstr: INTEGER;
+		fx, fy: INTEGER;
+	BEGIN
+		di := dl + dt * dstw; fy := sy - 8000H; sx := sx - 8000H;
+		FOR y := dt TO db - 1 DO
+			fx := sx;
+			si0 := Bounds(fy DIV 65536, 0, sh - 1) * srcw;
+			si1 := Bounds(fy DIV 65536 + 1, 0, sh - 1) * srcw;
+			FOR x := dl TO dr - 1 DO
+				(* destination color *)
+				col := dst[di];
+				dstb := col MOD 100H; dstg := col DIV 100H MOD 100H; dstr := col DIV 10000H MOD 100H;
+				xi0 := Bounds(fx DIV 65536, 0, sw - 1); xi1 := Bounds(fx DIV 65536 + 1, 0, sw - 1);
+				col0 := src[si0 + xi0];
+				col1 := src[si0 + xi1];
+				col2 := src[si1 + xi0];
+				col3 := src[si1 + xi1];
+				xfleft := (65536 - fx MOD 65536); xfright := (fx MOD 65536);
+				yftop := (65536 - fy MOD 65536); yfbottom := (fy MOD 65536);
+				a0 := ((col0 DIV 1000000H MOD 100H) * xfleft + (col1 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				a1 := ((col2 DIV 1000000H MOD 100H) * xfleft + (col3 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				ca := (a0 * yftop + a1 * yfbottom) DIV 65536;
+				IF ca # 0 THEN
+					b0 := ((col0 MOD 100H) * xfleft + (col1 MOD 100H) * xfright) DIV 65536;
+					g0 := ((col0 DIV 100H MOD 100H) * xfleft + (col1 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r0 := ((col0 DIV 10000H MOD 100H) * xfleft + (col1 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					a0 := ((col0 DIV 1000000H MOD 100H) * xfleft + (col1 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+					b1 := ((col2 MOD 100H) * xfleft + (col3 MOD 100H) * xfright) DIV 65536;
+					g1 := ((col2 DIV 100H MOD 100H) * xfleft + (col3 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r1 := ((col2 DIV 10000H MOD 100H) * xfleft + (col3 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					a1 := ((col2 DIV 1000000H MOD 100H) * xfleft + (col3 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+					cb := (b0 * yftop + b1 * yfbottom) DIV 65536;
+					cg := (g0 * yftop + g1 * yfbottom) DIV 65536;
+					cr := (r0 * yftop + r1 * yfbottom) DIV 65536;
+					ca := (a0 * yftop + a1 * yfbottom) DIV 65536;
+					IF ca # 255 THEN
+						cb := MIN((cb * 256 + (256 - ca) * dstb) DIV 256, 255);
+						cg := MIN((cg * 256 + (256 - ca) * dstg) DIV 256, 255);
+						cr := MIN((cr * 256 + (256 - ca) * dstr) DIV 256, 255)
+					END;
+					dst[di] := cb + ASH(cg, 8) + ASH(cr, 16) + 0FF000000H
+				END;
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q1BGRA8888BGRA8888;
+	(* blend *)
+	PROCEDURE Q1BGRA8888BGRA8888SW (IN src: RasterData; VAR dst: RasterData;
+												srcw, dstw, dl, dt, dr, db: INTEGER;
+												sx, sy, sdx, sdy, sw, sh: INTEGER);
+	VAR x, y, xfleft, xfright, yftop, yfbottom: INTEGER;
+		di, si0, si1, xi0, xi1: INTEGER;
+		col, col0, col1, col2, col3: INTEGER;
+		b0, g0, r0, a0, b1, g1, r1, a1, cb, cg, cr, ca, dstb, dstg, dstr: INTEGER;
+		fx, fy: INTEGER;
+	BEGIN
+		di := dl + dt * dstw; fy := sy - 8000H; sx := sx - 8000H;
+		FOR y := dt TO db - 1 DO
+			fx := sx;
+			si0 := Bounds(fy DIV 65536, 0, sh - 1) * srcw;
+			si1 := Bounds(fy DIV 65536 + 1, 0, sh - 1) * srcw;
+			FOR x := dl TO dr - 1 DO
+				(* destination color *)
+				col := dst[di];
+				dstb := col MOD 100H; dstg := col DIV 100H MOD 100H; dstr := col DIV 10000H MOD 100H;
+				xi0 := Bounds(fx DIV 65536, 0, sw - 1); xi1 := Bounds(fx DIV 65536 + 1, 0, sw - 1);
+				col0 := SwapRB(src[si0 + xi0]);
+				col1 := SwapRB(src[si0 + xi1]);
+				col2 := SwapRB(src[si1 + xi0]);
+				col3 := SwapRB(src[si1 + xi1]);
+				xfleft := (65536 - fx MOD 65536); xfright := (fx MOD 65536);
+				yftop := (65536 - fy MOD 65536); yfbottom := (fy MOD 65536);
+				a0 := ((col0 DIV 1000000H MOD 100H) * xfleft + (col1 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				a1 := ((col2 DIV 1000000H MOD 100H) * xfleft + (col3 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+				ca := (a0 * yftop + a1 * yfbottom) DIV 65536;
+				IF ca # 0 THEN
+					b0 := ((col0 MOD 100H) * xfleft + (col1 MOD 100H) * xfright) DIV 65536;
+					g0 := ((col0 DIV 100H MOD 100H) * xfleft + (col1 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r0 := ((col0 DIV 10000H MOD 100H) * xfleft + (col1 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					a0 := ((col0 DIV 1000000H MOD 100H) * xfleft + (col1 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+					b1 := ((col2 MOD 100H) * xfleft + (col3 MOD 100H) * xfright) DIV 65536;
+					g1 := ((col2 DIV 100H MOD 100H) * xfleft + (col3 DIV 100H MOD 100H) * xfright) DIV 65536;
+					r1 := ((col2 DIV 10000H MOD 100H) * xfleft + (col3 DIV 10000H MOD 100H) * xfright) DIV 65536;
+					a1 := ((col2 DIV 1000000H MOD 100H) * xfleft + (col3 DIV 1000000H MOD 100H) * xfright) DIV 65536;
+					cb := (b0 * yftop + b1 * yfbottom) DIV 65536;
+					cg := (g0 * yftop + g1 * yfbottom) DIV 65536;
+					cr := (r0 * yftop + r1 * yfbottom) DIV 65536;
+					ca := (a0 * yftop + a1 * yfbottom) DIV 65536;
+					IF ca # 255 THEN
+						cb := MIN((cb * 256 + (256 - ca) * dstb) DIV 256, 255);
+						cg := MIN((cg * 256 + (256 - ca) * dstg) DIV 256, 255);
+						cr := MIN((cr * 256 + (256 - ca) * dstr) DIV 256, 255)
+					END;
+					dst[di] := cb + ASH(cg, 8) + ASH(cr, 16) + 0FF000000H
+				END;
+				INC(fx, sdx); INC(di)
+			END;
+			INC(fy, sdy); INC(di, dstw - (dr - dl))
+		END
+	END Q1BGRA8888BGRA8888SW;
+
+
+	(* source rect must be completely in src, destination rect must be completely in dst *)
+	PROCEDURE Scale* (IN src: RasterData; srcw, srch, sx, sy, sw, sh: INTEGER;
+										VAR dst: RasterData; dstw, dsth, dx, dy, dw, dh: INTEGER;
+										swapColor: BOOLEAN; q: INTEGER);
+	VAR
+		fw, fh: REAL;
+		ssx, ssy: INTEGER;
+	BEGIN ASSERT((srcw > 0) & (srch > 0), 20); ASSERT((dstw > 0) & (dsth > 0), 21);
+		ASSERT(LEN(src) >= srcw * srch, 22); ASSERT(LEN(dst) >= dstw * dsth, 23);
+		ASSERT((sw > 0) & (sh > 0), 24); ASSERT((dw > 0) & (dh > 0), 25);
+		ASSERT((sx >= 0) & (sy >= 0) & (sx < srcw) & (sy < srch), 26);
+		ASSERT((srcw - sx >= sw) & (srch - sy >= sh), 27);
+		ASSERT((dx >= 0) & (dy >= 0) & (dx < dstw) & (dy < dsth), 28);
+		ASSERT((dstw - dx >= dw) & (dsth - dy >= dh), 29);
+
+		fw := sw / dw;
+		fh := sh / dh;
+		ssx := sx * 65536;
+		ssy := sy * 65536;
+
+		IF q = nearest THEN
+			IF swapColor THEN
+				Q0BGRA8888BGRA8888CopySW(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			ELSE
+				Q0BGRA8888BGRA8888Copy(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			END
+		ELSE
+			IF swapColor THEN
+				Q1BGRA8888BGRA8888CopySW(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			ELSE
+				Q1BGRA8888BGRA8888Copy(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			END
+		END
+	END Scale;
+
+	(* source rect must be completely in src, destination rect must be completely in dst *)
+	PROCEDURE ScaleBlend* (IN src: RasterData; srcw, srch, sx, sy, sw, sh: INTEGER;
+												VAR dst: RasterData; dstw, dsth, dx, dy, dw, dh: INTEGER;
+												swapColor: BOOLEAN; q: INTEGER);
+	VAR
+		fw, fh: REAL;
+		ssx, ssy: INTEGER;
+	BEGIN ASSERT((srcw > 0) & (srch > 0), 20); ASSERT((dstw > 0) & (dsth > 0), 21);
+		ASSERT(LEN(src) >= srcw * srch, 22); ASSERT(LEN(dst) >= dstw * dsth, 23);
+		ASSERT((sw > 0) & (sh > 0), 24); ASSERT((dw > 0) & (dh > 0), 25);
+		ASSERT((sx >= 0) & (sy >= 0) & (sx < srcw) & (sy < srch), 26);
+		ASSERT((srcw - sx >= sw) & (srch - sy >= sh), 27);
+		ASSERT((dx >= 0) & (dy >= 0) & (dx < dstw) & (dy < dsth), 28);
+		ASSERT((dstw - dx >= dw) & (dsth - dy >= dh), 29);
+
+		fw := sw / dw;
+		fh := sh / dh;
+		ssx := sx * 65536;
+		ssy := sy * 65536;
+
+		IF q = nearest THEN
+			IF swapColor THEN
+				Q0BGRA8888BGRA8888SW(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			ELSE
+				Q0BGRA8888BGRA8888(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			END
+		ELSE
+			IF swapColor THEN
+				Q1BGRA8888BGRA8888SW(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			ELSE
+				Q1BGRA8888BGRA8888(
+					src,
+					dst,
+					srcw, dstw, dx, dy, dx + dw, dy + dh,
+					ssx, ssy,
+					SHORT(ENTIER(fw * 65536)), SHORT(ENTIER(fh * 65536)),
+					srcw, srch)
+			END
+		END
+	END ScaleBlend;
+	
+
+END StdRasters.
+
+

@@ -1,0 +1,99 @@
+MODULE StdRegistry;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="190292" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0"
+	organization	= "www.oberon.ch blackbox.oberon.org"
+	contributors	= "Oberon microsystems, P. Kushnir, I.Denisov"
+	version	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAFgEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACQAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAA1AAAA@w0JLSAyMDEzMDMwOCwgUGV0ciBLdXNuaXIsIHZlcnNpb24gZm9yIHByb2plY3QgTHVuJw0J"/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABkAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAJAAAA@w0JLSAuLi4NCQ=="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT 
+		Kernel;
+
+	TYPE
+		Hook* = POINTER TO ABSTRACT RECORD END;
+
+	VAR
+		hook: Hook;
+
+	PROCEDURE (h: Hook) ReadString* (IN key: ARRAY OF CHAR; OUT str: ARRAY OF CHAR; VAR res: INTEGER), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) ReadInt* (IN key: ARRAY OF CHAR; OUT x: INTEGER; OUT res: INTEGER), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) ReadBool* (IN key: ARRAY OF CHAR; OUT x: BOOLEAN; OUT res: INTEGER), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) ReadIntList* (IN key: ARRAY OF CHAR; OUT x: ARRAY OF INTEGER; OUT res: INTEGER), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) WriteString* (IN key: ARRAY OF CHAR; IN str: ARRAY OF CHAR), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) WriteInt* (IN key: ARRAY OF CHAR; x: INTEGER), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) WriteBool* (IN key: ARRAY OF CHAR; x: BOOLEAN), NEW, ABSTRACT;
+	PROCEDURE (h: Hook) WriteIntList* (IN key: ARRAY OF CHAR; IN x: ARRAY OF INTEGER), NEW, ABSTRACT;
+
+
+	PROCEDURE ReadString* (IN key: ARRAY OF CHAR; OUT str: ARRAY OF CHAR; VAR res: INTEGER);
+	BEGIN
+		IF hook # NIL THEN
+			hook.ReadString(key, str, res)
+		ELSE res := -1 END
+	END ReadString;
+
+	PROCEDURE ReadInt* (IN key: ARRAY OF CHAR; OUT x: INTEGER; OUT res: INTEGER);
+	BEGIN
+		IF hook # NIL THEN
+			hook.ReadInt(key, x, res)
+		ELSE res := -1 END
+	END ReadInt;
+
+	PROCEDURE ReadBool* (IN key: ARRAY OF CHAR; OUT x: BOOLEAN; OUT res: INTEGER);
+	BEGIN
+		IF hook # NIL THEN
+			hook.ReadBool(key, x, res)
+		ELSE res := -1 END
+	END ReadBool;
+
+	PROCEDURE ReadIntList* (IN key: ARRAY OF CHAR; OUT x: ARRAY OF INTEGER; OUT res: INTEGER);
+	BEGIN
+		IF hook # NIL THEN
+			hook.ReadIntList(key, x, res)
+		ELSE res := -1 END
+	END ReadIntList;
+
+	PROCEDURE WriteString* (IN key: ARRAY OF CHAR; IN str: ARRAY OF CHAR);
+	BEGIN
+		IF hook # NIL THEN
+			hook.WriteString(key, str)
+		END
+	END WriteString;
+
+	PROCEDURE WriteInt* (IN key: ARRAY OF CHAR; x: INTEGER);
+	BEGIN
+		IF hook # NIL THEN
+			hook.WriteInt(key, x)
+		END
+	END WriteInt;
+
+	PROCEDURE WriteBool* (IN key: ARRAY OF CHAR; x: BOOLEAN);
+	BEGIN
+		IF hook # NIL THEN
+			hook.WriteBool(key, x)
+		END
+	END WriteBool;
+
+	PROCEDURE WriteIntList* (IN key: ARRAY OF CHAR; IN x: ARRAY OF INTEGER);
+	BEGIN
+		IF hook # NIL THEN
+			hook.WriteIntList(key, x)
+		END
+	END WriteIntList;
+
+	PROCEDURE SetHook* (h: Hook);
+	BEGIN
+		hook := h
+	END SetHook;
+
+	PROCEDURE Ready*(): BOOLEAN;
+	BEGIN
+		RETURN hook # NIL
+	END Ready;
+
+END StdRegistry.

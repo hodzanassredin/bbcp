@@ -1,0 +1,762 @@
+MODULE StdDialog;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="179338" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0, changes from 1.7.2 marked by green"
+	organization	= "<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly93d3cub2Jlcm9uLmNoJykA"/>Oberon microsystems<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAPQAAAAAAAAE1AAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9ibGFja2JveGZyYW1ld29yay5vcmcnKQA="/>BBWFC<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9vYmVyb25jb3JlLnJ1JykA"/>OberonCore<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANwAAAAAAAAEvAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9naXRodWIuY29tL2JiY2InKQA="/>BBCP Team<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	contributors	= "Oberon microsystems, Anton Dmitriev, Ivan Denisov"
+	version	= "<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="226488" h="150803" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="184138" h="150803" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAJwIAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAChAQAAAAAAAAAAiwAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAACwAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAFoAAAAAAgAAAP8NCS0gMjAwNzAyMTIsIG1mLCBtaW5vciBjbGVhbnVwDQktIDIwMTUwMzI5LCBjZW50ZXIgIzM0LCBmaXhpbmcgdGhlIHJldXNlIG9mIG9wZW4gZG9jdW1lbnRzDQktIDIwMTYxMjE2LCBjZW50ZXIgIzE0NCwgaW5jb25zaXN0ZW50IGRvY3UgYW5kIHVzYWdlIG9mIEZpbGVzLkxvY2F0b3IgZXJyb3IgY29kZXMNCS0gMjAxOTExMDcsIEFELCBpbnRyb2R1Y2VkIGEgaG9vayB0byBtb2RpZnkgdGhlIE9wZW4gYmVoYXZpb3IgYXMgcGFydCBvZiB0aGUgVHlsZXIgcHJvamVjdA0J"/><odc-view type="StdFolds.Fold" w="184138" h="150803" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="184138" h="150803" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABkAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAJAAAA@w0JLSAuLi4NCQ=="/><odc-view type="StdFolds.Fold" w="184138" h="150803" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT
+		Meta, Strings, Files, Stores, Models, Sequencers, Views, 
+		Log, Ports, Fonts, Librarian,  StdRegistry, TextModels, TextViews, Controllers, Printers,
+		Containers, Dialog, Properties, Documents, Converters, Windows;
+
+	TYPE
+		Item* = POINTER TO EXTENSIBLE RECORD
+			next*: Item;
+			item-, string-, filter-: POINTER TO ARRAY OF CHAR;
+			shortcut-: ARRAY 8 OF CHAR;
+			privateFilter-, failed, trapped: BOOLEAN;	(* filter call failed, caused a trap *)
+			res: INTEGER	(* result code of failed filter *)
+		END;
+		
+		FilterProcVal = RECORD (Meta.Value)
+			p: Dialog.GuardProc
+		END;
+		FilterProcPVal = RECORD (Meta.Value)
+			p: PROCEDURE(n: INTEGER; VAR p: Dialog.Par)
+		END;
+		
+		ViewHook* = POINTER TO ABSTRACT RECORD (Views.ViewHook) END;
+		StdViewHook = POINTER TO RECORD (ViewHook) END;
+		PrintHook* = POINTER TO ABSTRACT RECORD END;
+		
+		(* page setup *)
+		Preview = POINTER TO RECORD (Views.View) END;
+		UpdateMsg = RECORD (Views.Message) END;
+
+
+	VAR
+		curItem-: Item;	(** IN parameter for item filters **)
+		
+		platformPrefOk*, platformInitPrefDialog*,		
+		RecalcMainWindow*: PROCEDURE; (* called after preferences have been changed *)
+		
+		prefs*: RECORD
+			statusbar*, colorTheme*, windowBackground*,
+				defaultColor*: INTEGER;
+			thickCaret*: BOOLEAN;
+			caretPeriod*: INTEGER;
+			scaleFactor*: INTEGER;
+			beep*: BOOLEAN;
+			language*: Dialog.Combo;
+		END;
+
+		prefFName, prefDName: Fonts.Typeface;
+		prefFSize, prefDSize, prefDWght: INTEGER;
+		prefDStyle: SET;
+		
+		(* page setup *)
+		setup*: RECORD
+			decorate*: BOOLEAN;
+			landscape*: BOOLEAN;
+			left*, right*, top*, bottom*: REAL;
+			w*, h*: INTEGER;
+			hs, vs: REAL
+		END;
+		
+		viewHook: ViewHook;
+		stdViewHook: StdViewHook;
+		printHook: PrintHook;
+
+
+	PROCEDURE GetSubLoc* (mod: ARRAY OF CHAR; cat: Files.Name;
+											OUT loc: Files.Locator; OUT name: Files.Name);
+	BEGIN
+		Librarian.lib.GetSpec(mod, cat, loc, name)
+	END GetSubLoc;
+
+	PROCEDURE AddItem* (i: Item; item, string, filter, shortcut: ARRAY OF CHAR);
+		VAR j: INTEGER; ch: CHAR;
+	BEGIN
+		ASSERT(i # NIL, 20);
+		NEW(i.item, LEN(item$) + 1);
+		NEW(i.string, LEN(string$) + 1);
+		NEW(i.filter, LEN(filter$) + 1);
+		ASSERT((i.item # NIL) & (i.string # NIL) & (i.filter # NIL), 100);
+		i.item^ := item$;
+		i.string^ := string$;
+		i.filter^ := filter$;
+		i.shortcut := shortcut$;
+		j := 0; ch := filter[0]; WHILE (ch # ".") & (ch # 0X) DO INC(j); ch := filter[j] END;
+		i.privateFilter := (j > 0) & (ch = 0X);
+		i.failed := FALSE; i.trapped := FALSE
+	END AddItem;
+
+	PROCEDURE ClearGuards* (i: Item);
+	BEGIN
+		i.failed := FALSE; i.trapped := FALSE
+	END ClearGuards;
+
+	PROCEDURE GetGuardProc (name: ARRAY OF CHAR; VAR i: Meta.Item;
+														VAR par: BOOLEAN; VAR n: INTEGER);
+		VAR j, k: INTEGER; num: ARRAY 32 OF CHAR;
+	BEGIN
+		j := 0;
+		WHILE (name[j] # 0X) & (name[j] # "(") DO INC(j) END;
+		IF name[j] = "(" THEN
+			name[j] := 0X; INC(j); k := 0;
+			WHILE (name[j] # 0X) & (name[j] # ")") DO
+				num[k] := name[j]; INC(j); INC(k)
+			END;
+			IF (name[j] = ")") & (name[j+1] = 0X) THEN
+				num[k] := 0X; Strings.StringToInt(num, n, k);
+				IF k = 0 THEN Meta.LookupPath(name, i); par := TRUE
+				ELSE Meta.Lookup("", i)
+				END
+			ELSE Meta.Lookup("", i)
+			END
+		ELSE
+			Meta.LookupPath(name, i); par := FALSE
+		END
+	END GetGuardProc;
+	
+	PROCEDURE CheckFilter* (i: Item; VAR failed, ok: BOOLEAN; VAR par: Dialog.Par);
+		VAR x: Meta.Item; v: FilterProcVal; vp: FilterProcPVal; p: BOOLEAN; n: INTEGER;
+	BEGIN
+		IF ~i.failed THEN
+			curItem := i;
+			par.disabled := FALSE; par.checked := FALSE; par.label := i.item$;
+			par.undef := FALSE; par.readOnly := FALSE;
+			i.failed := TRUE; i.trapped := TRUE;
+			GetGuardProc(i.filter^, x, p, n);
+			IF (x.obj = Meta.procObj) OR (x.obj = Meta.varObj) & (x.typ = Meta.procTyp) THEN
+				IF p THEN
+					x.GetVal(vp, ok);
+					IF ok THEN vp.p(n, par) END
+				ELSE
+					x.GetVal(v, ok);
+					IF ok THEN v.p(par) END
+				END
+			ELSE ok := FALSE
+			END;
+			IF ok THEN i.res := 0 ELSE i.res := 1 END;
+			i.trapped := FALSE; i.failed := ~ok
+		END;
+		failed := i.failed
+	END CheckFilter;
+
+	PROCEDURE HandleItem* (i: Item);
+		VAR res: INTEGER;
+	BEGIN
+		IF ~i.failed THEN
+			Views.ClearQueue; res := 0;
+			Dialog.Call(i.string^, " ", res)
+		ELSIF (i # NIL) & i.failed THEN
+			IF i.trapped THEN
+				Dialog.ShowParamMsg("#System:ItemFilterTrapped", i.string^, i.filter^, "")
+			ELSE
+				Dialog.ShowParamMsg("#System:ItemFilterNotFound", i.string^, i.filter^, "")
+			END
+		END
+	END HandleItem;
+
+	PROCEDURE RecalcView* (v: Views.View);
+	(* recalc size of all subviews of v, then v itself *)
+	VAR m: Models.Model; v1: Views.View; c: Containers.Controller;
+		minW, maxW, minH, maxH, w, h, w0, h0: INTEGER;
+	BEGIN
+		IF v IS Containers.View THEN
+			c := v(Containers.View).ThisController();
+			IF c # NIL THEN
+				v1 := NIL; c.GetFirstView(Containers.any, v1);
+				WHILE v1 # NIL DO
+					RecalcView(v1);
+					c.GetNextView(Containers.any, v1)
+				END
+			END
+		END;
+		IF v.context # NIL THEN
+			m := v.context.ThisModel();
+			IF (m # NIL) & (m IS Containers.Model) THEN
+				m(Containers.Model).GetEmbeddingLimits(minW, maxW, minH, maxH);
+				v.context.GetSize(w0, h0); w := w0; h := h0;
+				Properties.PreferredSize(v, minW, maxW, minH, maxH, w, h, w, h);
+				IF (w # w0) OR (h # h0) THEN v.context.SetSize(w, h) END
+			END
+		END
+	END RecalcView;
+
+
+	PROCEDURE Open* (v: Views.View; title: ARRAY OF CHAR;
+									loc: Files.Locator; name: Files.Name; conv: Converters.Converter;
+									asTool, asAux, noResize, allowDuplicates, neverDirty: BOOLEAN);
+	BEGIN
+		viewHook.Open(v, title, loc, name, conv,
+			asTool, asAux, noResize, allowDuplicates, neverDirty)
+	END Open;
+
+	(* ViewHook *)
+	
+	PROCEDURE (h: StdViewHook) Open (v: Views.View; title: ARRAY OF CHAR;
+								loc: Files.Locator; name: Files.Name; conv: Converters.Converter;
+								asTool, asAux, noResize, allowDuplicates, neverDirty: BOOLEAN);
+		VAR t: Views.Title; flags, opts: SET; done: BOOLEAN; d: Documents.Document;
+			len: INTEGER; win: Windows.Window; c: Containers.Controller; seq: ANYPTR;
+	BEGIN
+		IF conv = NIL THEN conv := Converters.list END;	(* use document converter *)
+		ASSERT(v # NIL, 20);
+		flags := {}; done := FALSE;
+		IF noResize THEN
+			flags := flags + {Windows.noResize, Windows.noHScroll, Windows.noVScroll}
+		END;
+		IF asTool THEN INCL(flags, Windows.isTool) END;
+		IF asAux THEN INCL(flags, Windows.isAux) END;
+		IF neverDirty THEN INCL(flags, Windows.neverDirty) END;
+		len := MIN(LEN(title$), LEN(Views.Title) - 1); 
+		Strings.Extract(title, 0, len, t);
+		IF len = LEN(Views.Title) - 1 THEN
+			t[len - 1] := "."; t[len - 2] := "."; t[len - 3] := "."
+		END;
+		IF ~allowDuplicates THEN
+			Windows.SelectBySpec(loc, name, conv, flags, done);
+			IF ~done & (title # "") & (loc = NIL) & (name = "") THEN
+				Windows.SelectByTitle(v, flags, t, done)
+			END
+		ELSE
+			INCL(flags, Windows.allowDuplicates)
+		END;
+		IF ~done THEN
+			IF v IS Documents.Document THEN
+				IF v.context # NIL THEN
+					d := Documents.dir.New(
+								Views.CopyOf(v(Documents.Document).ThisView(), Views.shallow), 
+								Views.undefined, Views.undefined)
+				ELSE
+					d := v(Documents.Document)
+				END;
+				ASSERT(d.context = NIL, 22);
+				v := d.ThisView(); ASSERT(v # NIL, 23)
+			ELSIF v.context # NIL THEN
+				ASSERT(v.context IS Documents.Context, 24);
+				d := v.context(Documents.Context).ThisDoc();
+				IF d.context # NIL THEN
+					d := Documents.dir.New(Views.CopyOf(v, Views.shallow), Views.undefined, Views.undefined)
+				END;
+				ASSERT(d.context = NIL, 25)
+				(*IF d.Domain() = NIL THEN Stores.InitDomain(d, v.Domain()) END (for views opened via Views.Old *)
+			ELSE
+				d := Documents.dir.New(v, Views.undefined, Views.undefined)
+			END;
+			IF asTool OR asAux THEN
+				c := d.ThisController();
+				c.SetOpts(c.opts + {Containers.noSelection})
+			END;
+			ASSERT(d.Domain() = v.Domain(), 100);
+			ASSERT(d.Domain() # NIL, 101);
+			seq := d.Domain().GetSequencer();
+			IF neverDirty & (seq # NIL) THEN
+				ASSERT(seq IS Sequencers.Sequencer, 26);
+				seq(Sequencers.Sequencer).SetDirty(FALSE)
+			END;
+			IF neverDirty THEN
+				(* change "fit to page" to "fit to window" in secondary windows *)
+				c := d.ThisController(); opts := c.opts;
+				IF Documents.pageWidth IN opts THEN
+					opts := opts - {Documents.pageWidth} + {Documents.winWidth}
+				END;
+				IF Documents.pageHeight IN opts THEN
+					opts := opts - {Documents.pageHeight} + {Documents.winHeight}
+				END;
+				c.SetOpts(opts)
+			END;
+			win := Windows.dir.New();
+			IF seq # NIL THEN
+				Windows.dir.OpenSubWindow(win, d, flags, t)
+			ELSE
+				Windows.dir.Open(win, d, flags, t, loc, name, conv)
+			END
+		END
+	END Open;
+
+	
+
+	PROCEDURE (h: ViewHook) OldView* (loc: Files.Locator; VAR name: Files.Name;
+																VAR conv: Converters.Converter): Views.View;
+		VAR w: Windows.Window; s: Stores.Store; c: Converters.Converter;
+	BEGIN
+		ASSERT(loc # NIL, 20); ASSERT(name # "", 21);
+		Files.dir.GetFileName(name, Files.docType, name); s := NIL;
+		c := conv;
+		IF c = NIL THEN c := Converters.list END;	(* use document converter *)
+		w := Windows.GetBySpec(loc, name, c, {});
+		IF w # NIL THEN s := w.doc.ThisView() END;
+		IF s = NIL THEN
+			Converters.Import(loc, name, conv, s);
+			IF s # NIL THEN RecalcView(s(Views.View)) END
+		END;
+		IF s # NIL THEN RETURN s(Views.View) ELSE RETURN NIL END
+	END OldView;
+
+	PROCEDURE (h: ViewHook) RegisterView* (v: Views.View; 
+								loc: Files.Locator; name: Files.Name; conv: Converters.Converter);
+	BEGIN
+		ASSERT(v # NIL, 20); ASSERT(loc # NIL, 21); ASSERT(name # "", 22);
+		Files.dir.GetFileName(name, Files.docType, name);
+		Converters.Export(loc, name, conv, v)
+	END RegisterView;
+	
+	
+	PROCEDURE InitLanguage;
+		VAR loc: Files.Locator; li: Files.LocInfo; lang: Dialog.Language; n: INTEGER;
+	BEGIN
+		prefs.language.SetItem(0, Dialog.defaultLanguage);
+		n := 1;
+		loc := Files.dir.This("System/Rsrc/");
+		li := Files.dir.LocList(loc);
+		WHILE li # NIL DO
+			IF LEN(li.name$) = 2 THEN
+				Strings.ToLower(li.name, lang);
+				prefs.language.SetItem(n, lang);
+				INC(n);
+			END;
+			li := li.next;
+		END;
+		prefs.language.SetLen(n);
+		prefs.language.item := Dialog.language$;
+		IF prefs.language.item = '' THEN
+			prefs.language.item := Dialog.defaultLanguage$
+		END;
+	END InitLanguage;
+	
+	
+	PROCEDURE PrefOk*;
+		VAR res: INTEGER;
+	BEGIN
+		IF prefs.statusbar = 1 THEN
+			Dialog.showsStatus := TRUE; Dialog.memInStatus := FALSE
+		ELSIF prefs.statusbar = 2 THEN
+			Dialog.showsStatus := TRUE; Dialog.memInStatus := TRUE
+		ELSE
+			Dialog.showsStatus := FALSE
+		END;
+		Dialog.Call("StdCmds.UpdateAll", "", res);
+		Dialog.Call("StdCmds.RecalcAllSizes", "", res);
+		Dialog.Call("TextCmds.UpdateDefaultAttr", "", res);
+		StdRegistry.WriteBool("noStatus", ~Dialog.showsStatus); 
+		StdRegistry.WriteBool("memStatus", Dialog.memInStatus);
+		Dialog.thickCaret := prefs.thickCaret;
+		Dialog.caretPeriod := prefs.caretPeriod;
+		
+		IF prefs.scaleFactor < 50 THEN
+			prefs.scaleFactor := 50;
+			Dialog.UpdateInt(prefs.scaleFactor);
+		END;
+		IF prefs.scaleFactor > 200 THEN
+			prefs.scaleFactor := 200;
+			Dialog.UpdateInt(prefs.scaleFactor);
+		END;
+		Dialog.scaleFactor := prefs.scaleFactor;
+		
+		Dialog.colorTheme := prefs.colorTheme;
+		Dialog.defaultColor := prefs.defaultColor;
+		Ports.background := prefs.windowBackground;
+		Dialog.Call("StdTiles.UpdateUIColors", "", res);
+		StdRegistry.WriteInt("colorTheme", Dialog.colorTheme);
+		StdRegistry.WriteInt("defaultColor", Dialog.defaultColor);
+		StdRegistry.WriteInt("windowBackground", Ports.background );
+		
+		
+		Dialog.beep := prefs.beep;
+		StdRegistry.WriteBool("thickCaret", Dialog.thickCaret);
+		StdRegistry.WriteInt("caretPeriod", Dialog.caretPeriod);
+		StdRegistry.WriteInt("scaleFactor", Dialog.scaleFactor);
+		StdRegistry.WriteBool("beep", Dialog.beep);
+		IF platformPrefOk # NIL THEN
+			platformPrefOk
+		END;
+		Dialog.SetLanguage(prefs.language.item$, Dialog.persistent);
+		IF RecalcMainWindow # NIL THEN RecalcMainWindow() END;
+	END PrefOk;
+
+	PROCEDURE PrefsNotifier* (op, from, to: INTEGER);
+		VAR msg: UpdateMsg; t: INTEGER;
+	BEGIN
+		IF op = Dialog.changed THEN
+			IF prefs.caretPeriod < 50 THEN
+				prefs.caretPeriod := 50;
+				Dialog.UpdateInt(prefs.caretPeriod)
+			END;
+			IF prefs.caretPeriod > 10000 THEN
+				prefs.caretPeriod := 10000;
+				Dialog.UpdateInt(prefs.caretPeriod)
+			END;
+			(*
+			IF prefs.scaleFactor < 10 THEN
+				prefs.scaleFactor := 10;
+				Dialog.UpdateInt(prefs.scaleFactor)
+			END;
+			IF prefs.scaleFactor > 500 THEN
+				prefs.scaleFactor := 500;
+				Dialog.UpdateInt(prefs.scaleFactor)
+			END
+			*)
+		END
+	END PrefsNotifier;
+
+
+	PROCEDURE InitPrefDialog;
+	BEGIN
+		IF ~Dialog.showsStatus THEN
+			prefs.statusbar := 0
+		ELSIF Dialog.memInStatus THEN
+			prefs.statusbar := 2
+		ELSE
+			prefs.statusbar := 1
+		END;
+		prefs.thickCaret := Dialog.thickCaret;
+		prefs.caretPeriod := Dialog.caretPeriod;
+		prefs.scaleFactor := Dialog.scaleFactor;
+		prefs.colorTheme := Dialog.colorTheme;
+		prefs.defaultColor := Dialog.defaultColor;
+		prefs.windowBackground := Ports.background;
+		prefs.beep := Dialog.beep;
+		
+		Dialog.GetDefaultFont(prefFName, prefFSize);
+		Dialog.GetDialogFont(prefDName, prefDSize, prefDStyle, prefDWght);
+		
+		InitLanguage;
+		IF platformInitPrefDialog # NIL THEN
+			platformInitPrefDialog
+		END
+	END InitPrefDialog;
+
+
+	PROCEDURE OpenPrefDialog*;
+	VAR m, mPlatform: TextModels.Model; v: Views.View; c: Containers.Controller;
+	BEGIN
+		InitPrefDialog;
+		IF Dialog.language # Dialog.defaultLanguage THEN
+			v := Views.OldView(Files.dir.This("Std/Rsrc/"+Dialog.language), "Preferences.odc")
+		END;
+		IF v = NIL THEN
+			v := Views.OldView(Files.dir.This("Std/Rsrc"), "Preferences.odc")
+		END;
+		IF v # NIL THEN
+			WITH v: TextViews.View DO
+				m := v.ThisModel()
+			ELSE END
+		END;
+		IF (m # NIL) & (Dialog.platform = Dialog.windows) THEN
+			IF Dialog.language # Dialog.defaultLanguage THEN
+				v := Views.OldView(
+					Files.dir.This("Win/Rsrc/"+Dialog.language), "Preferences.odc")
+			END;
+			IF v = NIL THEN
+				v := Views.OldView(Files.dir.This("Win/Rsrc"), "Preferences.odc")
+			END;
+			IF v # NIL THEN
+				WITH v: TextViews.View DO
+					mPlatform := v.ThisModel()
+				ELSE END
+			END;
+			IF mPlatform # NIL THEN
+				m.Insert(m.Length(), mPlatform, 0, mPlatform.Length())
+			END
+		END;
+		IF m # NIL THEN
+			v := TextViews.dir.New(m);
+			WITH v: Containers.View DO
+				c := v.ThisController();
+				IF c # NIL THEN
+					c.SetOpts(c.opts - {Containers.noFocus} + {Containers.noCaret, Containers.noSelection});
+					Open(v, "#Std:Preferences", NIL, "", NIL, 
+						FALSE, TRUE, FALSE, FALSE, TRUE)
+						(* asTool, asAux, noResize, allowDuplicates, neverDirty *)
+						(* for some reason, asUax = TRUE => (wheel) scrolling enabled!,
+							~asAux => scrolling disabled! ??? ?????? ???? ?? ????????? *)
+				END
+			END
+		ELSE
+			Log.String("can not find Preferences form neither Std nor Win subsystem"); Log.Ln;
+		END
+	END OpenPrefDialog;
+
+
+	(* printer dialogs *)
+	
+	PROCEDURE SetPrintHook* (hook: PrintHook);
+	BEGIN
+		printHook := hook
+	END SetPrintHook;
+	
+	PROCEDURE (hook: PrintHook) GetPage* (p: Printers.Printer; VAR w, h: INTEGER), NEW,  ABSTRACT;
+	PROCEDURE (hook: PrintHook) PrintSetup*, NEW,  ABSTRACT;
+	PROCEDURE (hook: PrintHook) PrintDialog* (
+		hasSelection: BOOLEAN; VAR from, to, copies: INTEGER; VAR selection: BOOLEAN
+	), NEW,  ABSTRACT;
+
+
+	(* page setup previewer view *)
+
+	PROCEDURE (v: Preview) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		CONST scale = 16; rmm = Ports.mm DIV scale; size = 460 * rmm;
+		VAR u, w, h, x, y, uu: INTEGER;
+	BEGIN
+		u := f.unit;
+		IF Dialog.metricSystem THEN uu := 10 * rmm ELSE uu := Ports.inch DIV scale END;
+		w := setup.w DIV scale;
+		h := setup.h DIV scale;
+		x := (size - w) DIV 2;
+		y := (size - h) DIV 2;
+		l := SHORT(ENTIER(setup.left * uu));
+		t := SHORT(ENTIER(setup.top * uu));
+		r := SHORT(ENTIER(setup.right * uu));
+		b := SHORT(ENTIER(setup.bottom * uu));
+		f.DrawRect(x, y, x + w, y + h, Ports.fill, Ports.background);
+		f.DrawRect(x - u, y - u, x + w + u, y + h + u, 0, Ports.defaultColor);
+		IF setup.decorate THEN
+			IF t < 14 * rmm THEN t := 14 * rmm END;
+			f.DrawRect(x + l, y + 10 * rmm, x + l + 20 * rmm, y + 10 * rmm + u, Ports.fill, Ports.defaultColor);
+			f.DrawRect(x + w - r - 8 * rmm, y + 10 * rmm, x + w - r, y + 10 * rmm + u, Ports.fill, Ports.defaultColor)
+		END;
+		IF (w - r > l) & (h - b > t) THEN
+			f.DrawRect(x + l, y + t, x + w - r, y + h - b, 0, Ports.defaultColor)
+		END
+	END Restore;
+
+	PROCEDURE (v: Preview) HandleViewMsg (f: Views.Frame; VAR msg: Views.Message);
+	BEGIN
+		WITH msg: UpdateMsg DO
+			Views.Update(v, Views.keepFrames)
+		ELSE
+		END
+	END HandleViewMsg;
+	
+	PROCEDURE Deposit*;
+		VAR v: Preview;
+	BEGIN
+		NEW(v); Views.Deposit(v)
+	END Deposit;
+
+	(* page setup dialog *)
+
+	PROCEDURE SetupNotify* (op, from, to: INTEGER);
+		VAR msg: UpdateMsg; t: INTEGER;
+	BEGIN
+		IF op = Dialog.changed THEN
+			IF setup.landscape # (setup.w > setup.h) THEN
+				t := setup.w; setup.w := setup.h; setup.h := t
+			END;
+			Views.Omnicast(msg);
+			Dialog.Update(setup)
+		END
+	END SetupNotify;
+
+	PROCEDURE PageSetupOk*;
+		VAR win: Windows.Window; w, h, l, t, r, b, uu, res_: INTEGER;
+	BEGIN
+		win := Windows.dir.Focus(Controllers.targetPath);
+		IF win # NIL THEN
+			IF Dialog.metricSystem THEN
+				uu := 10 * Ports.mm
+			ELSE
+				uu := Ports.inch
+			END;
+			w := setup.w; h := setup.h;
+			l := SHORT(ENTIER(setup.left * uu));
+			t := SHORT(ENTIER(setup.top * uu));
+			r := w - SHORT(ENTIER(setup.right * uu));
+			b := h - SHORT(ENTIER(setup.bottom * uu));
+			IF (0 <= l) & (l < r) & (r <= w) & (0 <= t) & (t < b) & (b <= h) THEN
+				win.doc.SetPage(w, h, l, t, r, b, setup.decorate);
+				Dialog.Call("StdCmds.CloseDialog", "", res_)
+			ELSE
+				Dialog.Beep
+			END
+		END
+	END PageSetupOk;
+	
+	PROCEDURE InitPageSetup;
+		VAR win: Windows.Window; w, h, pw, ph, l, t, r, b, uu: INTEGER; p: Printers.Printer;
+	BEGIN
+		win := Windows.dir.Focus(Controllers.targetPath);
+		IF win # NIL THEN
+			IF Dialog.metricSystem THEN
+				uu := Ports.mm DIV 10
+			ELSE
+				uu := Ports.inch DIV 100
+			END;
+			win.doc.PollPage(w, h, l, t, r, b, setup.decorate);
+			p := Printers.dir.Current();
+			IF p # NIL THEN
+				printHook.GetPage(p, pw, ph);
+				IF (pw > ph) = (w > h) THEN
+					w := pw; h := ph
+				ELSE
+					w := ph; h := pw
+				END
+			END;
+			r := w - r; b := h - b;
+			setup.left := l DIV uu / 100;
+			setup.right := r DIV uu / 100;
+			setup.top := t DIV uu / 100;
+			setup.bottom := b DIV uu / 100;
+			setup.w := w; setup.h := h;
+			setup.hs := setup.right + setup.left;
+			setup.vs := setup.bottom + setup.top;
+			setup.landscape := w > h
+		END
+	END InitPageSetup;
+
+	PROCEDURE OpenPageSetup*;
+	VAR res_: INTEGER;
+	BEGIN
+		IF printHook # NIL THEN
+			InitPageSetup;
+			Dialog.Call("StdCmds.OpenToolDialog('Std/Rsrc/PageSetup', '#System:PageSetup')", "", res_)
+		END
+	END OpenPageSetup;
+
+	PROCEDURE PrintSetup*;
+	BEGIN
+		IF printHook # NIL THEN printHook.PrintSetup END
+	END PrintSetup;
+	
+	PROCEDURE PrintDialog* (hasSelection: BOOLEAN; VAR from, to, copies: INTEGER; VAR selection: BOOLEAN);
+	BEGIN
+		IF printHook # NIL THEN
+			printHook.PrintDialog(hasSelection, from, to, copies, selection)
+		END
+	END PrintDialog;
+
+	(* Std Dialogs *)
+	
+	PROCEDURE DefaultFontDialog*;
+		VAR tf: Fonts.Typeface; size, color, w: INTEGER; style: SET; set: BOOLEAN;
+			title: Dialog.String;
+	BEGIN
+		tf := prefFName;
+		size := prefFSize;
+		w := Fonts.normal;
+		style := {};
+		Dialog.MapString("#Std:Default font", title);
+		Dialog.GetFont(TRUE, tf, size, color, w, style, set, title);
+		IF set THEN
+			prefFName := tf; prefFSize := size;
+			Dialog.SetDefaultFont(prefFName, prefFSize);
+		END
+	END DefaultFontDialog;
+
+	PROCEDURE DialogsFontDialog*;
+		VAR tf: Fonts.Typeface; size, color, w: INTEGER;
+			style: SET; set: BOOLEAN; title: Dialog.String;
+	BEGIN
+		tf := prefDName;
+		size := prefDSize;
+		w := prefDWght;
+		style := prefDStyle;
+		Dialog.MapString("#Std:Dialog font", title);
+		Dialog.GetFont(TRUE, tf, size, color, w, style, set, title);
+		IF set THEN
+			prefDName := tf; prefDSize := size;
+			prefDStyle := style; prefDWght := w;
+			Dialog.SetDialogFont(prefDName, prefDSize, prefDStyle, prefDWght);
+		END
+	END DialogsFontDialog;
+
+	PROCEDURE ColorDialog*;
+		VAR set: BOOLEAN; p: Properties.StdProp; color: Ports.Color;
+	BEGIN
+		Properties.CollectStdProp(p);
+		IF ~(Properties.color IN p.known) THEN p.color.val := Ports.black END;
+		Dialog.GetColor(p.color.val, color, set);
+		IF set THEN
+			p.valid := {Properties.color};
+			p.color.val := color;
+			Properties.EmitProp(NIL, p)
+		END
+	END ColorDialog;
+
+	PROCEDURE FontDialog*;
+	(** open font dialog and set selection to choosen attributes **)
+		VAR set: BOOLEAN; p, p0: Properties.StdProp; title: Dialog.String;
+	BEGIN
+		Properties.CollectStdProp(p0);
+		IF (p0 # NIL) & (Properties.typeface IN p0.known) THEN
+			NEW(p); 
+			p.typeface := p0.typeface$;
+			p.size := p0.size;
+			p.color.val := p0.color.val;
+			p.weight := p0.weight; 
+			p.style := p0.style;
+			Dialog.MapString("#Std:Font", title);
+			Dialog.GetFont(TRUE, p.typeface, p.size, p.color.val, p.weight, p.style.val, set, title);
+			IF set THEN
+				p.valid := {Properties.typeface, Properties.style, Properties.weight, Properties.size, Properties.color};
+				p.style.mask := {Fonts.italic, Fonts.underline, Fonts.strikeout};
+				Properties.EmitProp(NIL, p)
+			END
+		END
+	END FontDialog;
+
+	PROCEDURE TypefaceDialog*;
+	(** open font dialog and set selection to choosen typeface **)
+		VAR set: BOOLEAN; p, p0: Properties.StdProp; title: Dialog.String;
+	BEGIN
+		Properties.CollectStdProp(p0);
+		IF (p0 # NIL) & (Properties.typeface IN p0.known) THEN
+			NEW(p);
+			p.typeface := p0.typeface$;
+			p.size := p0.size; 
+			p.weight := p0.weight;
+			p.style := p0.style;
+			Dialog.MapString("#Std:Typeface", title);
+			Dialog.GetFont(FALSE, p.typeface, p.size, p.color.val, p.weight, p.style.val, set, title);
+			IF set THEN
+				p.valid := {Properties.typeface};
+				Properties.EmitProp(NIL, p)
+			END
+		END
+	END TypefaceDialog;
+
+
+	PROCEDURE SetViewHook* (hook: ViewHook);
+	BEGIN
+		IF hook = NIL THEN hook := stdViewHook END; 
+		viewHook := hook; Views.SetViewHook(hook)
+	END SetViewHook;
+	
+	PROCEDURE Init;
+		VAR b: BOOLEAN; p, res: INTEGER;
+	BEGIN
+		NEW(stdViewHook);
+		Views.SetViewHook(stdViewHook); viewHook := stdViewHook;
+		
+		StdRegistry.ReadBool("noStatus", b, res);
+			Dialog.showsStatus := (res # 0) OR ~b;
+		StdRegistry.ReadBool("memStatus", b, res);
+			Dialog.memInStatus := (res = 0) & b;
+		StdRegistry.ReadBool("thickCaret", b, res); 
+			IF res = 0 THEN Dialog.thickCaret := b END;
+		StdRegistry.ReadInt("caretPeriod", p, res);
+			IF (res = 0) & (p > 0) & (p <= 10000) THEN Dialog.caretPeriod := p END;
+		StdRegistry.ReadInt("colorTheme", p, res);
+			IF res = 0 THEN Dialog.colorTheme := p END;
+		StdRegistry.ReadInt("defaultColor", p, res);
+			IF res = 0 THEN Dialog.defaultColor := p END;
+		StdRegistry.ReadInt("windowBackground", p, res);
+			IF res = 0 THEN Ports.background := p END;
+		StdRegistry.ReadBool("beep", b, res);
+			IF res = 0 THEN Dialog.beep := b END;
+	END Init;
+
+BEGIN
+	Init
+
+END StdDialog.

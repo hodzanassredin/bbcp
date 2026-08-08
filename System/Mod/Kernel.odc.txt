@@ -104,7 +104,7 @@ MODULE Kernel;
 			code-, data-, refs-: LONGINT;
 			procBase-, varBase-: LONGINT;	(* meta base addresses *)
 			names-: POINTER TO ARRAY [untagged] OF SHORTCHAR;	(* names[0] = 0X *)
-			ptrs-: POINTER TO ARRAY [untagged] OF LONGINT;
+			ptrs-: POINTER TO ARRAY [untagged] OF INTEGER;	(* offsets в var-блоке, 4 байта (CPE.FindPtrs = Out4) *)
 			imports-: POINTER TO ARRAY [untagged] OF Module;
 			export-: Directory;	(* exported objects (name sorted) *)
 			name-: Utf8Name
@@ -1692,6 +1692,17 @@ MODULE Kernel;
 		END
 	END Mark;
 
+	PROCEDURE InHeap (p: LONGINT): BOOLEAN;	(* p внутри какого-либо кластера кучи? *)
+		VAR c: Cluster;
+	BEGIN
+		c := root;
+		WHILE c # NIL DO
+			IF (p >= S.VAL(LONGINT, c) + 24) & (p < S.VAL(LONGINT, c) + c.size) THEN RETURN TRUE END;
+			c := c.next
+		END;
+		RETURN FALSE
+	END InHeap;
+
 	PROCEDURE MarkGlobals;
 		VAR m: Module; i: INTEGER; p: LONGINT; ap: AnyRef;
 	BEGIN
@@ -1701,7 +1712,8 @@ MODULE Kernel;
 				i := 0;
 				WHILE i < m.nofptrs DO
 					ap := S.VAL(AnyRef, m.varBase + m.ptrs[i]); p := S.VAL(LONGINT, ap.p); INC(i);
-					IF p # 0 THEN Mark(S.VAL(Block, p - 8)) END
+					(* InHeap: глобалы могут указывать в арену модулей (modList и пр.) — там нет heap-тегов *)
+					IF (p # 0) & InHeap(p) THEN Mark(S.VAL(Block, p - 8)) END
 				END
 			END;
 			m := m.next

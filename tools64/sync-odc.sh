@@ -14,7 +14,10 @@ OdcText.Import \"$txt\" \"$odc\""
 	fi
 done
 if [ -n "$cmds" ]; then
-	echo "$cmds" | "$BB2/run-BlackBoxInterp" 2>&1 | tail -2
+	# ВАЖНО: запускать ТОЛЬКО из каталога bbcb2. run-BlackBoxInterp ставит
+	# BB_USE_DIR=cwd; из bbcp хост подхватывает чужие Sym и падает с
+	# "illegal foot print", не записав .odc.
+	( cd "$BB2" && echo "$cmds" | ./run-BlackBoxInterp ) 2>&1 | tail -2
 else
 	echo "nothing to sync"
 fi

@@ -27,10 +27,12 @@ for f in "$USE"/Dev/Mod/*.odc.txt "$USE"/System/Mod/*.odc.txt "$USE"/Std/Mod/*.o
   echo "OdcText.Import \"$f\" \"$odc\"" >> /tmp/odc_cmds.txt
 done
 if [ -f /tmp/odc_cmds.txt ]; then
-  cat /tmp/odc_cmds.txt | "$BB2/run-BlackBoxInterp" >/dev/null 2>&1
+  # cwd=BB2 обязателен (BB_USE_DIR=cwd): иначе хост грузит чужие Sym и молча
+  # не пишет .odc. Ошибки НЕ глушим — иначе сборка идёт по протухшим .odc.
+  ( cd "$BB2" && cat /tmp/odc_cmds.txt | ./run-BlackBoxInterp ) 2>&1 | grep -v '^Done! res:  0$' || true
   rm -f /tmp/odc_cmds.txt
 fi
-"$BB/tools64/sync-odc.sh" >/dev/null 2>&1 || true
+"$BB/tools64/sync-odc.sh" || true
 cd "$USE"
 cat > /tmp/compile1.txt <<'LIST'
 DevMarkers
@@ -47,5 +49,6 @@ DevCPVamd64
 DevSelectors
 DevCommanders
 DevCompiler64
+ConsCompiler64
 LIST
 echo 'DevOnce.Go64' | "$HOME/sources/bbcp/run-dev0"

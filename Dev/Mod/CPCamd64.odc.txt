@@ -946,7 +946,11 @@ MODULE DevCPCamd64;
 			IF sysval THEN
 				IF (y.form < Int16) & (f >= Int16) OR (y.form IN {Int16, Char16}) & (f >= Int32) & (f < Char16) THEN LoadL(y, hint, stop) END;
 				IF (y.form >= Int16) & (f < Int16) THEN FreeHi(y) END;
-				IF (f = Int64) & (y.form IN {Pointer, ProcTyp}) THEN PtrToLong(y, hint, stop) END	(* 64-bit *)
+				IF (f = Int64) & (y.form IN {Int32, Set, Pointer, ProcTyp}) THEN	(* 64-bit *)
+					IF y.form IN {Pointer, ProcTyp} THEN PtrToLong(y, hint, stop)
+					ELSE LoadLong(y, hint, stop)	(* Int32/Set -> пара lo/hi с sign-extend; иначе hi = мусор *)
+					END
+				END
 			ELSE
 				CASE y.form OF
 				| Byte, Bool:

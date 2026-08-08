@@ -111,12 +111,20 @@ MODULE StdDebug;
 		out.WriteView(fold)
 	END CloseFold;
 	
-	PROCEDURE WriteHex (n: INTEGER);
+	PROCEDURE WriteHex (n: LONGINT);	(* 64-бит: адреса *)
+		VAR buf: ARRAY 17 OF CHAR; i, d: INTEGER;
 	BEGIN
-		out.WriteIntForm(n, TextMappers.hexadecimal, 9, "0", TextMappers.showBase)
+		out.WriteString("0x");
+		i := 16; buf[16] := 0X;
+		REPEAT
+			d := SHORT(n MOD 16);
+			IF d > 9 THEN INC(d, ORD("A") - ORD("0") - 10) END;
+			DEC(i); buf[i] := CHR(d + ORD("0")); n := n DIV 16
+		UNTIL n = 0;
+		WHILE i < 16 DO out.WriteChar(buf[i]); INC(i) END
 	END WriteHex;
 	
-	PROCEDURE WriteString (adr, len, base: INTEGER; zterm, unicode: BOOLEAN);
+	PROCEDURE WriteString (adr: LONGINT; len, base: INTEGER; zterm, unicode: BOOLEAN);
 		CONST beg = 0; char = 1; code = 2;
 		VAR ch: CHAR; sc: SHORTCHAR; val, mode: INTEGER; str: ARRAY 16 OF CHAR;
 	BEGIN
@@ -234,9 +242,9 @@ MODULE StdDebug;
 		END
 	END WriteName;
 	
-	PROCEDURE WriteGuid (a: INTEGER);
+	PROCEDURE WriteGuid (a: LONGINT);
 
-		PROCEDURE Hex (a: INTEGER);
+		PROCEDURE Hex (a: LONGINT);	(* 64-бит *)
 			VAR x: SHORTCHAR;
 		BEGIN
 			SYSTEM.GET(a, x);
@@ -263,10 +271,10 @@ MODULE StdDebug;
 		out.WriteChar("}")
 	END WriteGuid;
 	
-	PROCEDURE^ ShowVar (ad, ind: INTEGER; f, c: SHORTCHAR; desc: Kernel.Type; ptr: ArrayPtr;
+	PROCEDURE^ ShowVar (ad: LONGINT; ind: INTEGER; f, c: SHORTCHAR; desc: Kernel.Type; ptr: ArrayPtr;
 											back: RefView; VAR name, sel: Kernel.Name);
 	
-	PROCEDURE ShowRecord (a, ind: INTEGER; desc: Kernel.Type; back: RefView; VAR sel: Kernel.Name);
+	PROCEDURE ShowRecord (a: LONGINT; ind: INTEGER; desc: Kernel.Type; back: RefView; VAR sel: Kernel.Name);
 		VAR dir: Kernel.Directory; obj: Kernel.Object; name: Kernel.Name; i, j, n: INTEGER; base: Kernel.Type;
 			fc: FoldContext;
 	BEGIN
@@ -294,25 +302,25 @@ MODULE StdDebug;
 		END
 	END ShowRecord;
 	
-	PROCEDURE ShowArray (a, ind: INTEGER; desc: Kernel.Type; ptr: ArrayPtr; back: RefView; VAR sel: Kernel.Name);
-		VAR f: SHORTCHAR; i, n, m, size, len: INTEGER; name: Kernel.Name; eltyp, t: Kernel.Type;
+	PROCEDURE ShowArray (a: LONGINT; ind: INTEGER; desc: Kernel.Type; ptr: ArrayPtr; back: RefView; VAR sel: Kernel.Name);
+		VAR f: SHORTCHAR; i, n, m, size, len: INTEGER; ta: LONGINT; name: Kernel.Name; eltyp, t: Kernel.Type;
 			vi: SHORTINT; vs: BYTE; str: Dialog.String; high: BOOLEAN;
 			fc: FoldContext;
 	BEGIN
 		WriteName(desc, ptr); out.WriteTab;
 		len := LenOf(desc, ptr); eltyp := desc.base[0]; f := FormOf(eltyp); size := SizeOf(eltyp, ptr);
 		IF (f = 2X) OR (f = 3X) THEN	(* string *)
-			n := 0; m := len; high := FALSE;
+			n := 0; m := len; high := FALSE;	(* 64-бит: SYSTEM.GET не принимает LONGINT-выражение — через ta *)
 			IF f = 2X THEN
-				REPEAT SYSTEM.GET(a + n, vs); INC(n) UNTIL (n = 32) OR (n = len) OR (vs = 0);
-				REPEAT DEC(m); SYSTEM.GET(a + m, vs) UNTIL (m = 0) OR (vs # 0)
+				REPEAT ta := a + n; SYSTEM.GET(ta, vs); INC(n) UNTIL (n = 32) OR (n = len) OR (vs = 0);
+				REPEAT DEC(m); ta := a + m; SYSTEM.GET(ta, vs) UNTIL (m = 0) OR (vs # 0)
 			ELSE
 				REPEAT
-					SYSTEM.GET(a + n * 2, vi); INC(n);
+					ta := a + n * 2; SYSTEM.GET(ta, vi); INC(n);
 					IF vi DIV 256 # 0 THEN high := TRUE END
 				UNTIL (n = len) OR (vi = 0);
 				n := MIN(n, 32);
-				REPEAT DEC(m); SYSTEM.GET(a + m * 2, vi) UNTIL (m = 0) OR (vi # 0)
+				REPEAT DEC(m); ta := a + m * 2; SYSTEM.GET(ta, vi) UNTIL (m = 0) OR (vi # 0)
 			END;
 			WriteString(a, n, size, TRUE, TRUE);
 			INC(m, 2);
@@ -348,7 +356,7 @@ MODULE StdDebug;
 		END
 	END ShowArray;
 	
-	PROCEDURE ShowProcVar (a: INTEGER);
+	PROCEDURE ShowProcVar (a: LONGINT);
 		VAR vli, n, ref: INTEGER; m: Kernel.Module; modName, name: Kernel.Name; res: INTEGER; nn: Kernel.Utf8Name;
 	BEGIN
 		SYSTEM.GET(a, vli);
@@ -369,7 +377,7 @@ MODULE StdDebug;
 		END
 	END ShowProcVar;
 
-	PROCEDURE ShowPointer (a: INTEGER; f: SHORTCHAR; desc: Kernel.Type; back: RefView; VAR sel: Kernel.Name);
+	PROCEDURE ShowPointer (a: LONGINT; f: SHORTCHAR; desc: Kernel.Type; back: RefView; VAR sel: Kernel.Name);
 		VAR adr, x: INTEGER; ptr: ArrayPtr; c: Cluster; btyp: Kernel.Type;
 	BEGIN
 		SYSTEM.GET(a, adr);
@@ -424,9 +432,9 @@ MODULE StdDebug;
 		END
 	END ShowSelector;
 	
-	PROCEDURE ShowVar (ad, ind: INTEGER; f, c: SHORTCHAR; desc: Kernel.Type; ptr: ArrayPtr; back: RefView;
+	PROCEDURE ShowVar (ad: LONGINT; ind: INTEGER; f, c: SHORTCHAR; desc: Kernel.Type; ptr: ArrayPtr; back: RefView;
 											VAR name, sel: Kernel.Name);
-		VAR i, j, vli, a: INTEGER; tsel: Kernel.Name; a0: TextModels.Attributes;
+		VAR i, j, vli: INTEGER; a, ta: LONGINT; tsel: Kernel.Name; a0: TextModels.Attributes;
 			vc: SHORTCHAR; vsi: BYTE; vi: SHORTINT; vr: SHORTREAL; vlr: REAL; vs: SET;
 	BEGIN
 		out.WriteLn; out.WriteTab; i := 0;
@@ -450,10 +458,10 @@ MODULE StdDebug;
 			out.WriteTab; out.WriteString("NIL VARPAR")
 		ELSIF f = 11X THEN
 			Kernel.GetTypeName(desc, name);
-			IF (c = 3X) & (name[0] # "!") THEN SYSTEM.GET(ad + 4, desc) END;	(* dynamic type *)
+			IF (c = 3X) & (name[0] # "!") THEN ta := ad + 4; SYSTEM.GET(ta, desc) END;	(* dynamic type; 64-бит: temp *)
 			ShowRecord(a, ind + 1, desc, back, tsel)
 		ELSIF (c = 3X) & (f = 0BX) THEN	(* VAR anyrecord *)
-			SYSTEM.GET(ad + 4, desc);
+			ta := ad + 4; SYSTEM.GET(ta, desc);
 			ShowRecord(a, ind + 1, desc, back, tsel)
 		ELSIF f = 12X THEN
 			IF (desc.size = 0) & (ptr = NIL) THEN SYSTEM.GET(ad, a) END;	(* dyn array val par *)
@@ -479,7 +487,7 @@ MODULE StdDebug;
 			| 7X: SYSTEM.GET(a, vr); out.WriteReal(vr)
 			| 8X: SYSTEM.GET(a, vlr); out.WriteReal(vlr)
 			| 9X: SYSTEM.GET(a, vs); out.WriteSet(vs)
-			| 0AX: SYSTEM.GET(a, vli); SYSTEM.GET(a + 4, i);
+			| 0AX: SYSTEM.GET(a, vli); ta := a + 4; SYSTEM.GET(ta, i);
 				IF (vli >= 0) & (i = 0) OR (vli < 0) & (i = -1) THEN out.WriteInt(vli)
 				ELSE out.WriteIntForm(i, TextMappers.hexadecimal, 8, "0", TextMappers.hideBase); WriteHex(vli)
 				END
@@ -495,7 +503,7 @@ MODULE StdDebug;
 	
 
 	PROCEDURE ShowStack;
-		VAR ref, end, i, j, x, a, b, c: INTEGER; m, f: SHORTCHAR; mod: Kernel.Module; modName, name, sel: Kernel.Name;
+		VAR ref, end, i, j, x, c: INTEGER; a, b, ta: LONGINT; m, f: SHORTCHAR; mod: Kernel.Module; modName, name, sel: Kernel.Name;
 			d: Kernel.Type; res: INTEGER; nn: Kernel.Utf8Name;
 	BEGIN
 		a := Kernel.pc; b := Kernel.fp; c := 100;
@@ -503,7 +511,7 @@ MODULE StdDebug;
 			mod := Kernel.modList;
 			WHILE (mod # NIL) & ((a < mod.code) OR (a >= mod.code + mod.csize)) DO mod := mod.next END;
 			IF mod # NIL THEN
-				DEC(a, SHORT(mod.code));	(* TODO64 *)
+				DEC(a, mod.code);	(* 64-бит *)
 				IF mod.refcnt >= 0 THEN
 				Kernel.GetModName(mod, modName); out.WriteChar(" "); out.WriteString(modName); ref := SHORT(mod.refs);
 					REPEAT Kernel.GetRefProc(ref, end, nn) UNTIL (end = 0) OR (a < end);
@@ -539,7 +547,7 @@ MODULE StdDebug;
 				out.WriteLn
 			END;
 			IF (b >= Kernel.fp) & (b < Kernel.stack) THEN
-				SYSTEM.GET(b+4, a);	(* stacked pc *)
+				ta := b + 4; SYSTEM.GET(ta, a);	(* stacked pc; 64-бит: temp *)
 				SYSTEM.GET(b, b);	(* dynamic link *)
 				DEC(a); DEC(c)
 			ELSE c := 0
@@ -555,14 +563,14 @@ MODULE StdDebug;
 	END Do;
 
 	PROCEDURE GetTrapMsg(OUT msg: ARRAY OF CHAR);
-		VAR ref, end, a, res: INTEGER; mod: Kernel.Module; nn: Kernel.Utf8Name;
+		VAR ref, end, res: INTEGER; a: LONGINT; mod: Kernel.Module; nn: Kernel.Utf8Name;
 			name, head, tail: Kernel.Name; errstr: ARRAY 12 OF CHAR;
 			key: ARRAY Kernel.nameLen * 3 + LEN(errstr) OF CHAR;
 	BEGIN
 		a := Kernel.pc; mod := Kernel.modList; msg := "";
 		WHILE (mod # NIL) & ((a < mod.code) OR (a >= mod.code + mod.csize)) DO mod := mod.next END;
 		IF mod # NIL THEN
-			DEC(a, SHORT(mod.code)); ref := SHORT(mod.refs);
+			DEC(a, mod.code); ref := SHORT(mod.refs);	(* 64-бит *)
 			REPEAT Kernel.GetRefProc(ref, end, nn) UNTIL (end = 0) OR (a < end);
 			Utf.Utf8ToString(nn, name, res);
 			IF a < end THEN
@@ -576,7 +584,7 @@ MODULE StdDebug;
 		END
 	END GetTrapMsg;
 
-	PROCEDURE OutAdr (adr: INTEGER);
+	PROCEDURE OutAdr (adr: LONGINT);	(* 64-бит *)
 	BEGIN
 		out.WriteString(" ("); OutString("#System:adr"); out.WriteString(" = "); WriteHex(adr); out.WriteChar(")")
 	END OutAdr;
@@ -611,7 +619,7 @@ MODULE StdDebug;
 			OutString("#System:NIL dereference")
 		ELSIF Kernel.err = 202 THEN
 			OutString("#System:illegal instruction"); out.WriteString(": ");
-			out.WriteIntForm(Kernel.val, TextMappers.hexadecimal, 5, "0", TextMappers.showBase)
+			out.WriteIntForm(SHORT(Kernel.val), TextMappers.hexadecimal, 5, "0", TextMappers.showBase)	(* err=202: val = номер трапа, SMALL *)
 		ELSIF Kernel.err = 203 THEN
 			IF (Kernel.val >= -4) & (Kernel.val < 65536) THEN OutString("#System:NIL dereference (read)")
 			ELSE OutString("#System:illegal memory read"); OutAdr(Kernel.val)

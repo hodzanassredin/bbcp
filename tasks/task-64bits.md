@@ -314,3 +314,16 @@ fistpl(%rsp)→fwait, rsp высокий (0x6007_xxxxxxxx). Под gdb/setarch -
    HandleTrap+0xef (финальный HALT) — вероятно ещё один вид рассинхрона
    параметров (Meta/CallHook); (b) SIGFPE-каскад в HandleTrap (FPU cw=0x33E,
    IM не замаскирован) — следствие любого трапа; (c) GUI-окна.
+
+== 2026-08-09 (2): трап-машинерия на LONGINT ==
+1. SIGFPE-каскад разобран: LinKernel.HandleTrap SHORT(gregs[REG_RSP]) —
+   стек 0x7FFF... не влезает в INTEGER → fistpl FPE_FLTINV (IM в cw=0x33E
+   не замаскирован) → рекурсия. Фикс: pc/sp/fp/val → LONGINT в обоих
+   ядрах + интерфейс GetTrapInfo + TrapTitle/SigToErr; StdDebug на
+   LONGINT-адреса.
+2. Побочно найдено: Kernel.ADDRESS не был экспортирован (osf → отдельный
+   тип → err 113 у вызовов); Kernel.IsReadable была INTEGER-обёрткой.
+3. Новое ограничение кодгена: SYSTEM.GET(LONGINT-выражение, x) → err 220
+   (intrealtyp→FPU→Stk, CPCamd64.Mem не Con/Reg). Обход temp-переменной.
+4. Трап-репорт чистый. Дальше: GUI event loop (краш в GTK-нити),
+   StdInterpreter-вызов команд, открытие первого окна.

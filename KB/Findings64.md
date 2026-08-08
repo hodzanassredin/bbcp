@@ -424,3 +424,33 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     fwait) ловит её же рекурсивно (~0xC80 на кадр) до переполнения стека.
     Не путать с корнем п.67: каскад — следствие любого трапа, дошедшего до
     HandleTrap с грязным FPU-словом.
+70. **Трап-глобалы и адреса в Kernel → LONGINT (РЕШЕНО)**. Kernel глобалы
+    pc/sp/fp/val были INTEGER; LinKernel.HandleTrap делал
+    `sp := SHORT(gregs[REG_RSP])` — стек 0x7FFF... не влезает в INTEGER →
+    fistpl out-of-range → SIGFPE(FPE_FLTINV, IM в cw=0x33E не замаскирован) →
+    рекурсия HandleTrap до переполнения стека (каскад ~TRAP sig=8).
+    Изменено: Kernel err-: INTEGER, pc-/sp-/fp-/val-: LONGINT;
+    Platform.GetTrapInfo val: LONGINT (интерфейс + реализация LinKernel);
+    TrapTitle val: LONGINT; SigToErr pc/val: LONGINT (S.GET через temp);
+    убраны все SHORT() вокруг gregs/sigStack/argv.
+    КАСКАДНО: StdDebug переписан на LONGINT-адреса (WriteHex/OutAdr/
+    ShowVar/ShowRecord/ShowArray/ShowProcVar/ShowPointer/ShowStack/
+    GetTrapMsg/WriteGuid).
+71. **Подводные камни интерфейсных правок**: (а) позиции ошибок компилятора
+    считаются по .odc (каждый <odc-view> = 1 позиция!), по .odc.txt мапить
+    через замену view-тегов на 1 char; (б) Kernel.ADDRESS был НЕ
+    экспортирован — в osf уходил отдельным типом → err 113 "incompatible
+    assignment" при вызовах из других модулей (лечится экспортом);
+    (в) Kernel.IsReadable-обёртка была (from, to: INTEGER) — переведена на
+    ADDRESS; (г) bisect через ASSERT(FALSE, n) в компиляторе — быстрый способ
+    определить путь диспетчеризации (trap n показывает номер).
+72. **Ограничение кодгена: SYSTEM.GET/PUT не принимает LONGINT-выражение
+    адреса** (err 220): `S.GET(a + 1, x)` с a: LONGINT падает в CPCamd64.Mem
+    (x.mode не Con/Reg — Int64-plus идёт intrealtyp→FPU→Stk). Обход:
+    temp-переменная `t := a + 1; S.GET(t, x)` (применено в StdDebug).
+    Правильный фикс — материализация FPU-адреса в Pointer-регистр в
+    CPVamd64.Mem/CPCamd64.Mem — ОТЛОЖЕНО (связано с п.67).
+73. После п.70-72: пересборка 0 failed of 125; Compile=0ErrorsDetected;
+    трап-репорт печатается чисто (без FPE-каскада). Осталось: ObxHello.Do →
+    ~TRAP sig=15/18 в нити GTK event loop (pc в нативной lib 0x76AC...) →
+    рекурсивный SIGILL на финальном HALT HandleTrap — это GUI-фронт.

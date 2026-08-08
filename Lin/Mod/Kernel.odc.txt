@@ -52,7 +52,8 @@ MODULE LinKernel;
 		
 	VAR
 		baseStack: LONGINT;	(* received from Kernel thru InitPlatform *)
-		err, pc, sp, fp, val, sig: INTEGER;
+		err, sig: INTEGER;
+		pc, sp, fp, val: LONGINT;	(* 64-бит: адреса ловушки не влезают в INTEGER *)
 		argc-: INTEGER;
 		argv-: Libc.StrArray;
 
@@ -257,9 +258,9 @@ MODULE LinKernel;
 	PROCEDURE (VAR p: Platform) InActivationStack (pc: ADDRESS): BOOLEAN;
 		VAR inMainStack, inSignalStack: BOOLEAN; hi: ADDRESS;
 	BEGIN
-		hi := SHORT(baseStack);
+		hi := baseStack;	(* 64-бит: без SHORT *)
 		inMainStack := <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAFgIAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACQAQAAAAAAAAAAaAEAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAMwAAAAAAAAAaAAAAAAD0KrwAAAAAACoAGPABAAAAAACQAQAAAAANAAAAAAAAAADXGwIAOgkCAILyAAAAAAAAAACgAAAADAAAAIsAAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAG0AAAAAAAAAAAA2AAAAAILyCAAAAAAAAAAAAAAAAAAAABoAAAAAAPQqvAAAAAAAKgAY8AEAAAAAAJABAAAAAC0AAAD@QUQ6IGkgdGhpbmsgdGhpcyBpcyBhIHRhdXRvbG9neSAtIGFsd2F5cyBUUlVFAAAAAADXGwIAOgkCAILyAAAAAAAAAAAaAAAADAAAABEAAAAAAAABAAAAAIAAAAAAAAAAAAGC8ggAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAPAAAA@yhsbyA8PSBmci5mcCkCAiAmIChmci5mcCA8IGhpKQ=="/>((trap.top = pc) OR Below(trap.top, pc)) & Below(pc, hi)<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>;
-		inSignalStack := ((sigStack = pc) OR Below(SHORT(sigStack), pc)) & Below(pc, SHORT(sigStack + sigStackSize));
+		inSignalStack := ((sigStack = pc) OR Below(sigStack, pc)) & Below(pc, sigStack + sigStackSize);
 		RETURN inMainStack OR inSignalStack
 	END InActivationStack;
 
@@ -316,9 +317,9 @@ MODULE LinKernel;
 		currentTryContext := oldContext;
 	END Try;
 
-	PROCEDURE SigToErr (pc, sig, fpe: INTEGER; VAR err, val: INTEGER);
+	PROCEDURE SigToErr (pc: LONGINT; sig, fpe: INTEGER; VAR err: INTEGER; VAR val: LONGINT);
 	(** Translate Linux signal number sig and fpe error code into BB err number and, if applicable - program trap number val. pc is only relevant in case of SIGILL to retrieve trap/runtime error number *)
-		VAR limits: Libc.rlimit;
+		VAR limits: Libc.rlimit; x: INTEGER;
 	BEGIN
 		CASE sig OF
 			Libc.SIGINT: 
@@ -326,12 +327,12 @@ MODULE LinKernel;
 			| Libc.SIGILL: (* Illegal instruction (ANSI). *)
 				err := 202; val := 0;
 				IF Kernel.IsReadable(pc, pc + 4) THEN
-					S.GET(pc, val);
-					IF val MOD 100H = 8DH THEN	(* lea reg,reg *)
-						IF val DIV 100H MOD 100H = 0F0H THEN
-							err := val DIV 10000H MOD 100H	(* trap *)
-						ELSIF val DIV 1000H MOD 10H = 0EH THEN
-							err := 128 + val DIV 100H MOD 10H	(* run time error *)
+					S.GET(pc, x); val := x;
+					IF x MOD 100H = 8DH THEN	(* lea reg,reg *)
+						IF x DIV 100H MOD 100H = 0F0H THEN
+							err := x DIV 10000H MOD 100H	(* trap *)
+						ELSIF x DIV 1000H MOD 10H = 0EH THEN
+							err := 128 + x DIV 100H MOD 10H	(* run time error *)
 						END
 					END
 				END
@@ -357,7 +358,7 @@ MODULE LinKernel;
 				END
 			| Libc.SIGSEGV: (* Segmentation violation (ANSI). *) 
 				err := Libc.getrlimit(Libc.RLIMIT_STACK, limits);
-				IF sp - (S.VAL(INTEGER, argv) - limits.rlim_cur) < 16384 <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAQwMAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAC9AgAAAAAAAAABgwAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAADAQAAAP7@@@8ADwEAAAD8@@@@AAEAAAAA!v@@@wABAAAAAPz@@@8AAQAAAAD2@@@@AAEAAAD@U3RhY2sgb3ZlcmZsb3cgZGV0ZWN0aW9uIGlzIGhldXJpc3RpYyB1bmRlciBMaW51eC4gYXJndiBpcyBjbG9zZSB0byB0aGUgaW5pdGlhbCB2YWx1ZSBvZiBTUCB3aGVuIEJCIGlzIGNhbGxlZCAodGhvdWdoIG5vdCBleGFjdCk7IGdldGxpbWl0cyBnaXZlcyBhbiBpZGVhIG9mIHdoYXQgdGhlIHN0YWNrIHNpemUgaXMgKHRob3VnaCBub3QgY2VydGFpbik7IHRoZXNlIHZhbHVlcyBhcmUgQm90dG9tIGFuZCBTaXplIG9mIHN0YWNrLCBCb3R0b20gLSBTaXplIEiiIFRvcCBvZiBzdGFjay4gSW4gbXkgZXhwZXJpbWVudHMsIG9mZmVuZGluZyBTUCBuZXZlciBoaXQgYmV5b25kICh1bmRlcikgdGhlIHRvcCBvZiBzdGFjaywgYnV0IFNJR1NFR1YgaGFwcGVucyBzdGlsbC4gU28sIGkgY29tcGFyZSBvZmZlbmRpbmcgU1Agd2l0aCBUb3AsIGFuZCBpZiB0aGUgZGlmZmVyZW5jZSBpcyB1bmRlciBhbiBoZXVyaXN0aWMgdmFsdWUgKDE2SyBmb3IgaW5zdGFuY2UpLCB0aGVuIHRoaXMgU0VHViBpcyBjb25zaWRlcmVkIGEgc3RhY2sgb3ZlcmZsb3cuIB2EPoQgTYRChD6EID2ENYQgQoQ!hEeEPYQ!hC4="/><odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/> THEN err := 137 (* stack overflow *)
+				IF sp - (S.VAL(LONGINT, argv) - limits.rlim_cur) < 16384 <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAQwMAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAC9AgAAAAAAAAABgwAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAADAQAAAP7@@@8ADwEAAAD8@@@@AAEAAAAA!v@@@wABAAAAAPz@@@8AAQAAAAD2@@@@AAEAAAD@U3RhY2sgb3ZlcmZsb3cgZGV0ZWN0aW9uIGlzIGhldXJpc3RpYyB1bmRlciBMaW51eC4gYXJndiBpcyBjbG9zZSB0byB0aGUgaW5pdGlhbCB2YWx1ZSBvZiBTUCB3aGVuIEJCIGlzIGNhbGxlZCAodGhvdWdoIG5vdCBleGFjdCk7IGdldGxpbWl0cyBnaXZlcyBhbiBpZGVhIG9mIHdoYXQgdGhlIHN0YWNrIHNpemUgaXMgKHRob3VnaCBub3QgY2VydGFpbik7IHRoZXNlIHZhbHVlcyBhcmUgQm90dG9tIGFuZCBTaXplIG9mIHN0YWNrLCBCb3R0b20gLSBTaXplIEiiIFRvcCBvZiBzdGFjay4gSW4gbXkgZXhwZXJpbWVudHMsIG9mZmVuZGluZyBTUCBuZXZlciBoaXQgYmV5b25kICh1bmRlcikgdGhlIHRvcCBvZiBzdGFjaywgYnV0IFNJR1NFR1YgaGFwcGVucyBzdGlsbC4gU28sIGkgY29tcGFyZSBvZmZlbmRpbmcgU1Agd2l0aCBUb3AsIGFuZCBpZiB0aGUgZGlmZmVyZW5jZSBpcyB1bmRlciBhbiBoZXVyaXN0aWMgdmFsdWUgKDE2SyBmb3IgaW5zdGFuY2UpLCB0aGVuIHRoaXMgU0VHViBpcyBjb25zaWRlcmVkIGEgc3RhY2sgb3ZlcmZsb3cuIB2EPoQgTYRChD6EID2ENYQgQoQ!hEeEPYQ!hC4="/><odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/> THEN err := 137 (* stack overflow *)
 				ELSE err := 203
 				END
 		ELSE
@@ -374,7 +375,7 @@ MODULE LinKernel;
 		END
 	END PrintHeaderInfo;
 	
-	PROCEDURE (VAR p: Platform) GetTrapInfo (VAR opc, osp, ofp: ADDRESS; VAR oerr, oval: INTEGER; OUT orecursive: BOOLEAN);
+	PROCEDURE (VAR p: Platform) GetTrapInfo (VAR opc, osp, ofp: ADDRESS; VAR oerr: INTEGER; VAR oval: LONGINT; OUT orecursive: BOOLEAN);
 	BEGIN 
 		IF passing THEN opc := pc; osp := sp; ofp := fp; oerr := err; oval := val; orecursive := recursive
 		ELSE opc := 0
@@ -394,10 +395,10 @@ MODULE LinKernel;
 		oldpc := pc;
 
 		(* Linux *)
-			sp := SHORT(context.uc_mcontext.gregs[Libc.REG_ESP]);
-			fp := SHORT(context.uc_mcontext.gregs[Libc.REG_EBP]);
-			pc := SHORT(context.uc_mcontext.gregs[Libc.REG_EIP]);
-			val := SHORT(siginfo._sifields._sigfault.si_addr);
+			sp := context.uc_mcontext.gregs[Libc.REG_ESP];	(* 64-бит: без SHORT *)
+			fp := context.uc_mcontext.gregs[Libc.REG_EBP];
+			pc := context.uc_mcontext.gregs[Libc.REG_EIP];
+			val := siginfo._sifields._sigfault.si_addr;
 			log.String("~TRAP sig="); log.Int(sig);
 			log.String(" code="); log.Int(siginfo.si_code);
 			log.String(" pc="); log.Hex(context.uc_mcontext.gregs[Libc.REG_EIP]);
@@ -406,7 +407,7 @@ MODULE LinKernel;
 			log.String(" addr="); log.Hex(siginfo._sifields._sigfault.si_addr); log.Ln;
 
 		INC(trap.depth);
-		inSignalStack := ((sigStack = fp) OR Below(SHORT(sigStack), fp)) & Below(fp, SHORT(sigStack + sigStackSize));
+		inSignalStack := ((sigStack = fp) OR Below(sigStack, fp)) & Below(fp, sigStack + sigStackSize);
 		IF inSignalStack THEN ASSERT(trap.top # -1) ELSE oldfp := trap.top; trap.top := fp END;
 		IF (pc = oldpc) & (trap.depth > 1) THEN
 			log.String("Recursive trap at the same PC="); log.Hex(oldpc); 

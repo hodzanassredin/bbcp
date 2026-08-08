@@ -176,7 +176,7 @@ MODULE Kernel;
 			ext*: ItemExt
 		END;
 
-		ADDRESS = LONGINT;
+		ADDRESS* = LONGINT;	(* экспорт: иначе в osf уходит отдельный тип, несовместимый с LONGINT при вызовах *)
 		FrameDesc = RECORD 	(** Record for iterating over call stack, cf. GetRefFrame *)
 			sentry: Sentry;	(* FrameDesc may be created in the stack, thus .sentinel = NIL is the only way to detect that FrameDesc hasn't been initialized (because a pointer field is the only one that the Language Report guarantees a preset value). *)
 			lo: ADDRESS;	(* the lower boundary of the scanned stack *)
@@ -288,7 +288,7 @@ MODULE Kernel;
 			InActivationStack*: PROCEDURE (pc: ADDRESS): BOOLEAN;
 			IsReadable*: PROCEDURE (from, to: ADDRESS): BOOLEAN;
 			PrintHeaderInfo*: PROCEDURE;	(* EMPTY *)
-			GetTrapInfo*: PROCEDURE (VAR pc, sp, fp: ADDRESS; VAR err, val: INTEGER; OUT recursive: BOOLEAN);
+			GetTrapInfo*: PROCEDURE (VAR pc, sp, fp: ADDRESS; VAR err: INTEGER; VAR val: LONGINT; OUT recursive: BOOLEAN);
 			(** Provides information about the trap to the Kernel. pc = 0 means no trap info available. This can be used to prevent Kernel.HandleTrap from being called arbitrarily. *)
 			(* Various *)
 			InitModule*: PROCEDURE (mod: Module);	(* EMPTY (optional); called from InitModule to allow mprotect in LinKernel *)
@@ -324,7 +324,8 @@ MODULE Kernel;
 		root: Cluster;	(* cluster list *)
 		modList-: Module;	(* root of module list *)
 		trapCount-: INTEGER;
-		err-, pc-, sp-, fp-, val-: INTEGER;
+		err-: INTEGER;
+		pc-, sp-, fp-, val-: LONGINT;	(* 64-бит: адреса ловушки не влезают в INTEGER (стек 0x7FFF...) *)
 		stack-: LONGINT;	(* x86-64: адрес дна стека *)
 		
 		(* required for FreeBSD executable for Libc when ElfLinker used *)
@@ -408,7 +409,7 @@ MODULE Kernel;
 	PROCEDURE (VAR p: Platform) InActivationStack* (pc: ADDRESS): BOOLEAN, NEW, ABSTRACT;
 	PROCEDURE (VAR p: Platform) IsReadable* (from, to: ADDRESS): BOOLEAN, NEW, ABSTRACT;
 	PROCEDURE (VAR p: Platform) PrintHeaderInfo*, NEW, EMPTY;	(* EMPTY *)
-	PROCEDURE (VAR p: Platform) GetTrapInfo* (VAR pc, sp, fp: ADDRESS; VAR err, val: INTEGER; OUT recursive: BOOLEAN), NEW, ABSTRACT;
+	PROCEDURE (VAR p: Platform) GetTrapInfo* (VAR pc, sp, fp: ADDRESS; VAR err: INTEGER; VAR val: LONGINT; OUT recursive: BOOLEAN), NEW, ABSTRACT;
 	(** Provides information about the trap to the Kernel. pc = 0 means no trap info available. This can be used to prevent Kernel.HandleTrap from being called arbitrarily. *)
 	(* Various *)
 	PROCEDURE (VAR p: Platform) InitModule* (mod: Module), NEW, EMPTY;
@@ -891,7 +892,7 @@ MODULE Kernel;
 		platform.DeallocateModMem(modAdr, modSize, TRUE)
 	END InvalModMem;
 
-	PROCEDURE IsReadable* (from, to: INTEGER): BOOLEAN;
+	PROCEDURE IsReadable* (from, to: ADDRESS): BOOLEAN;	(* 64-бит *)
 	(** check wether memory  [from..to) may be read *)
 	BEGIN 
 		RETURN platform.IsReadable(from, to)
@@ -2327,7 +2328,7 @@ MODULE Kernel;
 		FLDCW
 	END InitFpu;
 	
-	PROCEDURE TrapTitle (err, val: INTEGER);
+	PROCEDURE TrapTitle (err: INTEGER; val: LONGINT);
 	BEGIN
 		IF err = 129 THEN BString("129 invalid with")
 		ELSIF err = 130 THEN BString("130 invalid case")
@@ -2408,7 +2409,7 @@ MODULE Kernel;
 		IF ~platform.initialized THEN BString("Fatal: No Platform hook installed into Kernel"); BLn; Quit(1)
 		ELSE
 			platform.GetTrapInfo(tpc, tsp, tfp, err, val, recursive);
-			pc := SHORT(tpc); sp := SHORT(tsp); fp := SHORT(tfp);
+			pc := tpc; sp := tsp; fp := tfp;	(* 64-бит: без SHORT — адреса не влезают в INTEGER *)
 			IF pc = 0 THEN BString('No actual trap when Kernel.HandleTrap called'); BLn; HALT(20)
 			ELSE
 				INC(trapCount);

@@ -736,6 +736,14 @@ MODULE DevCPCamd64;
 				INC(x.offset, y.offset * elsize)
 			ELSE
 				Load(y, hint, stop + {mem, stk, short});
+				IF (x.mode = 1) & (x.obj.mnolev <= 0) OR (x.mode = 15) & (x.obj # NIL) THEN
+					(* 64-бит: rip-relative адресация не кодирует регистровый индекс —
+					   материализуем базу глобального массива в регистр *)
+					GetReg(idx, Pointer, hint, stop + {y.reg});
+					x.mode := 15;	(* Abs: GenLoadAdr -> lea idx, [rip+disp] *)
+					DevCPLamd64.GenLoadAdr(x, idx);
+					x.mode := 14; x.reg := idx.reg; x.offset := 0; x.obj := NIL
+				END;
 				IF inxchk THEN
 					DevCPLamd64.MakeConst(len, x.typ.n, Int32);
 					DevCPLamd64.GenComp(len, y); DevCPLamd64.GenAssert(ccB, inxTrap)
@@ -1766,7 +1774,8 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				END;
 				Free(ap)
 			ELSIF ap.form = Int64 THEN
-				DevCPLamd64.GenPush(ap); Free(ap)	(* push qword [mem] *)
+				(* ap.mode = Stk: FPU-вычисленное значение уже на машстеке — не дублировать слот *)
+				IF ap.mode # Stk THEN DevCPLamd64.GenPush(ap) END; Free(ap)	(* push qword [mem] *)
 			ELSE	(* 32-битный источник: через Load в регистр, затем movsxd (иначе 4 байта мусора в старшем dword) *)
 				Load(ap, {}, {});	(* materialize to register *)
 				ASSERT(ap.mode = Reg, 98);
@@ -1876,7 +1885,9 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					DevCPLamd64.GenTest(a, c)
 				END
 			END;
-			DevCPLamd64.GenPush(ap); Free(ap);
+			(* ap.mode = Stk: FPU-вычисленное значение (intrealtyp) уже лежит на машстеке
+			   (DecStack + FISTP в ветке Push), повторный GenPush дублирует слот и сдвигает рамку *)
+			IF ap.mode # Stk THEN DevCPLamd64.GenPush(ap) END; Free(ap);
 			tag.typ := recTyp
 		ELSIF ap.form IN {Comp, String8, String16, VString8, VString16} THEN	(* convert to pointer *)
 			ASSERT(par.form = Pointer);

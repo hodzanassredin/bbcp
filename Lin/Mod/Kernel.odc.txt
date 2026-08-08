@@ -398,6 +398,12 @@ MODULE LinKernel;
 			fp := SHORT(context.uc_mcontext.gregs[Libc.REG_EBP]);
 			pc := SHORT(context.uc_mcontext.gregs[Libc.REG_EIP]);
 			val := SHORT(siginfo._sifields._sigfault.si_addr);
+			log.String("~TRAP sig="); log.Int(sig);
+			log.String(" code="); log.Int(siginfo.si_code);
+			log.String(" pc="); log.Hex(context.uc_mcontext.gregs[Libc.REG_EIP]);
+			log.String(" sp="); log.Hex(context.uc_mcontext.gregs[Libc.REG_ESP]);
+			log.String(" fp="); log.Hex(context.uc_mcontext.gregs[Libc.REG_EBP]);
+			log.String(" addr="); log.Hex(siginfo._sifields._sigfault.si_addr); log.Ln;
 
 		INC(trap.depth);
 		inSignalStack := ((sigStack = fp) OR Below(SHORT(sigStack), fp)) & Below(fp, SHORT(sigStack + sigStackSize));

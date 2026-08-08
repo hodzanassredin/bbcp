@@ -1059,6 +1059,7 @@ MODULE Kernel;
 		ASSERT(id.typ # 0, 100);
 		l := finalizers;
 		WHILE l # NIL DO
+			ASSERT(S.VAL(LONGINT, l.blk) # 0, 101);	(* узел освобождён/обнулён, но остался в цепочке *)
 			IF S.VAL(INTEGER, l.blk.tag) = id.typ THEN
 				id.obj := S.VAL(ANYPTR, S.ADR(l.blk.last));
 				IF id.Identified() THEN RETURN id.obj END
@@ -1898,9 +1899,29 @@ MODULE Kernel;
 		wouldFinalize := FALSE
 	END CallFinalizers;
 
+	PROCEDURE FinChainHit (lo, hi: LONGINT): FList;
+		(* отладочный инвариант 64-бит порта: узел finalizers/hotFinalizers внутри [lo, hi)? *)
+		VAR l: FList;
+	BEGIN
+		l := finalizers;
+		WHILE l # NIL DO
+			IF (S.VAL(LONGINT, l) - 8 >= lo) & (S.VAL(LONGINT, l) - 8 < hi) THEN RETURN l END;
+			l := l.next
+		END;
+		l := hotFinalizers;
+		WHILE l # NIL DO
+			IF (S.VAL(LONGINT, l) - 8 >= lo) & (S.VAL(LONGINT, l) - 8 < hi) THEN RETURN l END;
+			l := l.next
+		END;
+		RETURN NIL
+	END FinChainHit;
+
 	PROCEDURE Insert (blk: FreeBlock; size: INTEGER);	(* insert block in free list *)
 		VAR i: INTEGER;
 	BEGIN
+		ASSERT(size > 0, 30);
+		ASSERT(size < 64*1024*1024, 31);	(* гигантский size = коррупция free-list (поймано: size=адрес) *)
+		ASSERT(FinChainHit(S.VAL(LONGINT, blk), S.VAL(LONGINT, blk) + size) = NIL, 32);	(* free-блок накрыл живой FList-узел *)
 		blk.size := size - 8; blk.tag := S.VAL(Type, S.ADR(blk.size));	(* 64-бит: stored = total - 8 (было -4) *)
 		i := MIN(N - 1, (blk.size DIV 16));
 		blk.next := free[i]; free[i] := blk
@@ -2151,6 +2172,7 @@ MODULE Kernel;
 			IF a >= 32 THEN Insert(S.VAL(FreeBlock, S.VAL(LONGINT, b) + tsize), a)
 			ELSIF a > 0 THEN INC(tsize, a)	(* остаток < 32 не вмещает FreeDesc — поглощаем в блок *)
 			END;
+			ASSERT(FinChainHit(S.VAL(LONGINT, b), S.VAL(LONGINT, b) + tsize) = NIL, 21);	(* NewBlock накрыл живой FList-узел *)
 			IF size > 0 THEN Erase(S.ADR(b.size), (size + 3) DIV 4) END;
 			INC(allocated, tsize)
 		END;

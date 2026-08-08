@@ -292,3 +292,25 @@ CP-записей. Плюс calling convention полностью 32-битна�
 НОВЫЙ блокер (Findings64 п.66): ASLR-зависимый краш — вне gdb периодически
 SIGSEGV→рекурсивный трап в динамическом модуле; core: отложенный fault
 fistpl(%rsp)→fwait, rsp высокий (0x6007_xxxxxxxx). Под gdb/setarch -R чисто.
+
+== 2026-08-09: КОРЕНЬ ВСЕХ КРАШЕЙ НАЙДЕН И ПОЧИНЕН ==
+1. Диагностическая цепочка: ThisFinObj SEGV (blk=0) → watch-форензика:
+   free-блок [0x60003378, +560) накрывает живой FList-узел → зануление из
+   NewBlock Erase. В Kernel добавлены инварианты: FinChainHit + ASSERT
+   30/31/32 (Insert), 21 (NewBlock), 101 (ThisFinObj) — поймали момент
+   коррупции: Insert(blk=0x60000038, size=0x60000038) — size=blk!
+2. Разбор кодгена NewBlock: Insert(b+tsize, a) — b+tsize считается на x87
+   (fildll/fiaddl), push-последовательность: push a; fild; fiadd;
+   sub rsp,8; fistpll [rsp]; push [rsp] — ДУБЛИКАТ слота: callee видит
+   size = b+tsize вместо a (+ утечка 8 байт на вызов).
+3. Причина x87: узел LONGINT+int типизируется intrealtyp (form=Real64) →
+   CPVamd64 Ndop → FloatDOp (по дизайну компилятора). Доказано DBG-TRACE
+   assert'ами 91/92/95/107/108 (потом удалены).
+4. ФИКС (CPCamd64.Param): ветки Pointer и Int64 (SysV):
+   `IF ap.mode # Stk THEN GenPush(ap) END` — FPU-значение уже на машстеке.
+5. Полная пересборка (0 failed of 125) → Compile Hello.cp =
+   0ErrorsDetected, краша нет, Kernel.Collect чисто.
+ОТКРЫТО: (a) вызов ObxHello.Do через StdInterpreter → wild pc → SIGILL
+   HandleTrap+0xef (финальный HALT) — вероятно ещё один вид рассинхрона
+   параметров (Meta/CallHook); (b) SIGFPE-каскад в HandleTrap (FPU cw=0x33E,
+   IM не замаскирован) — следствие любого трапа; (c) GUI-окна.

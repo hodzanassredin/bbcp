@@ -391,3 +391,36 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     первого трапа портит rsp. Компилятор делает 64-битные сравнения через
     x87 (fildll/fcompp/fnstsw/sahf, fistpl+fwait) — fault всплывает на fwait
     далеко от источника.
+67. **КОРЕНЬ ВСЕХ КРАШЕЙ: двойной push FPU-значения-параметра (РЕШЕНО)**.
+    Int64-арифметика в этом компиляторе идёт через x87 ПО ДИЗАЙНУ: узел
+    `LONGINT+int` типизируется intrealtyp (form=Real64!) → Ndop видит
+    f IN realSet → FloatDOp (fildll/fiaddl). Значение-параметр, вычисленное
+    на FPU, материализуется Push* как DecStack(-8)+FISTP [rsp] (ap.mode=Stk —
+    УЖЕ на машстеке), а CPCamd64.Param (ветки `ap.typ.form = Pointer` и
+    `ap.form = Int64` в SysV-блоке) делал ещё `GenPush(ap)` = `push [rsp]` —
+    ДУБЛИКАТ: скретч-слот оставался ВНУТРИ области параметров, следующий
+    параметр читал мусор (size=blk!) + утечка 8 байт на вызов.
+    Пример: Insert(b+tsize, a) получал size=b+tsize → гигантский free-блок
+    накрывал живые FList-узлы → Erase занулял узел в цепочке finalizers →
+    ThisFinObj SEGV. Фикс: `IF ap.mode # Stk THEN GenPush(ap) END` в обеих
+    ветках. ДИАГНОСТИКА: ловушки-инварианты Kernel ASSERT 30/31/32 (Insert)
+    поймали момент коррупции; DBG-TRACE assert'ы 91..118 в компиляторе
+    показали путь Ndop→FloatDOp (потом удалены). УРОКИ: (а) refs в ocf.py —
+    КОНЦЫ процедур, брейк ставить на конец предыдущей; (б) fprintf(rsi=fmt,
+    rdx=arg1), strcmp в условиях gdb флаки — использовать dword-сравнения;
+    (в) комментарий в CP не должен содержать "*)" (напр. "Push*)" = ошибка
+    компиляции "statement starts with incorrect symbol"; (г) программа на
+    SIGILL 2-байтным опкодом = ASSERT/рантайм-ловушка бэкенда (GenAssert).
+68. **Проверка п.67**: полная пересборка System Std Text Form Lin Cons
+    (0 failed of 125) → `ConsCompiler64.Compile("", "Hello.cp")` =
+    "0ErrorsDetected", краша нет. Kernel.Collect — чисто. Осталось: вызов
+    команды `ObxHello.Do` через StdInterpreter → wild pc (~TRAP sig=18) →
+    SIGILL в Kernel.HandleTrap+0xef (финальный HALT трап-обработчика) →
+    рекурсия → abort. Подозрение: ещё один случай рассинхрона параметров
+    (вызов через Meta/CallHook, var-параметры или proc-переменные).
+69. SIGFPE-каскад (п.66): FPU control word компилятора = 0x33E — IM-бит=0
+    (invalid operation НЕ замаскирован) → fistp вне диапазона/NaN даёт
+    SIGFPE(FPE_FLTINV, code=7); HandleTrap (LinKernel+0x1589: fadds/fistpl/
+    fwait) ловит её же рекурсивно (~0xC80 на кадр) до переполнения стека.
+    Не путать с корнем п.67: каскад — следствие любого трапа, дошедшего до
+    HandleTrap с грязным FPU-словом.

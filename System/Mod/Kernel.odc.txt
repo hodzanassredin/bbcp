@@ -1727,11 +1727,14 @@ MODULE Kernel;
 (*  This is the specification for the code procedure following below:
 
 	PROCEDURE Next (b: Block): Block;	(* next block in same cluster *)
-		VAR size: INTEGER;
+		VAR size, stride: INTEGER;
 	BEGIN
 		S.GET(S.VAL(LONGINT, b.tag) DIV 4 * 4, size);
 		IF ODD(S.VAL(LONGINT, b.tag) DIV 2) THEN INC(size, b.last - S.ADR(b.last)) END;
-		RETURN S.VAL(Block, S.VAL(LONGINT, b) + (size + 19) DIV 16 * 16)
+		(* 64-бит: тег 8 байт → +23, как в NewBlock; free-блок (size=total-8) даёт ровно total *)
+		stride := (size + 23) DIV 16 * 16;
+		IF stride < 32 THEN stride := 32 END;	(* минимум как в NewBlock *)
+		RETURN S.VAL(Block, S.VAL(LONGINT, b) + stride)
 	END Next;
 
 *)
@@ -1746,8 +1749,12 @@ MODULE Kernel;
 		SUB	ECX,EAX
 		SUB	ECX,8	size + b.last - ADR(b.last)
 		L1:
-		ADD	ECX,19	size + 19
-		AND	CL,0F0H	(size + 19) DIV 16 * 16
+		ADD	ECX,17H	size + 23	(* 64-бит: тег 8 байт, как в NewBlock *)
+		AND	CL,0F0H	(size + 23) DIV 16 * 16
+		CMP	ECX,20H	stride < 32?
+		JAE	L2
+		MOV	ECX,20H	минимум 32 (FreeDesc + 16-выравнивание)
+		L2:
 		ADD	EAX,ECX	b + size
 	*)
 	08BH, 008H,
@@ -1758,8 +1765,11 @@ MODULE Kernel;
 	003H, 048H, 008H,
 	029H, 0C1H,
 	083H, 0E9H, 008H,
-	083H, 0C1H, 013H,
+	083H, 0C1H, 017H,
 	080H, 0E1H, 0F0H,
+	083H, 0F9H, 020H,
+	073H, 005H,
+	0B9H, 020H, 000H, 000H, 000H,
 	001H, 0C8H;
 
 	PROCEDURE CheckCandidates;
@@ -1870,7 +1880,7 @@ MODULE Kernel;
 		f := S.VAL(FList, a);
 		IF f.aiptr THEN ArrFinalizer(S.VAL(ANYPTR, S.ADR(f.blk.last)))
 		ELSE
-			ar := S.VAL(AdrRef, S.VAL(LONGINT, f.blk.tag) - 8); S.GET(ar.a, fin);	(* method 0 *)
+			ar := S.VAL(AdrRef, S.VAL(LONGINT, f.blk.tag) - 8); S.GET(S.VAL(LONGINT, ar), fin);	(* method 0: fin := M[tag-8] (было двойное разыменование) *)
 			IF (fin # NIL) & (f.blk.tag.mod.refcnt >= 0) THEN
 				fin(S.VAL(ANYPTR, S.ADR(f.blk.last)))
 			END;
@@ -1891,7 +1901,7 @@ MODULE Kernel;
 	PROCEDURE Insert (blk: FreeBlock; size: INTEGER);	(* insert block in free list *)
 		VAR i: INTEGER;
 	BEGIN
-		blk.size := size - 4; blk.tag := S.VAL(Type, S.ADR(blk.size));
+		blk.size := size - 8; blk.tag := S.VAL(Type, S.ADR(blk.size));	(* 64-бит: stored = total - 8 (было -4) *)
 		i := MIN(N - 1, (blk.size DIV 16));
 		blk.next := free[i]; free[i] := blk
 	END Insert;
@@ -2001,7 +2011,7 @@ MODULE Kernel;
 		VAR b, l: FreeBlock; s, i: INTEGER;
 	BEGIN
 		IF debug & (watcher # NIL) THEN watcher(3) END;
-		s := size - 4;
+		s := size - 8;	(* free size field = total - 8 *)
 		i := MIN(N - 1, s DIV 16);
 		WHILE (i # N - 1) & (free[i] = sentinel) DO INC(i) END;
 		b := free[i]; l := NIL;
@@ -2017,7 +2027,7 @@ MODULE Kernel;
 		VAR b, l: FreeBlock; s, i: INTEGER;
 	BEGIN
 		IF debug & (watcher # NIL) THEN watcher(3) END;
-		s := size - 4;
+		s := size - 8;	(* free size field = total - 8 *)
 		i := MIN(N - 1, s DIV 16);
 		WHILE (i # N - 1) & (free[i] = sentinel) DO INC(i) END;
 		b := free[i]; l := NIL;
@@ -2035,7 +2045,7 @@ MODULE Kernel;
 	The returned block is EXCLUDED from the free list!! *)
 		VAR b, l: FreeBlock; s, i: INTEGER;
 	BEGIN
-		s := limit - 4;
+		s := limit - 8;	(* free size field = total - 8 *)
 		i := 0;
 		REPEAT
 			b := free[i]; l := NIL;
@@ -2077,10 +2087,10 @@ MODULE Kernel;
 					INC(used, SHORT(granted - old)); (*INC(total, new - root.size);*) root.size := new;
 					b := LastBlock(S.VAL(INTEGER, root) + a);	(* last block of root cluster that ends at a - 4 *)
 					IF b # NIL THEN
-						b.size := (root.size - a + b.size + 4) DIV 16 * 16 - 4
+						b.size := (root.size - a + b.size + 8) DIV 16 * 16 - 8
 					ELSE
 						b := S.VAL(FreeBlock, S.VAL(INTEGER, root) + a);
-						b.size := (root.size - a) DIV 16 * 16 - 4
+						b.size := (root.size - a) DIV 16 * 16 - 8
 					END <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAzQEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABHAQAAAAAAAAAAkAAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAFAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAPQqvAAAAAAAKgAY8AEAAAAAAJABAAAAAAIAAAAApAAAAAECAAAA@w0JCQkJKCpFTFNJRiByZWR1Y2VycyAjIE5JTCBUSEVOCSgqIDUpIG5vIHNwYWNlID0!IGZ1bGx5IHJlZHVjZSAqKQ0JCQkJCXIgOj0gcmVkdWNlcnM7IHJlZHVjZXJzIDo9IE5JTDsNCQkJCQlXSElMRSByICMgTklMIERPIHIuUmVkdWNlKFRSVUUpOyByIDo9IHIubmV4dCBFTkQ7DQkJCQkJQ29sbGVjdCop"/><odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
 				END
 			END
@@ -2108,7 +2118,7 @@ MODULE Kernel;
 				new.next := c.next; c.next := new
 			END;
 			b := S.VAL(FreeBlock, S.VAL(LONGINT, new) + 24);
-			b.size := (new.size - 24) DIV 16 * 16 - 4
+			b.size := (new.size - 24) DIV 16 * 16 - 8
 		ELSE
 			b := NIL	(* 4) give up *)
 		END;
@@ -2121,7 +2131,7 @@ MODULE Kernel;
 		ASSERT(size >= 0, 20);
 		IF size > MAX(INTEGER) - 19 THEN RETURN NIL END;
 		tsize := (size + 23) DIV 16 * 16;	(* 64-бит: тег 8 байт + запас; минимум для Erase от b+8 *)
-	IF tsize < 24 THEN tsize := 24 END;	(* FreeDesc = 24 байта (tag@0, size@8, next@16) *)
+		IF tsize < 32 THEN tsize := 32 END;	(* FreeDesc = 24 байта, но шаг обязан быть кратен 16 *)
 		GetOldFreeBlock(tsize, b);	(* 1) search for free block *)
 		IF (b = NIL) & ~dontCollect THEN
 			FastCollect; GetOldFreeBlock(tsize, b);	(* 2) collect *)
@@ -2137,8 +2147,10 @@ MODULE Kernel;
 			END
 		END;
 		IF b # NIL THEN (* b # NIL *)
-			a := b.size + 4 - tsize;
-			IF a > 0 THEN Insert(S.VAL(FreeBlock, S.VAL(LONGINT, b) + tsize), a) END;
+			a := b.size + 8 - tsize;	(* free size field = total - 8 *)
+			IF a >= 32 THEN Insert(S.VAL(FreeBlock, S.VAL(LONGINT, b) + tsize), a)
+			ELSIF a > 0 THEN INC(tsize, a)	(* остаток < 32 не вмещает FreeDesc — поглощаем в блок *)
+			END;
 			IF size > 0 THEN Erase(S.ADR(b.size), (size + 3) DIV 4) END;
 			INC(allocated, tsize)
 		END;
@@ -2417,7 +2429,7 @@ MODULE Kernel;
 			i := MIN(N - 1, (root.size - 24) DIV 16 - 1);
 			free[i] := S.VAL(FreeBlock, S.VAL(LONGINT, root) + 24);
 			free[i].next := sentinel;
-			free[i].size := (root.size - 24) DIV 16 * 16 - 4;
+			free[i].size := (root.size - 24) DIV 16 * 16 - 8;
 			free[i].tag:=S.VAL(Type, S.ADR(free[i].size));
 			(* IF debug THEN ;DumpFree; END *)
 		END;

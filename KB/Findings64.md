@@ -334,3 +334,60 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     'Startup.Setup' и 'Kernel.Collect' выполняются (Console.WriteStr идёт
     в stdout). Падает только путь TextModels/Views (Call1 param text,
     ShowStdLog).
+62. **Два аллокатора = GC слепнет (РЕШЕНО, 2026-08-08)**. bbrun64 резолвил
+    `newRecAdr/newArrAdr` один раз по "Kernel64" (`strcpy(kernel,"Kernel64")`)
+    и прошивал во ВСЕ модули → весь NEW шёл в Kernel64 bump-heap (16 МБ
+    статика в арене), а generic NEW (Kernel.NewObj → Stores.CopyOf и т.п.) —
+    в CP Kernel кластеры. InHeap-охрана Mark (п.58) НЕ спускалась из
+    bump-объектов в кластерные дети → GC забирал живой Attributes, слот
+    переиспользовался (StdModel) → цепочка piece.attr→Reader.attr→Writer.attr
+    →ViewRef.attr→краш DevMarkers.SizePref (a.font=0xf00000000, dispatch по
+    мусору). Форензика: watchpoint-цепочка от краша вверх (c.ref.attr ←
+    WriteView r.attr:=wr.attr ← w.SetAttr(r.attr) ← rd.attr:=u.attr ←
+    piece.attr ← CopyOf), на каждом шаге адрес объекта брался из краша
+    предыдущего прогона (BB_ARENA_BASE детерминизм). Лечение: bbrun64.c
+    ReadModule перерешивает NewRec/NewArr для КАЖДОГО модуля: `ThisModule(
+    "Kernel") ?: ThisModule("Kernel64")` — всё, загруженное после Kernel
+    (включая все динамические), идёт в кластерную кучу. Остаточный риск:
+    bump-объекты модулей #1..#11 (до Kernel) бессмертны, их дети в кластерах
+    не маркируются (см. п.58).
+63. **Kernel GC: рассинхрон шага блоков (РЕШЕНО)**. NewBlock: tsize=
+    (size+23)DIV16*16, min 24; [code] Next: (size+19)DIV16*16 без минимума;
+    Insert/free-size = total-4. Три формулы взаимно несовместимы: min 24
+    ломает 16-выравнивание (блоки ≡8 mod 16, иначе strictStackSweep отвергает
+    candidates), Next занижал шаг → Sweep/CheckCandidates обваливали цепочку
+    блоков (краш Next: deref tag=0). Согласовано: Next=(size+23)DIV16*16 с
+    clamp 32 (в [code]-процедуре, байты подправлены: +0x17, CMP/JAE/MOV 0x20);
+    NewBlock min 32; free-size-семантика total-8 (Insert, OldBlock,
+    GetOldFreeBlock, LastBlock, MakeFreeMono/Multicluster, InitHeap, NewBlock
+    остаток + sliver-absorb `IF a>=32 THEN Insert ELSIF a>0 THEN INC(tsize,a)`).
+    УРОК: **CP-версии процедур в Kernel — КОММЕНТАРИИ**, живые — [code] с
+    байтами! Правка CP-Next ушла в комментарий; [code]-аудит Kernel: FINIT,
+    ALLOC/ADDREF/RELEASE/CALLREL, PUSH/CALL/RETI/RETR, Next — остальные ок.
+64. **ExecFinalizer: двойное разыменование (РЕШЕНО)**. `ar := S.VAL(AdrRef,
+    tag-8); S.GET(ar.a, fin)` читало M[M[tag-8]] (байты метода) вместо
+    M[tag-8] (адрес FINALIZE) → call по байтам пролога. Правильно:
+    `S.GET(S.VAL(LONGINT, ar), fin)`. AdrRef-идиома = ОДНО разыменование
+    (ar.a); остальные места (MarkLocals, trap-frames) корректны.
+65. refs/ocf.py: резолвить процедуры ТОЛЬКО по ocf из bbcp64use (свежим);
+    в bbcp они протухшие → имена процедур смещаются. Динамические модули
+    (DevCPT/компиляторная цепочка, ConsCompiler64) грузятся CP-лоадером
+    (Std/Mod/Loader Fixup — копия bbrun64-логики) по СЛУЧАЙНЫМ адресам
+    (LinKernel.AllocateModMem = mmap(0,MAP_32BIT)) → под gdb с
+    BB_ARENA_BASE их адреса другие, чем в ASLR-прогонах.
+66. **Открытый баг: ASLR-зависимый краш (текущий)**. После п.62-64 команда
+    компиляции бежит (прогресс 'c'), Kernel.Collect проходит, но ВНЕ gdb
+    (ASLR on) периодически: SIGSEGV → LinKernel.HandleTrap → рекурсия на том
+    же PC (в динамическом модуле) → exit(2) / core. Под gdb/setarch -R —
+    чисто. Данные core (15:14): rip=fwait в модуле ~0x436c13da; sigsegv
+    пришёл на fwait → отложенный fault от `fistpl (%rsp)`; si_addr=rsp=
+    0x60072f7b8944; rsp/rbp/rsi/rbx = 0x6007_2f7b_xxxx (ВЫСОКИЙ стек, в gdb-
+    прогонах BB бежит на main-стеке 0x7fffffff..!). Странность: регион
+    читается из core (замаплен, данные похожи на стек: ret-адреса, rbp-цепь).
+    GTK-нити (4 LWP) припаркованы в poll/cond — не гонка. Гипотезы:
+    (a) BB-стек (sigStack? loop stack) аллоцируется mmap БЕЗ MAP_32BIT →
+    улетает высоко с ASLR, а трап-машинерия (SHORT(sp/fp/pc) в HandleTrap,
+    MarkLocals) ломается; (b) jmp_buf/setjmp-раскладка при siglongjmp после
+    первого трапа портит rsp. Компилятор делает 64-битные сравнения через
+    x87 (fildll/fcompp/fnstsw/sahf, fistpl+fwait) — fault всплывает на fwait
+    далеко от источника.

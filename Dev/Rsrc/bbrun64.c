@@ -494,13 +494,19 @@ static bool ReadModule ()
     cnt = fread(cp, 1, mod.cs, f);   /* CodeBlk */
     /* FixBlk follows immediately; VarBlk is not stored */
 
-    if ((!newRecAdr) || (!newArrAdr)) {
-        k = ThisModule(kernel);
-        if (k != NULL) {
-            obj = ThisObject(k, "NewRec");
-            if (obj != NULL) newRecAdr = k->procBase + obj->offs;
-            obj = ThisObject(k, "NewArr");
-            if (obj != NULL) newArrAdr = k->procBase + obj->offs;
+    /* Перерешиваем NewRec/NewArr для КАЖДОГО модуля: пока CP "Kernel" не загружен,
+       NEW идёт в Kernel64 (bump-heap арены); после — в CP Kernel (кластерная куча с GC).
+       Иначе bump-объекты ссылаются на кластерные, а Mark (InHeap-охрана) их не
+       помечает → GC забирает живой объект → reuse → порча attr-слотов (краш
+       DevMarkers.SizePref через WriteSChar piece.attr). */
+    {
+        Module* ck = ThisModule("Kernel");
+        if (ck == NULL) ck = ThisModule(kernel);
+        if (ck != NULL) {
+            obj = ThisObject(ck, "NewRec");
+            if (obj != NULL) newRecAdr = ck->procBase + obj->offs;
+            obj = ThisObject(ck, "NewArr");
+            if (obj != NULL) newArrAdr = ck->procBase + obj->offs;
         }
     }
     Fixup(newRecAdr);

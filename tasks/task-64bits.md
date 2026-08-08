@@ -269,3 +269,26 @@ CP-записей. Плюс calling convention полностью 32-битна�
   movsd xmm0-7, int → rdi..r9, остаток → стек (в порядке слотов). Закрывает
   пункт аудита про gdouble (cairo_*, gtk_adjustment_new и др.). Real32/movss
   и >8 float-аргументов не покрыты.
+
+## Сессия 2026-08-08 (день): краш SizePref РАЗОБРАН, GC починен до конца
+
+Цепочка SizePref (Findings64 п.60-64):
+1. watchpoint-форензика от краша вверх: a.font=0xf00000000 ← ViewRef.attr=
+   StdModel ← wr.attr ← r.attr ← run.attr ← piece.attr = Stores.CopyOf,
+   вернувший валидный Attributes, потом GC его СОБРАЛ и слот переиспользовали
+   (tag-watch: Kernel.Insert=free → Kernel.NewRec=reuse как StdModel).
+2. Причина сбора: ДВА аллокатора (Kernel64 bump vs CP Kernel кластеры) —
+   NEW шёл в bump (bbrun64: kernel="Kernel64"), Mark не видел детей
+   bump-объектов. Фикс: bbrun64 перерешивает NewRec/NewArr на CP "Kernel"
+   для всех модулей, загруженных после него.
+3. Следом вскрылись 3 бага GC: [code] Next шаг (size+19 без clamp) против
+   NewBlock (size+23, min 24) против free-size=total-4 → обвал цепочки
+   блоков в CheckCandidates (краш Next, tag=0). Согласовано: +23, min 32,
+   free-size=total-8, sliver-absorb. ВАЖНО: живая Next — [code] с байтами,
+   CP-Next — комментарий!
+4. ExecFinalizer: S.GET(ar.a, fin) = двойное разыменование (байты метода
+   вместо адреса) → S.GET(S.VAL(LONGINT, ar), fin).
+После фиксов: Compile бежит (прогресс 'c'), Kernel.Collect проходит.
+НОВЫЙ блокер (Findings64 п.66): ASLR-зависимый краш — вне gdb периодически
+SIGSEGV→рекурсивный трап в динамическом модуле; core: отложенный fault
+fistpl(%rsp)→fwait, rsp высокий (0x6007_xxxxxxxx). Под gdb/setarch -R чисто.

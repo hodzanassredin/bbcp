@@ -822,38 +822,34 @@ MODULE Kernel;
 
 	PROCEDURE AllocModMem* (descSize, metaSize, codeSize, varSize: INTEGER;
 			VAR descAdr, metaAdr, codeAdr, varAdr: INTEGER): BOOLEAN;
-		VAR pageSize: INTEGER; res: BOOLEAN; dAdr, mAdr, cAdr, vAdr: ADDRESS; ir: IntRef;
+		VAR pageSize: INTEGER; res: BOOLEAN; base: ADDRESS; ir: IntRef;
 	BEGIN pageSize := platform.PageSize();
 		descSize := ((descSize - 1) DIV pageSize + 1) * pageSize;
 		metaSize := ((SIZE(INTEGER) + metaSize - 1) DIV pageSize + 1) * pageSize;
 		codeSize := ((codeSize - 1) DIV pageSize + 1) * pageSize;
 		varSize := ((varSize - 1) DIV pageSize + 1) * pageSize;
 
-		res := FALSE; dAdr := 0; mAdr := 0; cAdr := 0; vAdr := 0;
-		platform.AllocateModMem(descSize, dAdr, FALSE);
-		IF dAdr # 0 THEN
-			platform.AllocateModMem(metaSize, mAdr, FALSE);
-			IF mAdr # 0 THEN
-				platform.AllocateModMem(codeSize, cAdr, TRUE);
-				IF cAdr # 0 THEN
-					IF varSize # 0 THEN
-						platform.AllocateModMem(varSize, vAdr, FALSE);
-						res := vAdr # 0
-					ELSE vAdr := 0; res := TRUE
-					END;
-					IF res THEN INC(used, descSize + metaSize + codeSize + varSize)
-					ELSE platform.DeallocateModMem(cAdr, codeSize, TRUE); cAdr := 0
-					END
-				END;
-				IF ~res THEN platform.DeallocateModMem(mAdr, metaSize, TRUE); mAdr := 0 END
-			END;
-			IF ~res THEN platform.DeallocateModMem(dAdr, descSize, TRUE); dAdr := 0 END
-		END;
+		(* ОДИН непрерывный регион на все 4 блока: RIP-relative ссылки code<->meta/desc/var
+		   должны помещаться в знаковый disp32 (+-2 ГБ); отдельные mmap с MAP_32BIT
+		   разъезжаются по всем 4 ГБ -> SIGFPE в StdLoader.Fixup (SHORT через FISTP m32).
+		   Освобождение по-прежнему по поддиапазонам (DeallocModMem/InvalModMem) — munmap
+		   поддиапазона одного mapping разрешён. *)
+		platform.AllocateModMem(descSize + metaSize + codeSize + varSize, base, TRUE);
+		res := base # 0;
 		IF res THEN
-			ir := S.VAL(IntRef, mAdr); ir.i := metaSize;
-			INC(mAdr, SIZE(INTEGER))
+			INC(used, descSize + metaSize + codeSize + varSize);
+			descAdr := SHORT(base);
+			INC(base, descSize);
+			ir := S.VAL(IntRef, base); ir.i := metaSize;
+			INC(base, SIZE(INTEGER));
+			metaAdr := SHORT(base);
+			INC(base, metaSize - SIZE(INTEGER));
+			codeAdr := SHORT(base);
+			INC(base, codeSize);
+			IF varSize # 0 THEN varAdr := SHORT(base) ELSE varAdr := 0 END
+		ELSE
+			descAdr := 0; metaAdr := 0; codeAdr := 0; varAdr := 0
 		END;
-		descAdr := SHORT(dAdr); metaAdr := SHORT(mAdr); codeAdr := SHORT(cAdr); varAdr := SHORT(vAdr);
 		RETURN res
 	END AllocModMem;
 
@@ -1652,10 +1648,16 @@ MODULE Kernel;
 
 	PROCEDURE Mark (this: Block);
 		VAR father, son: Block; tag: Type; flag, offset: INTEGER; actual: LONGINT; ap: AnyRef;
+			dt: INTEGER;
 	BEGIN
 		(* InHeap: НЕ спускаться вне кластеров — bump-heap Kernel64 (арена модулей)
 		   не покрывается Sweep, mark-бит там остался бы навсегда (краш dispatch) *)
 		IF (this # NIL) & InHeap(S.VAL(LONGINT, this)) & ~ODD(S.VAL(INTEGER, this.tag)) THEN
+			dt := S.VAL(INTEGER, this.tag); DEC(dt, dt MOD 4);
+			(* 64-бит: не трогать блоки без дескриптора в модульной памяти:
+			   протухшие глобалы (free-list и пр.) указывают в free-блоки (tag = ADR(size),
+			   т.е. в кучу) — DSW по такому "дескриптору" читает мусор и падает *)
+			IF (dt > 0) & ~InHeap(dt) THEN
 			father := NIL;
 			LOOP
 				INC(S.VAL(INTEGER, this.tag));
@@ -1685,7 +1687,10 @@ MODULE Kernel;
 						ap := S.VAL(AnyRef, actual + offset); son := S.VAL(Block, ap.p);
 						IF (son # NIL) & InHeap(S.VAL(LONGINT, son) - 8) THEN	(* не спускаться в bump-heap (арену) *)
 							DEC(S.VAL(LONGINT, son), 8);
-							IF ~ODD(S.VAL(INTEGER, son.tag)) THEN	(* down *)
+							dt := S.VAL(INTEGER, son.tag); DEC(dt, dt MOD 4);
+							(* 64-бит: сын без модульного дескриптора (free-блок, SYSTEM.PTR
+							   в освобождённую память) — не спускаться, иначе DSW по мусору *)
+							IF (dt > 0) & ~InHeap(dt) & ~ODD(S.VAL(INTEGER, son.tag)) THEN	(* down *)
 								this.tag := S.VAL(Type, S.VAL(INTEGER, tag) + flag);
 								ap.p := S.VAL(ANYPTR, father); father := this; this := son;
 								EXIT
@@ -1694,6 +1699,7 @@ MODULE Kernel;
 						INC(S.VAL(INTEGER, tag), 4)
 					END
 				END
+			END
 			END
 		END
 	END Mark;
@@ -1822,7 +1828,10 @@ MODULE Kernel;
 	PROCEDURE MarkLocals;
 		VAR sp, p, min, max: LONGINT; c: Cluster; ar: AdrRef;
 	BEGIN
-		S.GETREG(FP, sp); nofcand := 0; c := root;
+		S.GETREG(FP, sp);
+		INC(sp, 7); sp := sp DIV 8 * 8;	(* 64-бит: указатели на стеке 8-выровнены, FP может быть ≡ 4 (mod 8);
+			скан с FP сдвигал все 8-байтные чтения на 4 → якоря не находились (use-after-free) *)
+		nofcand := 0; c := root;
 		WHILE c.next # NIL DO c := c.next END;
 		min := S.VAL(LONGINT, root); max := S.VAL(LONGINT, c) + c.size;
 		WHILE sp < baseStack DO
@@ -2053,7 +2062,9 @@ MODULE Kernel;
 		i := MIN(N - 1, s DIV 16);
 		WHILE (i # N - 1) & (free[i] = sentinel) DO INC(i) END;
 		b := free[i]; l := NIL;
-		WHILE b.size < s DO l := b; b := b.next END;
+		(* 64-бит: остаток a = b.size - s: a = 16 нельзя ни Insert (минимум 32), ни absorb
+		   (Next его не видит — sweep проваливается в sliver и падает) — такой блок пропускаем *)
+		WHILE (b.size < s) OR (b.size - s = 16) DO l := b; b := b.next END;
 		IF b # sentinel THEN
 			IF l = NIL THEN free[i] := b.next ELSE l.next := b.next END
 		ELSE b := NIL
@@ -2170,9 +2181,8 @@ MODULE Kernel;
 		END;
 		IF b # NIL THEN (* b # NIL *)
 			a := b.size + 8 - tsize;	(* free size field = total - 8 *)
-			IF a >= 32 THEN Insert(S.VAL(FreeBlock, S.VAL(LONGINT, b) + tsize), a)
-			ELSIF a > 0 THEN INC(tsize, a)	(* остаток < 32 не вмещает FreeDesc — поглощаем в блок *)
-			END;
+			ASSERT((a = 0) OR (a >= 32), 22);	(* a = 16: sliver, Next его не увидит (см. GetOldFreeBlock) *)
+			IF a >= 32 THEN Insert(S.VAL(FreeBlock, S.VAL(LONGINT, b) + tsize), a) END;
 			ASSERT(FinChainHit(S.VAL(LONGINT, b), S.VAL(LONGINT, b) + tsize) = NIL, 21);	(* NewBlock накрыл живой FList-узел *)
 			IF size > 0 THEN Erase(S.ADR(b.size), (size + 3) DIV 4) END;
 			INC(allocated, tsize)
@@ -2528,6 +2538,12 @@ BEGIN
 		monoClusterMem := ~(dll IN modList.opts);
 
 		Init;
+	END;
+	(* 64-бит: bbrun64 предустанавливает modList → ветка выше пропускается,
+	   baseStack оставался 0 → скан стека в MarkLocals никогда не работал *)
+	IF baseStack = 0 THEN
+		S.GETREG(SP, baseStack);
+		stack := baseStack	(* stack bottom, used by DevDebug and other possible trap analyzers *)
 	END;
 	debug := FALSE
 CLOSE

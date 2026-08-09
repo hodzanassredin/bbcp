@@ -21,6 +21,7 @@ MODULE LinInit;
 		Gtk := LinGtk2Gtk,
 		LinGui,	(* provides Kernel.GuiHook *)
 		LinConsole,
+		Console, Strings,
 		
 	(* Loading order *)
 		
@@ -42,6 +43,19 @@ MODULE LinInit;
 	BEGIN
 		RETURN 1
 	END Fake;
+
+	(* debug: вывод через Console (LinConsole.Init ставит Console при загрузке, и в GUI тоже) *)
+	PROCEDURE P (IN s: ARRAY OF CHAR);
+	BEGIN
+		Console.WriteStr(s); Console.WriteLn
+	END P;
+
+	PROCEDURE PR (IN s: ARRAY OF CHAR; x: INTEGER);
+		VAR t: ARRAY 32 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t);
+		Console.WriteStr("[LI] " + s + " res="); Console.WriteStr(t); Console.WriteLn
+	END PR;
 
 	PROCEDURE FetchEvent;
 		VAR res_: INTEGER;
@@ -95,10 +109,15 @@ MODULE LinInit;
 		IF ~ SearchVar("appConfigProcedure", configCmd) THEN
 			configCmd := "StdConfig.Setup"
 		END;
-		
+		P("[LI] configCmd=" + configCmd);
+
 		Dialog.Call("LinConfig.SetupBefore", "Failed to call LinConfig.SetupBefore", res_);
+		PR("SetupBefore", res_);
 		Dialog.Call(configCmd, "Failed to call " + configCmd, res_);
+		PR(configCmd, res_);
 		Dialog.Call("LinConfig.SetupAfter", "Failed to call LinConfig.SetupAfter", res_);
+		PR("SetupAfter", res_);
+		P("[LI] before Loop.Start");
 		
 		res_ := GLib.g_timeout_add(Dialog.idlePeriod, Fake, 0);
 		

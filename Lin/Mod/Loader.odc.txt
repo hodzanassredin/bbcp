@@ -1,17 +1,20 @@
 MODULE LinLoader;
 
-	IMPORT Kernel, LinFiles;	(* LinFiles: тело ставит Files.dir до загрузки модулей *)
+	IMPORT Kernel, LinFiles, Console, Strings;	(* LinFiles: тело ставит Files.dir до загрузки модулей *)
 
 	CONST init = "LinInit";
 
 	PROCEDURE Load (IN name: ARRAY OF CHAR);
 		VAR importing, imported, err, object: ARRAY 256 OF CHAR;
-			m: Kernel.Module; res: INTEGER;
+			m: Kernel.Module; res: INTEGER; t: ARRAY 16 OF CHAR;
 	BEGIN
 		m := Kernel.ThisLoadedMod(SHORT(name));
 		IF m = NIL THEN
 			Kernel.LoadMod(name);
 			Kernel.GetLoaderResult(res, importing, imported, object);
+			Strings.IntToString(res, t);
+			Console.WriteStr("[LL] LoadMod res="); Console.WriteStr(t);
+			Console.WriteStr(" importing=" + importing); Console.WriteStr(" imported=" + imported); Console.WriteLn;
 			IF res # 0 THEN
 				CASE res OF Kernel.done: err := ": no error"
 				| Kernel.fileNotFound: err := ": file not found!"

@@ -1609,16 +1609,31 @@ MODULE DevCPVamd64;
 							DevCPCamd64.Load(y, {}, {}); DevCPCamd64.IntDOp(x, y, times, FALSE)
 					| getrfn:
 							expr(n.right, y, {}, {});
-							IF y.offset < 8 THEN	
-								DevCPLamd64.MakeReg(y, y.offset, n.left.typ.form);	(* ??? *)
+							IF y.offset < 8 THEN
+								IF n.left.typ.form = Int64 THEN
+									(* 64-бит: машинный регистр 64-битный — split в пару lo/hi,
+									   иначе старшая половина читается из мусорного регистра *)
+									DevCPLamd64.MakeReg(y, y.offset, Pointer);
+									DevCPCamd64.PtrToLong(y, {}, {y.reg})
+								ELSE
+									DevCPLamd64.MakeReg(y, y.offset, n.left.typ.form)	(* ??? *)
+								END;
 								expr(n.left, x, {}, {loaded}); DevCPCamd64.Assign(x, y)
 							ELSE DevCPM.err(220)
 							END
 					| putrfn:
 							expr(n.left, x, {}, {});
 							IF x.offset < 8 THEN
-								DevCPLamd64.MakeReg(x, x.offset, n.right.typ.form);	(* ??? *)
-								expr(n.right, y, wreg - {x.reg}, {}); DevCPCamd64.Assign(x, y)
+								IF n.right.typ.form = Int64 THEN
+									(* 64-бит: join пары lo/hi в один 64-битный регистр *)
+									expr(n.right, y, wreg - {x.offset}, {});
+									DevCPCamd64.LongToPtr(y, {}, {});
+									DevCPLamd64.MakeReg(x, x.offset, Pointer)
+								ELSE
+									DevCPLamd64.MakeReg(x, x.offset, n.right.typ.form);	(* ??? *)
+									expr(n.right, y, wreg - {x.reg}, {})
+								END;
+								DevCPCamd64.Assign(x, y)
 							ELSE DevCPM.err(220)
 							END
 					| newfn:

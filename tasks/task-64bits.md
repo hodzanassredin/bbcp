@@ -327,3 +327,62 @@ fistpl(%rsp)→fwait, rsp высокий (0x6007_xxxxxxxx). Под gdb/setarch -
    (intrealtyp→FPU→Stk, CPCamd64.Mem не Con/Reg). Обход temp-переменной.
 4. Трап-репорт чистый. Дальше: GUI event loop (краш в GTK-нити),
    StdInterpreter-вызов команд, открытие первого окна.
+
+== 2026-08-09 (3): GUI — первое окно не открывается (В РАБОТЕ) ==
+Симптом: gtk_window_new вызывается 1 раз, show_all/realize — ни разу,
+"body loop finished" (exitWithoutWindows), молчаливый выход.
+Детали цепочки и план — Findings64 п.74. Кандидаты обрыва:
+ConnectSignals (LinBackends, не читан), Dialog.Call(StdConfig.Setup)
+возвращает res_#0 молча (ошибка в ShowMsg без окон), либо SetupWorkspace.
+Следующий шаг: [LR]-принты configCmd/res_ в Lin/Mod/Init.odc.txt,
+go64.sh LinInit, GUI-прогон bbrun64; затем gdb-брейки на
+StdWindows.Init / SetupWorkspace / NewBackend / Backend.Open.
+После GUI: краш ObxHello.Do (wild pc в GTK-нити) — вероятно та же болезнь.
+Отложено осознанно: SYSTEM.GET(LONGINT-выражение) err 220 — фикс кодгена
+(Findings64 п.72). Не забыть вычистить bbrun64_clean/bbrun64_g из
+старого коммита 5260e5be.
+
+== 2026-08-09 (4): GC sliver-absorb a=16 — КОРЕНЬ крашей при больших компиляциях ==
+Компиляция IMPORT LinLibc → первый GC → SIGSEGV в CheckCandidates/[code]Next.
+Полный разбор: Findings64 п.75. Фикс: GetOldFreeBlock пропускает блоки с
+остатком 16; NewBlock ASSERT 22; absorb-ветка удалена.
+Попутно выяснено (важно для отладки): Console.WriteStr БЕЗОПАСЕН и в GUI
+(LinConsole.Init ставит Console при загрузке — LinInit его импортирует);
+ADР-err-113 в LinInit был из-за краша/проблем при импорте Libc.osf, а не из-за
+ADR (Probe5: a := SYSTEM.ADR(b) компилируется нормально).
+
+== 2026-08-09 (5): анализ процесса + стратегия верификации ==
+См. KB/Verification64.md. Выводы: краши — запаздывающие проявления
+нарушенных инвариантов (куча/кодеген); инварианты не были записаны
+исполняемо. Решения: Kernel.ValidateHeap (тайлинг, free-list, дескрипторы),
+единая формула stride + boot self-tests, ASSERT-уровни в проде,
+peephole-проверка form/REXW в кодегене, [code] -> CP где можно.
+Систему НЕ переписываем — архитектура здоровая, добавляем
+верификационный слой. Текущая охота: use-after-free DevCPT (Findings64
+п.76 продолжение): live-объект не помечен; версии — ptroffs дескриптора
+не покрывает поле или guard отрезал путь.
+
+== 2026-08-09 (6): серия фиксов GC/кодегена + текущая точка ==
+СДЕЛАНО (всё закоммитить!): sliver a=16 (GetOldFreeBlock), Mark guard
+(дескриптор обязан быть в модульной памяти — вход и down-шаг),
+baseStack=0 (тело Kernel: IF baseStack=0 THEN GETREG), CPLamd64 REXW
+(Int32-глобал грузился r64 — мусор в индексах), GETREG/PUTREG Int64
+(split/join пар: новые CPCamd64.PtrToLong*/LongToPtr*, CPVamd64
+getrfn/putrfn). Подробности: Findings64 п.75-81. Стратегия верификации:
+KB/Verification64.md (инварианты, ValidateHeap, boot self-tests).
+ТЕКУЩАЯ ТОЧКА (Findings64 п.82-83): 
+1) in-BB компиляция не пишет .ocf (нет syscalls) → CommandError
+   CodeFileNotFound на запуске свежего модуля; копать OutCode→RegisterObj
+   vs Files.Register (LinFiles 64-бит).
+2) GC use-after-free DevCPT.Struc: скан стека слот читает, но не
+   маркирует; подозрение на FPU-кодировку `~strictStackSweep OR p MOD 16
+   = 0` (константа fcomps не проверена) — см. п.83.
+3) GTK-нити (pango) шумят сигналами в HandleTrap (п.84).
+LinInit.odc.txt содержит НЕКОМПИЛИРУЮЩИЕСЯ debug-принты P/PR/PLn через
+Libc.write+SYSTEM.ADR (err 113!) — перед продолжением GUI-ветки
+ПЕРЕПИСАТЬ их на Console.WriteStr (Console жив и в GUI — LinConsole.Init;
+Probe7: Strings+Console компилируются). err 113 с SYSTEM.ADR(b) в
+аргументе Libc.write — отдельная загадка (Probe5: чистый ADR ок; файлы
+с ADR в LinFiles ок) — вероятно связь с п.82/состоянием Libc.osf.
+НЕ ЗАБЫТЬ: коммит (go64/test64/build-dev64 всё зелёное), вычистить
+Probe*.cp из bbcp64use, Obx/Mod/Probe7.odc* leftover.

@@ -357,7 +357,11 @@ MODULE DevCPLamd64;
 
 			a1 := from; a2.mode := 0;
 			CheckSize(from.form, w);
-			IF from.obj # NIL THEN DevCPE.GenByte(REXW); DevCPE.GenByte(8BH); GenCExt(to.reg * 8, from)
+			IF from.obj # NIL THEN
+				(* 64-бит: REXW только для 8-байтных форм; Int32 грузим 32-битным mov
+				   (zero-extend), иначе в индексном регистре остаётся мусор из соседнего слота *)
+				IF Size[from.form] >= 8 THEN DevCPE.GenByte(REXW) END;
+				DevCPE.GenByte(8AH + w); GenCExt(to.reg * 8, from)
 			ELSE
 				IF from.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(0A0H + w); GenLinked8(from, absolute)	(* MOV rax, [moffs64] *)

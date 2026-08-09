@@ -806,6 +806,19 @@ out:
         BodyProc body = (BodyProc) m->code;
         printf("init %s...\n", m->name);
         body();
+        /* FPU stack leak check: after a well-behaved body x87 stack is empty */
+        if (getenv("BB_FPUCHECK") != NULL) {
+            static unsigned char fx[512] __attribute__((aligned(16)));
+            unsigned short cw = *(unsigned short*)(fx + 0);
+            unsigned short sw = *(unsigned short*)(fx + 2);
+            unsigned char tw = *(unsigned char*)(fx + 4);
+            __asm__ volatile("fxsave %0" : "=m"(fx));
+            tw = *(unsigned char*)(fx + 4);
+            if ((tw != 0) || (*(unsigned short*)(fx + 2) & 1))
+                printf("  ! FPU dirty after %s: ftw=%02x fsw=%04x fcw=%04x\n",
+                       m->name, tw, *(unsigned short*)(fx + 2), *(unsigned short*)(fx + 0));
+            (void)cw; (void)sw;
+        }
         fprintf(stderr, "done %s\n", m->name);
     }
     fprintf(stderr, "body loop finished\n");
@@ -814,6 +827,11 @@ out:
     if (getenv("BB_TRAP") != NULL) __builtin_trap();	/* gdb hook: модули загружены, можно ставить bp в коде модулей */
     {
         Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
+        Module* other = ThisModule(consoleMode ? "LinLoader" : "LinIntLoader");
+        /* тело НЕвыбранного лоадера не должно исполняться никогда: иначе ленивый
+           InitModule (напр. из LinInit.SearchVar по modList) запускает консольный
+           LinIntLoader в GUI-режиме -> REPL на EOF stdin -> тихий exit(0) */
+        if (other != NULL) other->opts = other->opts | init;
         if (m != NULL && !(m->opts & init)) {
             m->opts = m->opts | init;
             fprintf(stderr, "init %s (main loader, %s mode)...\n", m->name, consoleMode ? "console" : "gui");

@@ -66,6 +66,8 @@ MODULE LinKernel;
 		currentTryContext: POINTER TO Libc.sigjmp_buf; (* trap return context, if Kernel.Try has been used. *)
 		isReadableContext: Libc.sigjmp_buf; (* for IsReadable *)
 		isReadableCheck: BOOLEAN;
+
+		stubPage: ADDRESS; stubLeft: INTEGER;	(* dll-трамполины (StubFor), bump-аллокация по 16 байт *)
 		
 		trap: RECORD
 			depth: INTEGER;	(** counts recursive traps *)
@@ -223,6 +225,25 @@ MODULE LinKernel;
 		IF h # Dl.NULL THEN ok := TRUE END
 	END LoadDll;
 
+	PROCEDURE StubFor (target: LONGINT): INTEGER;
+		(* трамплин mov rax,imm64; jmp rax в MAP_32BIT-памяти: ripBased disp32 из модулей
+		   (< 4 ГБ) не дотягивается до libc (~0x7f...). Как StubFor в bbrun64.c. *)
+		CONST stubLen = 16;
+		VAR p: ADDRESS;
+	BEGIN
+		IF stubLeft < stubLen THEN
+			stubPage := Libc.mmap(0, 4096, Libc.PROT_READ + Libc.PROT_WRITE + Libc.PROT_EXEC,
+				Libc.MAP_PRIVATE + Libc.MAP_ANON + Libc.MAP_32BIT, -1, 0);
+			ASSERT(stubPage # Libc.MAP_FAILED);
+			stubLeft := 4096
+		END;
+		p := stubPage; INC(stubPage, stubLen); DEC(stubLeft, stubLen);
+		S.PUT(p, SHORT(48H)); INC(p); S.PUT(p, SHORT(0B8H)); INC(p);	(* mov rax, imm64 *)
+		S.PUT(p, target); INC(p, 8);
+		S.PUT(p, SHORT(0FFH)); INC(p); S.PUT(p, SHORT(0E0H));	(* jmp rax *)
+		RETURN SHORT(p)
+	END StubFor;
+
 	PROCEDURE (VAR p: Platform) ThisDllObj (mode, _: INTEGER; IN dll, name: ARRAY OF CHAR): INTEGER;
 		CONST mVar = 3; mProc = 4; (* sync with Kernel!! *)
 		VAR ad: INTEGER; h: Dl.HANDLE; res: INTEGER; s: ARRAY Kernel.nameLen OF SHORTCHAR;
@@ -232,7 +253,7 @@ MODULE LinKernel;
 			Utf.StringToUtf8(dll, s, res); ASSERT(res = 0);
 			h := Dl.dlopen(s, Dl.RTLD_LAZY + Dl.RTLD_GLOBAL);
 			IF h # Dl.NULL THEN Utf.StringToUtf8(name, s, res); ASSERT(res = 0);
-				ad := SHORT(Dl.dlsym(h, s))	(* TODO64: ThisDllObj пока INTEGER-кап *)
+				ad := StubFor(Dl.dlsym(h, s))
 			END
 		END;
 		RETURN ad

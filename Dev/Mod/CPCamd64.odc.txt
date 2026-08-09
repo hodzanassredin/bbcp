@@ -330,8 +330,8 @@ MODULE DevCPCamd64;
 		END
 	END Pop;
 	
-	PROCEDURE^ LoadLong (VAR x: DevCPLamd64.Item; hint, stop: SET);
-	PROCEDURE^ PtrToLong (VAR y: DevCPLamd64.Item; hint, stop: SET);
+	PROCEDURE^ LoadLong* (VAR x: DevCPLamd64.Item; hint, stop: SET);
+	PROCEDURE^ PtrToLong* (VAR y: DevCPLamd64.Item; hint, stop: SET);
 	
 	PROCEDURE Load* (VAR x: DevCPLamd64.Item; hint, stop: SET);	(* = Assert(x, hint, stop + {mem, stk}) *)
 		VAR r: DevCPLamd64.Item; f: BYTE;
@@ -454,7 +454,7 @@ MODULE DevCPCamd64;
 		END
 	END LoadL;
 	
-	PROCEDURE LoadLong (VAR x: DevCPLamd64.Item; hint, stop: SET);
+	PROCEDURE LoadLong* (VAR x: DevCPLamd64.Item; hint, stop: SET);
 		VAR r, rh: DevCPLamd64.Item; offs: INTEGER;
 	BEGIN
 		IF x.form = Int64 THEN
@@ -484,7 +484,7 @@ MODULE DevCPCamd64;
 		x.form := Int64
 	END LoadLong;
 
-	PROCEDURE PtrToLong (VAR y: DevCPLamd64.Item; hint, stop: SET);
+	PROCEDURE PtrToLong* (VAR y: DevCPLamd64.Item; hint, stop: SET);
 		(* 64-bit: Pointer/ProcTyp (один 64-битный регистр) -> пара Int64 lo/hi *)
 		VAR rh: DevCPLamd64.Item;
 	BEGIN
@@ -494,6 +494,22 @@ MODULE DevCPCamd64;
 		DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E8H + rh.reg); DevCPE.GenByte(32);	(* shr rh, 32 *)
 		y.form := Int64; y.index := rh.reg
 	END PtrToLong;
+
+	PROCEDURE LongToPtr* (VAR y: DevCPLamd64.Item; hint, stop: SET);
+		(* 64-bit: пара Int64 (y.reg=lo, y.index=hi) -> один 64-битный регистр *)
+		VAR r, rl: DevCPLamd64.Item;
+	BEGIN
+		IF y.mode # Reg THEN LoadLong(y, hint, stop) END;	(* пара обязана быть в регистрах *)
+		ASSERT(y.mode = Reg, 90);
+		GetReg(r, Pointer, hint, stop + {y.reg, y.index});
+		rl.mode := Reg; rl.form := Int32; rl.scale := 0; rl.offset := 0; rl.index := 0; rl.obj := NIL;
+		rl.reg := y.index; DevCPLamd64.GenMove(rl, r);	(* mov r32, hi (zero-extend) *)
+		DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E0H + r.reg); DevCPE.GenByte(32);	(* shl r, 32 *)
+		rl.reg := y.reg;
+		DevCPE.GenByte(0BH); DevCPE.GenByte(0C0H + r.reg * 8 + rl.reg);	(* or r32, lo32 (старшие биты r сохраняются) *)
+		FreeReg(y.index, Int32); FreeReg(y.reg, Int32);
+		y.form := Pointer; y.reg := r.reg; y.index := 0
+	END LongToPtr;
 	
 	(*------------------------------------------------*)
 	

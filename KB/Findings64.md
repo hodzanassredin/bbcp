@@ -454,3 +454,163 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     трап-репорт печатается чисто (без FPE-каскада). Осталось: ObxHello.Do →
     ~TRAP sig=15/18 в нити GTK event loop (pc в нативной lib 0x76AC...) →
     рекурсивный SIGILL на финальном HALT HandleTrap — это GUI-фронт.
+74. **GUI: первое окно не открывается (2026-08-09, в работе).** Симптом:
+    gtk_window_new(TOPLEVEL) вызывается РОВНО один раз (gdb, /tmp/gui3.gdb),
+    но gtk_widget_show_all / gtk_widget_realize НЕ вызываются →
+    "body loop finished" (exitWithoutWindows), процесс выходит молча.
+    Архитектура (Lin/Mod/Backends.odc, читать через `odcey text -skip-embedded-view`):
+    BackendDirectory.NewBackend (~стр.521) делает gtk_window_new +
+    drawing area + fixed + ConnectSignals; Backend.Open (~стр.504) делает
+    gtk_widget_show_all(wb.wnd). Значит обрыв между NewBackend и Open
+    (кандидат: ConnectSignals — не читан) либо Open вообще не вызывается.
+    Config-цепочка бутa: Lin/Mod/Init.odc Init (~стр.78-108):
+    SearchVar("appConfigProcedure") ничего не находит (переменной нет в
+    дереве) → configCmd := "StdConfig.Setup" → Dialog.Call("StdConfig.Setup")
+    → StdConfig.Setup вызывает StdWindows.Init, StdDocuments.Install,
+    StdMenus.Install, StdTiles.On и SetupWorkspace (Std/Mod/Config.odc,
+    SetupWorkspace ~стр.76 — grids/dividers/windows; читать через odcey).
+    Startup.Setup — no-op stub, это норма. НЕ выяснено: доходит ли до
+    StdConfig.Setup/SetupWorkspace; Dialog.Call может вернуть res_#0 и
+    ошибка уходит в Dialog.ShowMsg (а окна ещё нет — молчание!). План:
+    (1) [LR]-принты configCmd/res_ в LinInit после каждого Dialog.Call
+    (log.String из LinKernel, как в LinRegistry); (2) если Dialog.Call
+    не проходит — копать Dialog.Call/StdInterpreter (пересекается с
+    крашем ObxHello.Do); (3) если проходит — gdb-брейки по cad-адресам
+    из "+"-строк загрузчика (StdWindows cad=0x428cd000, refs из
+    bbcp64use/Std/Code/{Config,Windows}.ocf, Lin/Code/Backends.ocf) —
+    найти обрыв до show_all. gdb: strcmp в условиях флаки — dword-
+    сравнения *(unsigned int*)$rsi == 0x... ; refs в ocf.py — КОНЦЫ
+    процедур, брейк на конец предыдущей.
+75. **GC: sliver-absorb a=16 ломал цепочку блоков (2026-08-09, РЕШЕНО).**
+    Симптом: компиляция модуля с `IMPORT Libc := LinLibc` (большой sym) →
+    первый же GC → SIGSEGV addr=0 в CheckCandidates (инлайн [code] Next:
+    `MOV ECX,[ECX]` по tag=0). gdb-реконструкция хода от кластера
+    (base+24, stride в точности по 32-битной семантике asm: AND CL,0FCH =
+    & 0xFFFFFFFC, ADD/SUB 32-бит) — 1914 блоков, точное попадание в crash:
+    последний блок (ARRAY OF SHORTCHAR — строка имён из Libc.osf)
+    заканчивался на 0x6003ffe8, дальше 16 байт нулей до sweep-end.
+    МЕХАНИЗМ: free-тоталы ≡ 0 (mod 16) (MakeFreeMulticluster/Sweep дают
+    (size-24)DIV16*16; Insert/Sweep хранят size=total-8), tsize ≡ 0 →
+    остаток a = total-tsize ∈ {0,16,32,...}. Ветка absorb
+    `ELSIF a > 0 THEN INC(tsize,a)` (минимум Insert=32, FreeDesc=24)
+    срабатывала РОВНО на a=16: блок физически занимал stride+16, но
+    [code] Next вычисляет stride из tag/last — поглощённые 16 байт
+    НЕВИДИМЫ → sweep проваливается в sliver → tag=0 → краш. В 32-бит
+    absorb-случая не существовало (min Insert=16, a≡0 mod 16 → a=0 или
+    a≥16-Insert); регрессия введена нашим минимумом 32 (FreeDesc=24).
+    ФИКС (System/Mod/Kernel.odc.txt): GetOldFreeBlock пропускает free-блок,
+    если b.size - s = 16 (`WHILE (b.size < s) OR (b.size - s = 16)`);
+    в NewBlock ASSERT((a=0)OR(a>=32), 22) + удалена мёртвая ветка absorb.
+    Побочный эффект: free-блок с остатком 16 пропускается → чуть больше
+    фрагментации, GC сольёт с соседями. НЕ трогать: Insert(16) невозможен —
+    FreeDesc.next лежит по offset 16, запись накрыл бы tag следующего блока.
+    Техника: реконструкция GC-хода в gdb python по post-mortem памяти —
+    рабочая, т.к. Mark восстанавливает tag (mark-бит маскируется 0xFC,
+    array-бит стабилен); блоки ≡ 8 (mod 16) (кластер+24).
+76. **GC: Mark спускался в free-блоки и мусорные "дескрипторы" (2026-08-09).**
+    После фикса п.75: первый GC при большой компиляции → SIGSEGV в Mark
+    (DSW-traversal): MarkGlobals/MarkLocals вызывают Mark на блоках, чей tag
+    НЕ дескриптор: free-блок (tag = ADR(size), т.е. указатель в кучу) или
+    протухший глобал/SYSTEM.PTR в освобождённую память. Доказано gdb:
+    actual = this+8 = 0x6003f9c0, offset = 0x42AA28A0 (мусор из
+    "дескриптора" в куче), ap = actual+offset = 0xA2AE2260 → crash.
+    ФИКС (System/Mod/Kernel.odc.txt, Mark): и на входе, и на down-шаге
+    проверяется дескриптор: dt := tag - tag MOD 4; спуск только если
+    (dt > 0) & ~InHeap(dt) — дескриптор обязан лежать в модульной памяти,
+    не в куче. В 32-бит той же дыры не было видно: чтения попадали в
+    mapped-память и мусор маркировался молча (повезло), а free-list
+    указатели, видимо, не попадали в ptrs-метаданные. НА ЗАМЕТКУ: ptrs
+    глобалов может содержать сомнительные слоты — если вылезет снова,
+    искать КОНКРЕТНЫЙ модуль/слот (frame-археология через modList —
+    Module record: next@0, nofptrs@44, varBase@96, ptrs@112, name@136).
+77. **КОДГЕН: загрузка глобала Int32 как r64 (мусор в индексном регистре).**
+    MarkLocals: candidates[nofcand] := max — nofcand (INTEGER) грузился
+    `mov rax, [rip+disp]` (8 байт!) → старшие 32 бита = соседний глобал
+    (0x60040000) → rax*8 → запись по адресу-мусору → SIGSEGV. Место:
+    Dev/Mod/CPLamd64.odc.txt GenMove, ветвь `(to.reg = AX) & (from.mode =
+    Abs) & (from.scale = 0)`, подветвь `from.obj # NIL` — там стоял
+    безусловный REXW + 8BH. Латентно било ВСЕ Int32-глобалы во всех
+    модулях (обычно маскируется последующими 32-битными операциями;
+    фатально при 64-битном использовании регистра — индексы/адреса).
+    ФИКС: REXW только если Size[from.form] >= 8, опкод 8AH + w (как в
+    общей ветке). Сборка: go32.sh DevCPLamd64 (dev0), затем test64.sh.
+    ПРИМЕЧАНИЕ: похожие безусловные REXW проверять везде в CPLamd64.
+78. **baseStack = 0 — консервативный скан стека в MarkLocals НИКОГДА не
+    работал (2026-08-09, КОРЕНЬ серии крашей).** bbrun64 предустанавливает
+    modList для CP Kernel → тело Kernel пропускает ветку `IF modList = NIL`,
+    где был `S.GETREG(SP, baseStack)` → baseStack = 0 навсегда →
+    `WHILE sp < baseStack` ложно сразу → candidates не собираются →
+    объекты, живые только через стек (локальные переменные DevCPT при
+    импорте sym!), умирают при первом GC → use-after-free → крахи GC.
+    Доказательная цепочка: watchpoint-жизнь блока B (DevCPT.Struc):
+    alloc (NewObj из InObj) → Sweep освобождает (Insert, caller=Sweep) →
+    DevCPT пишет в мёртвый объект → следующий GC падает. В момент
+    освобождения: heap/module ссылок нет, на стеке указатель есть
+    (InObj+0x2d6 push obj), но в candidates[] его нет → скан мёртв →
+    baseStack = 0 (gdb: root @0x42636158, baseStack @0x42636160 = 0).
+    ФИКС: тело Kernel — `IF baseStack = 0 THEN GETREG(SP,baseStack) END`
+    вне ветки modList. Урок процесса: эта бага объясняет и "ASLR-
+    зависимый краш" п.66, и часть исторических GC-крахов.
+79. **Техника gdb (накопленное):**
+    - HW watchpoint сообщает $pc ПОСЛЕ пишущей инструкции (брейк надо
+      ставить на несколько байт РАНЬШЕ, по дизасму ocf).
+    - CODE-breakpoints (int3) в модульной памяти НЕ работают, если
+      поставлены до загрузки модуля: лоадер перечитывает .ocf поверх
+      патча. HW watchpoints работают всегда (heap мапится рано).
+      Поздний якорь — первый printf: heap уже замаплен, код ещё нет.
+    - FreeDesc.next в OCF v2 лежит по offset 12 (выравнивание максимум
+      4!), не 16. Cluster: size@0, next@4 (8-байтный по 4-смещению!).
+      Проверять layout дизасмом, не предполагать natural alignment.
+    - MarkLocals/DSW: min/max/p через FPU (intrealtyp) — точные 64-бит.
+    - python в gdb commands с вложенными end ломается — выносить в
+      отдельный .py и source после остановки (if $hit<N cont end).
+80. **Кодеген: SYSTEM.GETREG/PUTREG с LONGINT (2026-08-09, исправлено).**
+    Int64 в регистрах = ПАРА (reg=lo, index=hi) — см. CPCamd64.LoadLong.
+    getrfn делал MakeReg(y, reg, Int64) без index → hi брался из
+    мусорного регистра (eax) → MarkLocals сканировал не стек, а ~0x0000
+    0000ffffXXXX → SIGSEGV. putrfn симметрично (mov ebp,lo затирает hi
+    нулями). ФИКС: CPVamd64 getrfn/putrfn для Int64 — через новые
+    CPCamd64.PtrToLong* (split: mov rh,r64; shr rh,32) и LongToPtr*
+    (join: mov r,hi; shl r,32; or r,lo). PtrToLong и LoadLong теперь
+    экспортированы (были приватные; у PtrToLong была forward без *).
+    Проверено дизасмом: GETREG(FP,sp) теперь mov rbp,rax; shr; 2 stores.
+81. **Статус "0ErrorsDetected" = УСПЕХ (ресурс #Dev:Ok в статус-баре),
+    НЕ ветка ошибки!** Реальная ошибка = маркеры "pos= err=". Урок:
+    не путать. ORD(BOOLEAN) → err 111 (не поддержан компилятором).
+82. **В РАБОТЕ (слепок 2026-08-09 вечер):** компиляция внутри BB64
+    (ConsCompiler64.Compile) завершается "успешно", но .ocf НЕ пишется
+    (strace: нет openat(O_CREAT) вообще) → выполнение свежего модуля
+    (Probe8.T) = CommandError CodeFileNotFound (то, что видел
+    пользователь!), а при выполнении — wild jump (pc=0x766C... в main
+    нити) — вероятно отдельный баг обработки отсутствующего модуля.
+    Цепочка записи: DevCPVamd64.Module → DevCPM.NewObj(SelfName) →
+    objFile := Files.dir.New(loc, ask) (loc из Librarian.lib.GetSpec)
+    → DevCPE.OutCode → хвост: IF noerr THEN DevCPM.RegisterObj →
+    objFile.Register(ObjFName,...) — syscalls нет → OutCode/RegisterObj
+    не доезжают ИЛИ Files.dir.New/Register молча не работают в 64-бит.
+    СЛЕДУЮЩИЙ ШАГ: проверить дизасм/логи, доезжает ли до OutCode
+    (между NewObj и OutCode много кода — возможен тихий уход), и
+    Files.Register в LinFiles на 64-бит корректность.
+83. **GC use-after-free (основная нить):** DevCPT.Struc (NewObj из
+    InObj, caller DevCPT+0x79) освобождается Sweep, будучи живым;
+    InsertIn+0xf9 пишет в мёртвый. Доказано: (а) указатель на объект
+    лежит на стеке в локале InObj.obj (InObj+0x64) ДО GC; (б) скан
+    MarkLocals ЧИТАЕТ этот слот (rwatch), но в candidates[] он не
+    попадает; (в) candidates-батчи (45/26/24 записи) B не содержат;
+    (г) min/max/baseStack корректны, константа 16.0 на месте.
+    ПОДОЗРЕНИЕ: FPU-кодировка теста `(~strictStackSweep OR p MOD 16=0)`
+    (fprem/ftst/fcom/xor/fadd/fcomps по константе @...fd6 — значение не
+    проверено!) или ранний GC с меньшим max. Проверить константу fcomps
+    и логику boolean-through-FPU в CPVamd64.
+84. **GTK/нити:** pangoft2 (шрифты, LinFonts) создаёт glib-потоки при
+    загрузке (g_object_new → g_thread_new) даже в консольном режиме;
+    они получают сигналы (sig=15/18) и LinKernel.HandleTrap (на ВСЕ
+    сигналы процесса) ловит их как BB-трапы → шум/каскады. Main-нить
+    при этом падает отдельно (wild pc). Разводить: HandleTrap должен
+    обрабатывать только SEGV/FPE/ILL/INT и только main-нить.
+85. **gdb техника (дополнение к п.79):** rwatch работает для ловли
+    чтений; code-breakpoints в модульной памяти теряются при дозагрузке
+    (перечитывание .ocf поверх int3) — ставить только hw watchpoints или
+    брейки после полной загрузки; якорь — break printf (heap замаплен,
+    модульный код ещё нет). В batch+python: не вкладывать python в
+    commands с вложенными end — выносить в .py и source после стопа.

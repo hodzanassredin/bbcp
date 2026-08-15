@@ -614,3 +614,93 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     брейки после полной загрузки; якорь — break printf (heap замаплен,
     модульный код ещё нет). В batch+python: не вкладывать python в
     commands с вложенными end — выносить в .py и source после стопа.
+
+== Сессия 2026-08-15 (GUI-ветка, корневой баг GC найден) ==
+
+86. **Kernel.AllocModMem: единый регион на все 4 блока.** Раньше
+    desc/meta/code/var выделялись отдельными mmap(MAP_32BIT) и
+    разъезжались по всем 4 ГБ → RIP-relative disp32 (знаковый ±2 ГБ) не
+    влезал → SHORT(disp) через FISTP m32 → SIGFPE в StdLoader.Fixup при
+    загрузке LinInit. Фикс: один непрерывный mmap на суммарный размер,
+    блоки раскладываются внутри (munmap поддиапазонов при
+    DeallocModMem/InvalModMem легален). Проверено: LinInit dad/mad/cad
+    идут подряд от 0x60040000.
+
+87. **LinKernel.ThisDllObj: StubFor-трамполины.** Раньше
+    SHORT(dlsym(...)) урезал адрес libc до 32 бит. Теперь как в
+    bbrun64.c: `mov rax,imm64; jmp rax` (48 B8 <8> FF E0), bump по 16
+    байт в RWX-страницах с MAP_32BIT; модульные переменные
+    stubPage/stubLeft.
+
+88. **bbrun64: невыбранному лоадеру ставить opts |= init.** Иначе
+    ленивый Kernel.InitModule (Meta.Lookup по modList, напр. из
+    LinInit.SearchVar) прогонял тело LinIntLoader в GUI-режиме →
+    консольный REPL → EOF stdin → тихий Quit(0) до старта GUI.
+    (~строка 829 bbrun64.c.)
+
+89. **bbcp64use: Rsrc-симлинки.** "cannot open menu file" было из-за
+    отсутствия Rsrc; сделано: для System/Std/Text/Form/Dev/Obx
+    `ln -s ~/sources/bbcp/<S>/Rsrc bbcp64use/<S>/Rsrc`.
+
+90. **КОРЕНЬ use-after-free всей недели: MarkLocals сканировал стек с
+    FP≡4 (mod 8).** У этого кодгена rbp бывает не 8-выровнен
+    (наблюдали rbp=...7a34); скан с `S.GETREG(FP, sp)` и шагом 8 читал
+    все слоты со сдвигом 4 → 8-выровненные pointer-слоты не находились
+    → якорей нет → Sweep собирал живые объекты (TextModels-Piece,
+    DevCPT.Struc — п.83 и все прежние UAF). Проявления: ASSERT 32 в
+    Kernel.Insert (free-спан через живой Piece), порча size free-блока
+    из StdModel.Internalize → Next() за кластер. ФИКС: в MarkLocals
+    после GETREG: `INC(sp, 7); sp := sp DIV 8 * 8`. После фикса:
+    консоль чистая, P10 (2000 объектов + 3 collect) OK. УРОК: п.83 —
+    FPU-константа была красной селёдкой, реальная причина —
+    выравнивание; "слот читается, но не маркируется" надо было читать
+    как "читается НЕ ТОТ слот".
+
+91. **FPU-leak check в bbrun64 чист.** Под BB_FPUCHECK: fxsave +
+    ftw/fsw после каждого тела модуля — тела не текут. fctrl=0x37e
+    (invalid-op unmasked, by design Kernel.InitFpu) — любая FPU-ошибка
+    = SIGFPE на следующем fwait.
+
+92. **gdb-рецепты (GUI/модули).** До загрузки модулей sw-breakpoints в
+    их коде затираются fread лоадера → якорь: `set environment
+    BB_TRAP=1`, run → SIGILL → `set $rip = $rip + 2` → ставить bp →
+    `signal 0` (НЕ continue — иначе сигнал уйдёт в HandleTrap!).
+    refs из ocf.py = КОНЦЫ процедур (entry = предыдущий конец). Дизасм
+    ocf.py файловый (sentinel 0x6Axxxxxx), реальный disp — только в gdb
+    по runtime-адресу; после trap-encoding (8D xx) дизасм
+    дезсинхронизируется — читать байты (x/28bx).
+
+93. **Текущий SEGV (2026-08-15, не закрыт):** GUI доходит до
+    `[LI] configCmd=StdConfig.Setup`, `SetupBefore res=0`, затем SEGV в
+    TextModels.Find+0xfc8 (pc=0x4285BFC8: `cmp 0x10(%rax),%edx` — v.len
+    при v=NIL, addr=0x10) во время StdConfig.Setup (чтение Menus.odc
+    через Views.OldView → StdReader.ReadPrevView → Reset → Find).
+    Данные: Find идёт по живому, но НЕ замкнутому piece-списку с
+    m=0x12e0=4832 при t.len=4291 — нарушен pre Find (pos <= t.len) →
+    rd.pos/rd.state неконсистентны. reader obj ~0x60002d80:
+    base@0x18=0x6003fa90 ✓, dword@+0x20: [1, 0xffffffff] — -1 рядом с
+    pos=1. Piece-список цел (адреса убывают по mmap-кластерам — GC не
+    при чём). ГИПОТЕЗА: 32/64 путаница в цепочке чтения
+    Stores/LinFiles64/StdReader (rd.pos/era/off, ReadInt, версии
+    Stores). Пробник ObxProbe11 (чтение Menus.odc в консоли) НЕ
+    скомпилировался: err 83 at pos 887,910 — на `IF v IS
+    TextViews.View THEN` / приведении; выяснить err 83
+    (Dev/Rsrc/Errors.odc) и поправить.
+
+94. **Карта модулей (gui_run5/6):** Kernel cad=0x42655000 (cs=25652
+    после фикса MarkLocals), StdLoader 0x42678000, LinKernel 0x426c4000,
+    LinLoader 0x427b7000, TextModels 0x4285b000, Stores 0x4275d000,
+    Views 0x427ca000, Documents 0x42842000. Полная карта печатается в
+    начале прогона (`+ Module dad=... cad=...`). Kernel refs старого
+    ocf устарели после пересборки — пересчитывать через ocf.py.
+
+95. **Layout (подтверждено):** FList node: tag@obj-8, next@0, blk@8,
+    iptr/aiptr@16. Piece: prev@0, next@8, len@16, attr@24, file@32.
+    StdModel: trailer@48, pc.org@56, pc.prev@64, spill@72, rd@80,
+    size=88, ptroffs=[0,48,64,72,80,-24,-1]; trailer.len=0x7FFFFFFF.
+    Runtime ptroffs-дескриптор: [offsets..., отрицательный up-link,
+    -1], tag указывает сразу на offsets (header из OutDesc не
+    попадает). Block: tag@0,last@8,actual@16,first@24, объект=b+8;
+    free-блок: tag=b+8, stored size=total-8; array-блоки: tag|2.
+    Cluster: size@0,next@4, блоки с base+24; кластеры 256КБ, mmap
+    top-down (новые НИЖЕ).

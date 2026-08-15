@@ -386,3 +386,27 @@ Probe7: Strings+Console компилируются). err 113 с SYSTEM.ADR(b) в
 с ADR в LinFiles ок) — вероятно связь с п.82/состоянием Libc.osf.
 НЕ ЗАБЫТЬ: коммит (go64/test64/build-dev64 всё зелёное), вычистить
 Probe*.cp из bbcp64use, Obx/Mod/Probe7.odc* leftover.
+
+== 2026-08-15: КОРНЕВОЙ баг GC (MarkLocals) + GUI дошёл до StdConfig.Setup ==
+СДЕЛАНО (всё в KB/Findings64 п.86-95):
+- AllocModMem: единый mmap-регион на 4 блока модуля (иначе RIP-disp32
+  не влезал → SIGFPE в StdLoader.Fixup) — п.86.
+- LinKernel.ThisDllObj: StubFor-трамполины вместо SHORT(dlsym) — п.87.
+- bbrun64: невыбранному лоадеру opts|=init (иначе GUI уходил в
+  консольный REPL и тихо Quit(0)) — п.88.
+- bbcp64use: Rsrc-симлинки ("cannot open menu file" закрыт) — п.89.
+- КОРЕНЬ всех use-after-free: MarkLocals сканировал стек с FP≡4(mod8),
+  все pointer-слоты читались со сдвигом 4 → якоря терялись. Фикс:
+  выравнивание sp на 8 после GETREG — п.90. Консоль чистая, P10 OK.
+ТЕКУЩАЯ ТОЧКА: GUI доходит до StdConfig.Setup (чтение Menus.odc через
+Views.OldView) → SEGV в TextModels.Find+0xfc8 (v.len при v=NIL).
+pre Find нарушен: m=4832 > t.len=4291; rd.pos/rd.state неконсистентны
+(dword -1 рядом с pos=1 в reader). Гипотеза: 32/64 путаница в чтении
+Stores/LinFiles64/StdReader. Детали — п.93. Пробник ObxProbe11 не
+скомпилировался (err 83 pos 887,910) — поправить и воспроизвести
+крэш в консоли.
+ДАЛЕЕ: (1) починить Probe11 → репродукция в консоли; (2) аудит
+Stores-чтения (ReadInt/версии/rd-era); (3) трап-репортер рекурсивно
+падает (мусорный sp) — маскирует трапы; (4) первое окно GUI;
+(5) in-BB компиляция не пишет .ocf (п.82); (6) GTK-нити/HandleTrap
+(п.84). НЕ ЗАБЫТЬ: коммит сессии.

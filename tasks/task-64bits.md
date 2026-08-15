@@ -437,3 +437,15 @@ Stores-чтения (ReadInt/версии/rd-era); (3) трап-репортер
 Открытые: трап-репортер рекурсия; in-BB компиляция (п.82);
 ObxCompileLog/ObxTaAdr (err 249/220); Gtk64-Audit остатки (ccall16
 миграция, REAL-аргументы, callbacks).
+
+== 2026-08-15 (3): СРЕДА ЗАПУЩЕНА В 64 БИТАХ ===
+7. SysVPostCall(nslots) — снятие слотов аргументов ccall (KB п.103).
+8. LinKernel.StubFor: RETURN начала стаба, не start+11 (KB п.104).
+9. C→BB callbacks: SysV Enter/Exit — сохранение rbx/r12-r15 и
+   балансировка стека add rsp,96+jmp r11 (KB п.105). Меню работают,
+   окно BlackBox + Log открываются, трапов нет. Скриншот проверен.
+Всё закоммичено. Дальше: трап-репортер (рекурсия, мусорный sp),
+in-BB компиляция (п.82, ConsCompiler64 → "0ErrorsDetected" но без
+.ocf — CommandError CodeFileNotFound при запуске свежих модулей),
+ObxCompileLog (err 249), ObxTaAdr (err 220 GET LONGINT),
+GdkEvent-офсеты сверить с KB/GdkEvent-offsets.txt, REAL-аргументы ccall.

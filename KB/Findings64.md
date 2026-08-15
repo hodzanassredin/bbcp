@@ -770,3 +770,49 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     (TryHandler) все зависимые ocf "illegal footprint" → обязательна
     пересборка подсистем (subs64/test64), иначе loader молча скипает
     модули → NIL-вызовы.
+
+== Сессия 2026-08-15 (финал): GUI работает ==
+
+103. **SysVPostCall не снимал слоты аргументов.** SysVPreCall кладёт
+     аргументы на стек ДО push r12 и читает их из [r12+8+i*8];
+     SysVPostCall делал только `mov rsp,r12; pop r12` → слоты оставались.
+     Для верхнеуровневого ccall безвредно (кадр чистится mov rsp,rbp),
+     но при ВЛОЖЕННОМ ccall (результат одного ccall = аргумент другого)
+     остатки слотов внутреннего вызова сдвигают аргументы внешнего:
+     pango_layout_line_get_pixel_extents(pango_layout_get_line(...),
+     NIL, rect) получал (line, мусор, NIL) вместо (line, NIL, &rect) →
+     pango писал logical_rect куда попало → порча g_class → SEGV в
+     pango_layout_get_text. Фикс: SysVPostCall(nslots) + add rsp,
+     nslots*8. Проверка: gdb break на C-функции, печать rdi/rsi/rdx.
+
+104. **LinKernel.StubFor возвращал start+11** (p после последнего PUT)
+     — вызов runtime-загруженных dll-функций (g_timeout_add из LinInit)
+     прыгал на байт E0 трамплина → loopnz → нули → SEGV addr=0.
+     Boot-стабы (bbrun64.c StubFor) были верны — поэтому packed-модули
+     работали, а runtime-модули (LinInit) падали. Фикс: RETURN SHORT(p0).
+
+105. **C→BB callbacks (GTK signals) — две ошибки в SysV Enter/Exit.**
+     (а) CP-код использует rbx/r12-r15 как scratch, а GTK ждёт их
+     сохранёнными → в Enter для [ccall]-процедур добавлены push
+     r15,r14,r13,r12,rbx (над аргументами, чтобы [rbp+16]=arg1 не
+     съехал), в Exit — mov из [rsp+56..88]. (б) ГЛАВНОЕ: выход был
+     plain ret (GenReturn(0)) — 6 рег-аргументов (+5 сохранений)
+     оставались на стеке C-вызывающего → каждый callback сдвигал rsp
+     GTK на 48 (стало 88) байт → каскадная порча (g_closure_invoke с
+     closure=наш func_data, call *heap-указатель). Фикс Exit: mov r11,
+     [rsp]; add rsp, 96; jmp r11. Диагностика: break на вход/выход
+     callback'а, сравнение rsp и [rsp]. ПРИМЕЧАНИЕ: Enter/Exit для
+     [ccall] уже существовал (pop r11/push args), но балансировка была
+     неверна изначально — в 32 битах было cdecl с ret $n, всё сходилось.
+
+106. **РЕЗУЛЬТАТ: 64-битная среда BlackBox поднимается**: меню
+     (File/Edit/.../Help), главное окно, окно Log, ноль трапов за прогон.
+     Проверка окна: wmctrl -l + xwd-скриншот.
+
+107. **Техника сессии (gdb).** Пробник с ASSERT(x,99) → SIGILL до
+     handler'а в gdb → runtime-дизасм с реальными disp. Watchpoint на
+     поле объекта (g_class) для поимки порчи. Условный bp на
+     g_closure_invoke для не-heap closure. Скриншоты окон через xwd +
+     ручной xwd→png на python (convert отсутствует). Модули: ocf.py
+     refs = КОНЦЫ процедур; entry = конец предыдущей (в refs-листе
+     легко ошибиться на один proc — проверять байты пролога!).

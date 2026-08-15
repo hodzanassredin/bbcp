@@ -1,0 +1,25 @@
+MODULE ObxProbe18;
+
+	IMPORT SYSTEM, Console, Strings, If := ObxProbe18if;
+
+	PROCEDURE P (IN s: ARRAY OF CHAR; x: LONGINT);
+		VAR t: ARRAY 40 OF CHAR;
+	BEGIN
+		Strings.IntToString(SHORT(x), t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END P;
+
+	PROCEDURE T*;
+		VAR r1, r2: If.Rec;
+	BEGIN
+		r1.x := 11; r2.x := 22;
+		P("adr(r1)=", SYSTEM.ADR(r1));
+		P("adr(r2)=", SYSTEM.ADR(r2));
+		If.probe3(111, NIL, r2);
+		P("a=", If.probe_at(0)); P("b=", If.probe_at(1)); P("c=", If.probe_at(2));
+		If.probe3(222, r1, r2);
+		P("a=", If.probe_at(0)); P("b=", If.probe_at(1)); P("c=", If.probe_at(2));
+		If.probe3(333, NIL, NIL);
+		P("a=", If.probe_at(0)); P("b=", If.probe_at(1)); P("c=", If.probe_at(2))
+	END T;
+
+END ObxProbe18.

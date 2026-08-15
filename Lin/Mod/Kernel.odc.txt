@@ -229,7 +229,7 @@ MODULE LinKernel;
 		(* трамплин mov rax,imm64; jmp rax в MAP_32BIT-памяти: ripBased disp32 из модулей
 		   (< 4 ГБ) не дотягивается до libc (~0x7f...). Как StubFor в bbrun64.c. *)
 		CONST stubLen = 16;
-		VAR p: ADDRESS;
+		VAR p, p0: ADDRESS;
 	BEGIN
 		IF stubLeft < stubLen THEN
 			stubPage := Libc.mmap(0, 4096, Libc.PROT_READ + Libc.PROT_WRITE + Libc.PROT_EXEC,
@@ -237,11 +237,12 @@ MODULE LinKernel;
 			ASSERT(stubPage # Libc.MAP_FAILED);
 			stubLeft := 4096
 		END;
-		p := stubPage; INC(stubPage, stubLen); DEC(stubLeft, stubLen);
+		p0 := stubPage; INC(stubPage, stubLen); DEC(stubLeft, stubLen);
+		p := p0;
 		S.PUT(p, SHORT(48H)); INC(p); S.PUT(p, SHORT(0B8H)); INC(p);	(* mov rax, imm64 *)
 		S.PUT(p, target); INC(p, 8);
 		S.PUT(p, SHORT(0FFH)); INC(p); S.PUT(p, SHORT(0E0H));	(* jmp rax *)
-		RETURN SHORT(p)
+		RETURN SHORT(p0)	(* НАЧАЛО стаба! (было p = p0+11 — вызов улетал на байт E0) *)
 	END StubFor;
 
 	PROCEDURE (VAR p: Platform) ThisDllObj (mode, _: INTEGER; IN dll, name: ARRAY OF CHAR): INTEGER;
@@ -323,7 +324,7 @@ MODULE LinKernel;
 		RETURN res
 	END IsReadable;
 	
-	PROCEDURE Try (h: Kernel.TryHandler; a, b, c: INTEGER);	
+	PROCEDURE Try (h: Kernel.TryHandler; a, b, c: Kernel.ADDRESS);	
 		VAR res: INTEGER; context: Libc.sigjmp_buf; oldContext: POINTER TO Libc.sigjmp_buf;
 	BEGIN
 		oldContext := currentTryContext;
@@ -474,16 +475,14 @@ MODULE LinKernel;
 		res := Libc.<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABlAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAmQAAAAAAACoAGPABAAAAAACQAQAAAAAKAAAA@3NpZ2ZpbGxzZXQ="/>sigemptyset<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>(S.ADR(sa.sa_mask));
 		sa.sa_flags := <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA8gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABsAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAmQAAAAAAACoAGPABAAAAAACQAQAAAAARAAAA@0xpYmMuU0FfT05TVEFDSyAr"/><odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/> Libc.SA_SIGINFO + Libc.SA_NODEFER ; (* HandleTrap takes three arguments *)
 		<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAGAMAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACSAgAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAmQAAAAAAACoAGPABAAAAAACQAQAAAAA3AgAA@0lGIExpbkxpYmMuc2lnYWN0aW9uKExpbkxpYmMuU0lHSU5ULCBzYSwgb2xkKSAjIDAgVEhFTiBNc2coImZhaWxlZCB0byBpbnN0YWxsIFNJR0lOVCIpIEVORDsNCQlJRiBMaW5MaWJjLnNpZ2FjdGlvbihMaW5MaWJjLlNJR0lMTCwgc2EsIG9sZCkgIyAwIFRIRU4gTXNnKCJmYWlsZWQgdG8gaW5zdGFsbCBTSUdJTEwiKSBFTkQ7DQkJSUYgTGluTGliYy5zaWdhY3Rpb24oTGluTGliYy5TSUdGUEUsIHNhLCBvbGQpICMgMCBUSEVOIE1zZygiZmFpbGVkIHRvIGluc3RhbGwgU0lHRlBFIikgRU5EOw0JCUlGIExpbkxpYmMuc2lnYWN0aW9uKExpbkxpYmMuU0lHU0VHViwgc2EsIG9sZCkgIyAwIFRIRU4gTXNnKCJmYWlsZWQgdG8gaW5zdGFsbCBTSUdTRUdWIikgRU5EOw0JCUlGIExpbkxpYmMuc2lnYWN0aW9uKExpbkxpYmMuU0lHUElQRSwgc2EsIG9sZCkgIyAwIFRIRU4gTXNnKCJmYWlsZWQgdG8gaW5zdGFsbCBTSUdQSVBFIikgRU5EOw0JCUlGIExpbkxpYmMuc2lnYWN0aW9uKExpbkxpYmMuU0lHVEVSTSwgc2EsIG9sZCkgIyAwIFRIRU4gTXNnKCJmYWlsZWQgdG8gaW5zdGFsbCBTSUdURVJNIikgRU5EOw=="/>(* respond to all possible signals *)
-		FOR i := 1 TO Libc._NSIG - 1 DO
-			IF (i # Libc.SIGKILL)
-				& (i # Libc.SIGSTOP)
-				& (i # Libc.SIGWINCH)
-				& (i # Libc.SIGCHLD)
-				& (i # Libc.SIGSEGV)
-			THEN
-				IF Libc.sigaction(i, sa, NIL) # 0 THEN (* Msg("failed to install signal"); Int(i) *) END;
-			END
-		END;<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
+		(* 64-бит: HandleTrap ТОЛЬКО на fault-сигналы. Раньше вешался на все 1.._NSIG-1
+		   (кроме KILL/STOP/WINCH/CHLD/SEGV) → ловил SIGCONT/SIGURG и пр. от glib/gtk-потоков
+		   (pango создаёт thread pool) → каскад фальшивых трапов и "Recursive trap" abort. *)
+		IF Libc.sigaction(Libc.SIGINT, sa, NIL) # 0 THEN log.String("LinKernel: sigaction SIGINT failed"); log.Ln END;
+		IF Libc.sigaction(Libc.SIGILL, sa, NIL) # 0 THEN log.String("LinKernel: sigaction SIGILL failed"); log.Ln END;
+		IF Libc.sigaction(Libc.SIGFPE, sa, NIL) # 0 THEN log.String("LinKernel: sigaction SIGFPE failed"); log.Ln END;
+		IF Libc.sigaction(Libc.SIGPIPE, sa, NIL) # 0 THEN log.String("LinKernel: sigaction SIGPIPE failed"); log.Ln END;
+		IF Libc.sigaction(Libc.SIGTERM, sa, NIL) # 0 THEN log.String("LinKernel: sigaction SIGTERM failed"); log.Ln END;
 
 		(* SIGSEGV to be executed on an alternative stack *)
 		sa.sa_flags := sa.sa_flags + Libc.SA_ONSTACK;
@@ -574,7 +573,7 @@ MODULE LinKernel;
 		platform.p.Terminate(1)
 	END FatalError;
 	
-	PROCEDURE (VAR p: Platform) Setup (stackBase: LONGINT; opts: SET; OUT id: INTEGER; OUT eoln: Kernel.Eoln; VAR monoCluster: BOOLEAN; OUT gradualCommit: BOOLEAN; VAR physicalMemory: INTEGER; OUT try: PROCEDURE (h: Kernel.TryHandler; a, b, c: INTEGER));
+	PROCEDURE (VAR p: Platform) Setup (stackBase: LONGINT; opts: SET; OUT id: INTEGER; OUT eoln: Kernel.Eoln; VAR monoCluster: BOOLEAN; OUT gradualCommit: BOOLEAN; VAR physicalMemory: INTEGER; OUT try: PROCEDURE (h: Kernel.TryHandler; a, b, c: Kernel.ADDRESS));
 		CONST linux = 30; (* Dialog.linux *)
 	BEGIN
 		id := linux;

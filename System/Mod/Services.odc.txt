@@ -32,7 +32,7 @@ MODULE Services;
 			trapped-: BOOLEAN
 		END;
 		SafeRecAction* = ABSTRACT RECORD (SafeAction)
-			adr, typ: INTEGER;	(* address and type descriptor of VAR rec: ANYREC on stack; used to implement low-level call for DoRec with VAR-param *)
+			adr, typ: Kernel.ADDRESS;	(* address and type descriptor of VAR rec: ANYREC on stack; used to implement low-level call for DoRec with VAR-param (64-бит: было INTEGER, усекало адреса) *)
 		END;
 
 		ActionHook* = POINTER TO ABSTRACT RECORD END;
@@ -294,7 +294,7 @@ MODULE Services;
 	BEGIN
 		count := Kernel.trapCount; a.trapped := FALSE;
 		Kernel.Try(SYSTEM.VAL(Kernel.TryHandler,
-			SHORT(SYSTEM.ADR(TryHandler))), SHORT(SYSTEM.ADR(a)), SHORT(SYSTEM.TYP(a)), -1);
+			SYSTEM.ADR(TryHandler)), SYSTEM.ADR(a), SYSTEM.TYP(a), -1);
 		a.trapped := Kernel.trapCount # count
 	END Try;
 
@@ -302,9 +302,9 @@ MODULE Services;
 		VAR count: INTEGER;
 	BEGIN
 		count := Kernel.trapCount; a.trapped := FALSE;
-		a.adr := SHORT(SYSTEM.ADR(rec)); a.typ := SHORT(SYSTEM.TYP(rec));
+		a.adr := SYSTEM.ADR(rec); a.typ := SYSTEM.TYP(rec);
 		Kernel.Try(SYSTEM.VAL(Kernel.TryHandler,
-			SHORT(SYSTEM.ADR(TryHandler))), SHORT(SYSTEM.ADR(a)), SHORT(SYSTEM.TYP(a)), -1);
+			SYSTEM.ADR(TryHandler)), SYSTEM.ADR(a), SYSTEM.TYP(a), -1);
 		a.trapped := Kernel.trapCount # count
 	END TryRec;
 

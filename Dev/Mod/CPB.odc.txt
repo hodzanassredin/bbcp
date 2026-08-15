@@ -1655,7 +1655,7 @@ MODULE DevCPB;
 		| thisrecfn, (*THISRECORD*)
 		  thisarrfn: (*THISARRAY*)
 				IF (x.class = Ntype) OR (x.class = Nproc) THEN err(126)
-				ELSIF f IN {Int8, Int16, Int32} THEN
+				ELSIF (f IN {Int8, Int16, Int32}) OR ((f = Int64) & (DevCPT.processor = 12)) THEN	(* amd64: дескриптор типа может быть Int64 (Kernel.ADDRESS) *)
 					IF f < Int32 THEN Convert(x, DevCPT.int32typ) END;
 					p := NewOp(Ndop, fctno, p, x); p.typ := DevCPT.undftyp
 				ELSE err(111)

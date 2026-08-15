@@ -1,0 +1,9 @@
+MODULE ObxProbe18if ["/tmp/libtprobe.so"];
+
+	TYPE
+		Rec* = RECORD [untagged] x*, y*, w*, h*: INTEGER END;
+
+	PROCEDURE [ccall] probe3* ["probe3"] (a: LONGINT; OUT [nil] b, c: Rec);
+	PROCEDURE [ccall] probe_at* ["probe_at"] (i: LONGINT): LONGINT;
+
+END ObxProbe18if.

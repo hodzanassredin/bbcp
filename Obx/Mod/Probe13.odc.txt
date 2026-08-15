@@ -1,0 +1,35 @@
+MODULE ObxProbe13;
+
+	IMPORT Files, Views, TextModels, TextViews, TextMappers, Console, Strings;
+
+	PROCEDURE P (IN s: ARRAY OF CHAR; x: INTEGER);
+		VAR t: ARRAY 32 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END P;
+
+	PROCEDURE T*;
+		VAR loc: Files.Locator; v: Views.View; m: TextModels.Model;
+			s: TextMappers.Scanner; n, i: INTEGER; ch: CHAR;
+	BEGIN
+		loc := Files.dir.This("System"); loc := loc.This("Rsrc");
+		v := Views.OldView(loc, "Menus");
+		IF v = NIL THEN Console.WriteStr("P13 view=NIL"); Console.WriteLn; RETURN END;
+		IF ~(v IS TextViews.View) THEN Console.WriteStr("P13 not text"); Console.WriteLn; RETURN END;
+		m := v(TextViews.View).ThisModel();
+		P("P13 textlen=", m.Length());
+		s.ConnectTo(m); s.SetPos(0); n := 0;
+		s.Scan;
+		WHILE (n < 24) & (s.type # TextMappers.eot) DO
+			Console.WriteStr("tok"); P(" type=", s.type); 
+			Console.WriteStr(" str=[");
+			i := 0;
+			WHILE (i < s.len) & (i < 40) DO ch := s.string[i]; Console.WriteChar(ch); INC(i) END;
+			Console.WriteStr("]");
+			IF s.type = TextMappers.char THEN Console.WriteStr(" char="); Console.WriteChar(s.char) END;
+			Console.WriteLn; INC(n); s.Scan
+		END;
+		P("P13 done n=", n)
+	END T;
+
+END ObxProbe13.

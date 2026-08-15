@@ -1423,7 +1423,7 @@ MODULE Dialog;
 		END
 	END RemoveLangNotifier;
 
-	PROCEDURE Exec (a, b, c: INTEGER);
+	PROCEDURE Exec (a, b, c: Kernel.ADDRESS);
 		VAR nl: LangNotifier;
 	BEGIN
 		nl := currentNotifier; currentNotifier := NIL;

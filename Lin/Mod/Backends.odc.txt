@@ -1,0 +1,656 @@
+MODULE LinBackends;
+(**<odc-view type="StdHeaders.View" w="360000000" h="172844" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0"
+	organization	= "www.oberon.ch, blackbox.oberon.org"
+	contributors	= "Oberon microsystems, Anton Dmitriev"
+	version	= "<odc-view type="StdLinks.Link" w="188400" h="183942" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="188400" h="183942" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="188400" h="183942" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="188400" h="183942" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="188400" h="183942" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="188400" h="183942" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABhAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAGAAAA@w0JLSANCQ=="/><odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABhAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAGAAAA@w0JLSANCQ=="/><odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+**)
+
+	IMPORT
+		SYSTEM, Views, Ports, Dialog, Controllers, Meta, Services, 
+		Windows, StdWindows, StdDialog, StdMenuTool, 
+		HostPorts := LinPorts, 
+		GLib := LinGtk2GLib, Gdk := LinGtk2Gdk, 
+		Gtk := LinGtk2Gtk, GtkU := LinGtk2Util, Key := LinGtk2Keysyms;
+
+	CONST
+		inPlace* = 31;	(* flag for in place windows *)	(* AD: OLE-related flag: inPlace windows are drawn in another application *)
+		
+		(* these constants need to be in sync with StdWindows *)
+			SCRLCK = 0D801X;
+			ENTER = 0DX; ESC = 1BX;
+			TAB = 09X; LTAB = 0AX; RDEL = 07X; LDEL = 08X;
+			PL = 10X; PR = 11X; PU = 12X; PD = 13X;
+			DL = 14X; DR = 15X; DU = 16X; DD = 17X;
+			AL = 1CX; AR = 1DX; AU = 1EX; AD = 1FX;
+			WL = 5; WR = 6;	(* wheel left/right; picks up numbering after Controllers.gotoPos *)
+		
+		press = 0; move = 1;	(* values for the type parameter for HandleMouse *)
+		debug = FALSE;
+
+	TYPE
+		Pixels = INTEGER;
+		Backend* = POINTER TO RECORD(StdWindows.WindowBackend)
+			wnd-: Gtk.GtkWindow; (* gtk window *)
+			da: Gtk.GtkDrawingArea; 	(* gtk drawing area *)
+			fixed: Gtk.GtkFixed;	(* .fixed is used in HostCFrames: GTK widgets are inserted into it *)
+			resizing: BOOLEAN;	(* flags an ongoing resize operation; prevents recursive <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAADgEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACIAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAtAAAA@2NhbGxzICBiZXR3ZWVuIENvbmZpZ3VyZVNpZ25hbCBhbmQgLlNldFNpemUtIA=="/><odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>*)
+		END;
+		BackendDirectory = POINTER TO RECORD (StdWindows.BackendDirectory)
+		END;
+	
+		CounterAction = POINTER TO RECORD (Services.Action) END;
+		
+		SignalHandler = ABSTRACT RECORD (Services.SafeAction)
+			wb: Backend;
+			res: INTEGER
+		END;
+		
+		ExposeHandler = RECORD (SignalHandler)
+			l, t, r, b: Pixels;
+			eventCount: INTEGER
+		END;
+		
+		FocusInHandler = RECORD (SignalHandler) END;
+		
+		MouseHandler = RECORD (SignalHandler)
+			what, type, button, x, y: INTEGER;
+			ticks: LONGINT;
+			state: SET
+		END;
+		
+		ConfigureHandler = RECORD (SignalHandler)
+			width, height: Pixels
+		END;
+		
+		KeyPressHandler = RECORD (SignalHandler)
+			state: SET;
+			event: Gdk.GdkEventKey
+		END;
+		
+		ScrollHandler = RECORD (SignalHandler)
+			direction: INTEGER;
+			x, y: Pixels;
+			state: SET
+		END;
+		
+		DeleteHandler = RECORD (SignalHandler) END;
+		
+		Ext = POINTER TO RECORD (StdWindows.Ext) END;
+		
+		CancelRefocusAction = POINTER TO RECORD (Services.Action) wb: Backend END;
+		
+		ShortcutMatcher = RECORD (StdMenuTool.ShortcutMatcher)
+			mod: SET;
+			len: INTEGER;
+			keyvals: POINTER TO ARRAY [untagged] OF INTEGER;
+		END;
+
+	VAR
+		scW-, scH-: INTEGER;	(** screen width and height *)
+		first-: Gtk.GtkWindow;
+		unit: INTEGER;
+		latter: Backend;
+		latterSentinel: CounterAction;
+		cancelRefocus: CancelRefocusAction;
+		prevPressTime: LONGINT;
+		prevX, prevY: Pixels;
+		
+	(* Backend *)
+	
+	PROCEDURE (wb: Backend) SetTitle* (IN title: Views.Title);
+		VAR us: GLib.PString;
+	BEGIN
+		us := GLib.g_utf16_to_utf8(title, -1, NIL, NIL, NIL);
+		Gtk.gtk_window_set_title(wb.wnd, us);
+		GLib.g_free(SYSTEM.VAL(GLib.gpointer, us));
+	END SetTitle;
+
+	PROCEDURE (wb: Backend) GetOrigin* (OUT xRoot, yRoot: Pixels): BOOLEAN;
+	BEGIN Gdk.gdk_window_get_root_coords(wb.da.window, 0, 0, xRoot, yRoot); RETURN TRUE
+	END GetOrigin;
+	
+	PROCEDURE (wb: Backend) Close-;
+	BEGIN
+		IF wb.wnd # NIL THEN
+			Gtk.gtk_container_remove(wb.wnd, wb.fixed);
+			Gtk.gtk_widget_destroy(wb.wnd);
+			wb.wnd := NIL
+		END
+	END Close;
+	
+	PROCEDURE TrySignalHandler (VAR h: SignalHandler): INTEGER;
+	BEGIN h.res := 28051978; Services.Try(h); IF h.res = 28051978 THEN h.res := 1 END; RETURN h.res
+	END TrySignalHandler;
+
+	PROCEDURE (VAR h: DeleteHandler) Do;
+	BEGIN 
+		IF (h.wb # NIL) & (h.wb.wnd # NIL) THEN
+			ASSERT(StdWindows.guardedCloseHook # NIL, 20);
+			StdWindows.guardedCloseHook(h.wb.win)
+		END
+	END Do;
+	
+	PROCEDURE [ccall] DeleteSignal (_: Gtk.GtkWidget; __: Gdk.GdkEvent; a: INTEGER): INTEGER;
+		VAR h: DeleteHandler;										(* retrun 0 -> close ok. return 1 -> don't close *)
+	BEGIN h.wb := SYSTEM.VAL(Backend, a); RETURN TrySignalHandler(h)
+	END DeleteSignal;
+	
+	(* Procedures relating to activation/deactivation of a window *)
+	
+	PROCEDURE (a: CounterAction) Do;
+	BEGIN latter := NIL
+	END Do;
+	
+	PROCEDURE (w: Backend) Select*;
+	BEGIN 
+		 IF latter # w THEN latter := w; 
+			Gtk.gtk_window_present(w.wnd);
+			IF 0 = Gtk.gtk_window_is_active(w.wnd) THEN Services.DoLater(latterSentinel, Services.now) END
+		END
+	END Select;
+
+	PROCEDURE (VAR h: FocusInHandler) Do;
+	BEGIN 
+		IF latter = NIL THEN 
+			latter := h.wb; IF h.wb.win # NIL THEN
+				Windows.dir.Select(h.wb.win, Windows.lazy)
+			END; latter := NIL
+		ELSIF
+			latter = h.wb THEN latter := NIL; Services.RemoveAction(latterSentinel)
+		END 
+	END Do;
+	
+	PROCEDURE (a: CancelRefocusAction) Do; 
+		VAR h: FocusInHandler; _: INTEGER;
+	BEGIN 
+		IF a.wb # NIL THEN h.wb := a.wb; _ := TrySignalHandler(h) END
+	END Do;
+
+	PROCEDURE [ccall] FocusInSignal (_: Gtk.GtkWindow; __: Gdk.GdkEventFocus; d: INTEGER): INTEGER;
+	BEGIN <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAUAEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAADKAAAAAAAAAAAAhgAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAgAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAABoAAAD@aC53YiA6PSBTWVNURU0uVkFMKEJhY2tlbmQsIGQpOyBSRVRVUk4gVHJ5U2lnbmFsSGFuZGxlcihoKQ=="/>
+		cancelRefocus.wb := SYSTEM.VAL(Backend, d); Services.DoLater(cancelRefocus, Services.Ticks() + 2);
+		RETURN 1 (* = continue processing *) <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
+	END FocusInSignal;
+	
+	PROCEDURE ValidShortcutKey (k: INTEGER): BOOLEAN;
+	BEGIN
+		RETURN (k >= Key.GDK_F1) & (k <= Key.GDK_F12)
+			OR (k = Key.GDK_Insert) OR (k = Key.GDK_Home)
+			OR (k = Key.GDK_Favourites) OR (k = Key.GDK_Back)
+			OR (k = Key.GDK_Forward) OR (k = Key.GDK_Menu) OR (k = Key.GDK_Delete) 
+	END ValidShortcutKey;
+	
+	PROCEDURE EncodeShortcut (IN shortcut: ARRAY OF CHAR; OUT code: INTEGER);
+		VAR ch, nch: CHAR; n, j: INTEGER; 
+	BEGIN
+		code := -1; ch := shortcut[0]; nch := shortcut[1]; j := 1;
+		IF (ch = "F") & ('0' <= nch) & (nch <= '9') THEN
+			n := 0;
+			WHILE (nch >= "0") & (nch <= "9") DO
+				n := 10 * n + ORD(nch) - ORD("0"); INC(j); nch := shortcut[j]
+			END;
+			IF (n >= 1) & (n <= 16) THEN code := Key.GDK_F1 - 1 + n END
+		ELSIF shortcut = "Ins" THEN code := Key.GDK_Insert
+		ELSIF shortcut = "Del" THEN code := Key.GDK_Delete
+		ELSIF shortcut = "Home" THEN code := Key.GDK_Home
+		ELSIF shortcut = "Fav" THEN code := Key.GDK_Favourites
+		ELSIF shortcut = "Back" THEN code := Key.GDK_Back
+		ELSIF shortcut = "Fwd" THEN code := Key.GDK_Forward
+		ELSIF shortcut = "Apps" THEN code := Key.GDK_Menu
+		END;
+		IF ~ValidShortcutKey(code) THEN code := -1 END
+	END EncodeShortcut;
+
+	PROCEDURE (VAR m: ShortcutMatcher) Match (_: StdDialog.Item; code: INTEGER; mod: SET): BOOLEAN;
+		VAR i: INTEGER;
+	BEGIN 
+		i := 0; WHILE (i < m.len) & ~((m.keyvals[i] = code) & (m.mod = mod)) DO INC(i) END;
+		RETURN i < m.len
+	END Match;
+	
+	PROCEDURE (VAR h: KeyPressHandler) Do;
+		VAR ok, done, modify: BOOLEAN; kv, code: INTEGER; ch: CHAR; it: StdDialog.Item;
+			b, b0: SET;	(* ~modify => b0 undefined; modify => b0 = b - {Controls.modify} *)
+			m: ShortcutMatcher; 
+			unused: POINTER TO ARRAY [untagged] OF POINTER TO Gdk.GdkKeymapKey;
+	BEGIN
+		done := FALSE;
+		IF h.event.type = Gdk.GDK_KEY_PRESS THEN
+			m.mod := {};
+			IF Gdk.GDK_SHIFT_BIT IN h.event.state THEN INCL(m.mod, Controllers.extend) END;
+			IF Gdk.GDK_CONTROL_BIT IN h.event.state THEN INCL(m.mod, Controllers.modify) END;
+			IF Gdk.GDK_MOD1_BIT IN h.event.state THEN INCL(m.mod, Controllers.pick) END;
+			kv := h.event.keyval;
+			IF (m.mod - { Controllers.extend } # {}) OR ValidShortcutKey(kv) THEN
+				ok := Gdk.gdk_keymap_get_entries_for_keycode(Gdk.gdk_keymap_get_default(), h.event.hardware_keycode, unused, m.keyvals, m.len);
+				GLib.g_free(SYSTEM.VAL(INTEGER, unused));
+				ASSERT(ok);
+				it := StdMenuTool.dir.FirstMatch(m);
+				IF it # NIL THEN StdMenuTool.dir.Execute(it); done := TRUE END
+			END
+		END;
+		IF ~done THEN
+			b := {}; 
+			IF Gdk.GDK_SHIFT_BIT IN h.state THEN b := b + {HostPorts.shift, Controllers.extend} END;
+			IF Gdk.GDK_CONTROL_BIT IN h.state THEN 
+				b0 := b + {HostPorts.ctrl}; b := b0 + {Controllers.modify}; modify := TRUE
+			ELSE modify := FALSE
+			END;
+			IF Gdk.GDK_MOD1_BIT IN h.state THEN INCL(b, HostPorts.alt); INCL(b, Controllers.pick) END;
+			IF Gdk.GDK_MOD5_BIT IN h.state THEN INCL(b, StdWindows.scrollLock); 
+			END;
+			
+			code := h.event.keyval; ch := 0X;
+			CASE code OF 
+			| Key.GDK_Pause:
+			| Key.GDK_Scroll_Lock: ch := SCRLCK
+			| Key.GDK_Shift_L..Key.GDK_Caps_Lock:
+			| Key.GDK_F1 .. Key.GDK_F12: 
+			| Key.GDK_Delete: ch := RDEL	(* delete -> right delete *)
+			| Key.GDK_BackSpace: ch := LDEL	(* backspace -> left delete *)
+			| Key.GDK_Tab:  
+				IF Controllers.extend IN b THEN ch := LTAB; EXCL(b, Controllers.extend) 	(* left tab *)
+				ELSE ch := TAB	(* right tab *)
+				END
+			| Key.GDK_Return, Key.GDK_KP_Enter, Key.GDK_ISO_Enter: ch := ENTER
+			| Key.GDK_Escape: ch := ESC
+			| Key.GDK_Page_Up: IF modify THEN ch := PL; b := b0 ELSE ch := PU END
+			| Key.GDK_Page_Down: IF modify THEN ch := PR; b := b0 ELSE ch := PD END
+			| Key.GDK_End: IF modify THEN ch := DD; b := b0 ELSE ch := DR END
+			| Key.GDK_Home: IF modify THEN ch := DU; b := b0 ELSE ch := DL END
+			| Key.GDK_Left: ch := AL
+			| Key.GDK_Up: ch := AU
+			| Key.GDK_Right: ch := AR
+			| Key.GDK_Down: ch := AD
+			ELSE
+				code := Gdk.gdk_keyval_to_unicode(code); 
+				IF (code >= 20H) & (code # 7FH) THEN ch := CHR(code) END
+			END;
+			IF ch # 0X THEN h.wb.win.KeyDown(ch, b) END
+		END
+	END Do;
+
+	PROCEDURE [ccall] KeyPressSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventKey; a: INTEGER): INTEGER;
+		VAR h: KeyPressHandler;
+	BEGIN h.wb := SYSTEM.VAL(Backend, a); h.state := e.state; h.event := e;
+		RETURN TrySignalHandler(h)
+	END KeyPressSignal;
+
+	PROCEDURE ToPixels(w: Gdk.GdkWindow; rx, ry: REAL; OUT x, y: INTEGER);
+		VAR _: INTEGER;
+	BEGIN _ := Gdk.gdk_window_get_origin(w, x, y); 
+		x := SHORT(ENTIER(rx)) - x; y := SHORT(ENTIER(ry)) - y
+	END ToPixels;
+			
+	PROCEDURE ToModifiers (gtkState: SET; VAR modifiers: SET); 	(** translate GTK state to BB mdfiers *)
+		VAR s, m: SET;
+	BEGIN s := gtkState; m := modifiers;	(* AD: looove compact texts ;) *)
+		IF Gdk.GDK_SHIFT_BIT IN s THEN INCL(m, HostPorts.shift); INCL(m, Controllers.extend) END;
+		IF Gdk.GDK_CONTROL_BIT IN s THEN INCL(m, HostPorts.ctrl); INCL(m, Controllers.modify) END;
+		IF Gdk.GDK_MOD1_BIT IN s THEN INCL(m, HostPorts.alt); INCL(m, Controllers.pick) END;
+		modifiers := m;
+	END ToModifiers;
+	
+	PROCEDURE UpdateCursor (w: StdWindows.Window; x, y: Pixels; modifiers: SET);
+		VAR pw, ph: INTEGER; msg: Controllers.PollCursorMsg; cur: INTEGER;
+	BEGIN
+		w.GetSize(pw, ph);
+		IF (x >= 0) & (x < pw) & (y >= 0) & (y < ph) THEN
+			msg.x := x * w.frame.unit - w.frame.gx; 
+			msg.y := y * w.frame.unit - w.frame.gy; 
+			msg.cursor := Ports.arrowCursor;
+			msg.modifiers := modifiers;
+			(* does this ? need to be bracketed by Controllers.SetCurrentPath/ResetCurrentPath? *)
+			w.ForwardCtrlMsg(msg); cur := msg.cursor
+		ELSE cur := Ports.arrowCursor
+		END;
+		IF cur >= 0 THEN w.frame.SetCursor(cur) END
+	END UpdateCursor;
+
+	PROCEDURE (VAR h: MouseHandler) Do;
+		VAR isDown: BOOLEAN; x, y: Pixels; b: SET; e: Gdk.GdkEvent; fake: Gdk.GdkWindow;
+	BEGIN
+		IF h.what = press THEN
+			ASSERT(~(h.type IN {Gdk.GDK_2BUTTON_PRESS, Gdk.GDK_3BUTTON_PRESS}), 100)
+		ELSE fake := Gdk.gdk_window_get_pointer(h.wb.wnd.window, h.x, h.y, b)
+		END;
+		b := {};
+		IF h.button = 1 THEN INCL(b, HostPorts.left) END;
+		IF h.button = 2 THEN INCL(b, HostPorts.middle); INCL(b, Controllers.pick) END;
+		IF h.button = 3 THEN INCL(b, HostPorts.right); INCL(b, Controllers.popup) END;
+		isDown := b # {};
+		IF isDown THEN
+			ToModifiers(h.state, b);
+			IF (h.ticks - prevPressTime < 300)
+				& (ABS(prevX - h.x) < 3 ) & (ABS(prevY - h.y) < 3) THEN
+				INCL(b, Controllers.doubleClick);
+				prevPressTime := h.ticks - 400 (* delay *)
+			ELSE
+				prevPressTime := h.ticks
+			END;
+			prevX := h.x;
+			prevY := h.y;
+		END;
+		
+		x := h.x; y := h.y;
+		HostPorts.SetMouseState(x, y, b, isDown);
+		IF h.what = press THEN StdWindows.Track (h.wb.win, x, y, b) END;
+		IF h.wb.win # NIL THEN UpdateCursor(h.wb.win, x, y, b) END; (* window could have been closed by Windows.Track *)
+		(* IF ~isDown THEN activated := FALSE END; this looks like part of implementing behaviour when a click over an inactive window would activate the window, but would not be forwarded into the window. This is how it is now in Win32. In effect, you click in an inactive text with selection, and the window is activated, but the selection is not unselected; I personally like it when the click does both: activates and then is forwarded into the window, which makes the selection disappear and caret be positioned at click: it makes for less clicking around :)  *)
+	END Do;
+	
+	PROCEDURE [ccall] ButtonPressSignal (wdg: Gtk.GtkWidget; e: Gdk.GdkEventButton; adr: INTEGER
+	): INTEGER;
+		VAR h: MouseHandler; res: INTEGER;
+	BEGIN
+		(* Con.String("BUTTON press signal "); Con.Ln; *)
+		cancelRefocus.wb := NIL; (* could as well Services.RemoveAction(action) *)
+		IF e.type = Gdk.GDK_BUTTON_PRESS THEN
+			h.wb := SYSTEM.VAL(Backend, adr);
+			h.what := press; h.type := e.type; h.button := e.button; h.state := e.state;
+			h.ticks := Services.Ticks();
+			ToPixels(wdg.window, e.x_root, e.y_root, h.x, h.y);
+			res := TrySignalHandler(h)
+		ELSE res := 0
+		END;
+		RETURN res
+	END ButtonPressSignal;
+	
+	PROCEDURE [ccall] MotionNotifySignal (wdg: Gtk.GtkWidget; e: Gdk.GdkEventMotion; adr: INTEGER
+	): INTEGER;
+		VAR ww, wh, res: INTEGER; h: MouseHandler;
+	BEGIN 
+		h.wb := SYSTEM.VAL(Backend, adr);
+		Gtk.gtk_window_get_size(h.wb.wnd, ww, wh); 
+		ToPixels(wdg.window, e.x_root, e.y_root, h.x, h.y);
+		IF (0 <= h.x) & (h.x < ww) & (0 <= h.y) & (h.y < wh) THEN 
+			h.what := move; h.type := e.type; h.state := e.state;
+			res := TrySignalHandler(h)
+		ELSE res := 0
+		END;
+		RETURN res
+	END MotionNotifySignal;
+	
+	(* Procedures relating to window resizing *)
+	PROCEDURE (wb: Backend) SetSize- (width, height: Pixels);
+	BEGIN wb.win.port.SetSize(width, height); Gtk.gtk_drawing_area_size(wb.da, width, height);
+		IF (width > 0) & (height > 0) THEN
+			IF ~wb.resizing THEN wb.resizing := TRUE; Gtk.gtk_window_resize (wb.wnd, width, height)
+			ELSE wb.resizing := FALSE 
+			END
+		END
+	END SetSize;
+
+	PROCEDURE (VAR h: ConfigureHandler) Do;
+		VAR wb: Backend; wid, hei: Pixels;
+	BEGIN wb := h.wb; ASSERT(wb # NIL, 20); ASSERT(wb.da # NIL, 21);
+		ASSERT(wb.win # NIL, 22); ASSERT(wb.win.port # NIL, 23); 
+		wb.win.port.GetSize(wid, hei);
+		IF wb.resizing OR (wid # h.width) OR (hei # h.height) THEN
+			Gtk.gtk_drawing_area_size(wb.da, h.width, h.height);
+			IF ~wb.resizing THEN
+				wb.resizing := TRUE;
+				wb.win.SetSize(h.width, h.height)
+			ELSE
+				wb.resizing := FALSE
+			END
+		END;
+		h.res := 0	(* AD: THIS IS CRUCIAL! this lets GTK's handlers adjust widget sizes *)
+	END Do;
+	
+	PROCEDURE [ccall] ConfigureSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventConfigure; a: INTEGER): INTEGER;
+		VAR h: ConfigureHandler; peek, get: Gdk.GdkEvent; i: INTEGER;
+	BEGIN 
+		(* AD: unfortunately, all this optimization code does not work; peek is always NIL to the best of my experimental knowledge *)
+			peek := Gdk.gdk_event_peek(); i := 0;
+			WHILE (peek # NIL) & (peek.type = Gdk.GDK_CONFIGURE) DO INC(i);
+				Gdk.gdk_event_free(peek);
+				IF get # NIL THEN Gdk.gdk_event_free(get) END;
+				get := Gdk.gdk_event_get(); ASSERT(get # NIL, 60); 
+				peek := Gdk.gdk_event_peek()
+			END;
+			IF get # NIL THEN e := get(Gdk.GdkEventConfigure) END;
+		(**)
+		h.wb := SYSTEM.VAL(Backend, a); h.width := e.width; h.height := e.height;
+		IF get # NIL THEN Gdk.gdk_event_free(get) END; 
+		IF peek # NIL THEN Gdk.gdk_event_free(peek) END;
+		RETURN TrySignalHandler(h)
+	END ConfigureSignal;
+
+	PROCEDURE (VAR h: ExposeHandler) Do;
+	BEGIN
+		(* debug
+		Con.String("ExposeHandler.Handle: "); Con.String(h.wb.win.title);
+		Con.Int(h.eventCount); Con.Int(h.l); Con.Int(h.t); Con.Int(h.r); Con.Int(h.b); Con.Ln 
+		*)
+		StdWindows.UpdateIn(h.wb.win, h.l, h.t, h.r, h.b, Views.keepFrames);
+		IF h.eventCount = 0 THEN StdWindows.Validate(h.wb.win) END
+	END Do;
+	
+	PROCEDURE [ccall] ExposeSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventExpose; a: INTEGER): INTEGER;
+		VAR h: ExposeHandler;
+	BEGIN h.wb := SYSTEM.VAL(Backend, a);
+		h.l := e.area.x; h.t := e.area.y; h.r := h.l + e.area.width; h.b := h.t + e.area.height;
+		h.eventCount := e.count;
+		RETURN TrySignalHandler(h)
+	END ExposeSignal;
+	
+	PROCEDURE (VAR h: ScrollHandler) Do;
+		VAR op: INTEGER; mod: SET;
+	BEGIN 
+		CASE h.direction OF Gdk.GDK_SCROLL_UP: op := Controllers.decLine
+		| Gdk.GDK_SCROLL_DOWN: op := Controllers.incLine
+		| Gdk.GDK_SCROLL_LEFT: op := WL
+		| Gdk.GDK_SCROLL_RIGHT: op := WR
+		ELSE
+			(* debug
+			Con.String("HostWindows.ScrollHandler.Do: unexpected value of h.direction " +
+			"(from GdkEventScroll)"); Con.Int(h.direction); Con.Ln
+			*)
+		END;
+		mod := {}; ToModifiers(h.state, mod);
+		StdWindows.Wheel(h.wb.win, op, h.x, h.y, mod)
+	END Do;
+
+	PROCEDURE [ccall] ScrollSignal (w: Gtk.GtkWidget; e: Gdk.GdkEventScroll; a: INTEGER): INTEGER;
+		VAR h: ScrollHandler;
+	BEGIN h.wb := SYSTEM.VAL(Backend, a); 
+		ToPixels(w.window, e.x_root, e.y_root, h.x, h.y);
+		h.direction := e.direction; h.state :=e.state;
+		RETURN TrySignalHandler(h)
+	END ScrollSignal;
+
+	PROCEDURE ConnectSignals (wb: Backend);
+		VAR _, a: INTEGER;
+	BEGIN
+		a := SYSTEM.VAL(INTEGER, wb);
+		(* window signals *)
+		_ := GtkU.gtk_signal_connect(wb.wnd, "delete-event", SYSTEM.ADR(DeleteSignal), a);
+		_ := GtkU.gtk_signal_connect(wb.wnd, "focus-in-event", SYSTEM.ADR(FocusInSignal), a);
+		(* DIA: Scroll *)
+		_ := GtkU.gtk_signal_connect(wb.wnd, "scroll-event", SYSTEM.ADR(ScrollSignal), a); 
+		_ := GtkU.gtk_signal_connect(wb.wnd, "configure-event", SYSTEM.ADR(ConfigureSignal), a);
+		(* drawing area signals *)
+		_ := GtkU.gtk_signal_connect(wb.da, "key-press-event", SYSTEM.ADR(KeyPressSignal), a);
+		_ := GtkU.gtk_signal_connect(wb.da, "button-press-event", SYSTEM.ADR(ButtonPressSignal), a);
+		_ := GtkU.gtk_signal_connect(wb.da, "motion-notify-event", SYSTEM.ADR(MotionNotifySignal), a);
+		_ := GtkU.gtk_signal_connect(wb.da, "expose-event", SYSTEM.ADR(ExposeSignal), a);
+		(* set the event masks *)
+		(* DIA: Scroll *)
+		Gtk.gtk_widget_set_events(wb.da, {}
+			+ Gdk.GDK_EXPOSURE_MASK + Gdk.GDK_BUTTON_PRESS_MASK
+			+ Gdk.GDK_BUTTON_RELEASE_MASK + Gdk.GDK_BUTTON_MOTION_MASK
+			+ Gdk.GDK_KEY_PRESS_MASK + Gdk.GDK_KEY_RELEASE_MASK
+			+ Gdk.GDK_POINTER_MOTION_MASK + Gdk.GDK_SCROLL_MASK);
+		Gtk.gtk_widget_set_events(wb.wnd,  Gdk.GDK_BUTTON_PRESS_MASK
+			+ Gdk.GDK_BUTTON_RELEASE_MASK +  Gdk.GDK_SCROLL_MASK);
+		Gtk.gtk_widget_set_events(wb.fixed,  Gdk.GDK_BUTTON_PRESS_MASK 
+			+ Gdk.GDK_BUTTON_RELEASE_MASK +  Gdk.GDK_SCROLL_MASK)
+	END ConnectSignals;
+
+	PROCEDURE (wb: Backend) Port* (): Ports.Port;
+		VAR p: HostPorts.Port; res: Ports.Port;
+	BEGIN 
+		IF (wb.win # NIL) & (wb.win.port # NIL) THEN res := wb.win.port
+		ELSE NEW(p); p.Init(unit, FALSE); p.SetSize(0, 0); p.SetDA(wb.da); p.SetFW(wb.fixed); res := p
+		END;
+		RETURN res
+	END Port;
+
+	PROCEDURE (wb: Backend) Open- (isDialog: BOOLEAN);
+	BEGIN
+		ASSERT(wb.win # NIL, 20); ASSERT(wb.win.port # NIL, 21);
+		IF (Windows.dir.l # StdWindows.none) THEN 
+			Gtk.gtk_window_move(wb.wnd, Windows.dir.l, Windows.dir.t) 
+		END;
+		IF isDialog THEN
+			Gtk.gtk_window_set_policy(wb.wnd, 0, 0, 1);
+			Gtk.gtk_window_set_keep_above(wb.wnd, GLib.True)
+		ELSE
+			Gtk.gtk_window_set_policy(wb.wnd, 1, 1, 1)
+		END;
+		Gtk.gtk_widget_show_all(wb.wnd)
+	END Open;
+
+
+	(* BackendDirectory *)
+	
+	PROCEDURE (d: BackendDirectory) NewBackend* (): Backend;
+		VAR wb: Backend; res: INTEGER;
+	BEGIN NEW(wb); wb.resizing := FALSE;
+		wb.wnd := Gtk.gtk_window_new(Gtk.GTK_WINDOW_TOPLEVEL);
+		wb.da := Gtk.gtk_drawing_area_new(); (* DrawingArea has a GdkWindow by default *)
+		Gtk.gtk_widget_set_double_buffered(wb.da, 1);
+		Gtk.gtk_drawing_area_size(wb.da, 0, 0);
+			wb.fixed := Gtk.gtk_fixed_new();
+			Gtk.gtk_widget_set_has_window(wb.fixed, 1);
+			(* AD: this is critical to make sure GTK widgets inserted into .fixed do kind of have a z-order; otherwise they may mesh up with widgets from .wnd, should there be any *)
+		Gtk.gtk_fixed_put(wb.fixed, wb.da, 0, 0);
+		Gtk.gtk_widget_set_can_focus(wb.da, 1);
+		ConnectSignals(wb);
+		IF first = NIL THEN
+			first := wb.wnd;
+			Dialog.Call("LinClipboard.SetSignals", "", res);
+		END;
+		Gtk.gtk_container_add(wb.wnd, wb.fixed);
+		Gtk.gtk_window_set_focus(wb.wnd, wb.da);
+		IF wb.wnd = NIL THEN wb := NIL END;
+		RETURN wb
+	END NewBackend;
+
+	PROCEDURE (d: BackendDirectory) GetBounds* (OUT w, h: Pixels);
+			VAR
+				res, size, sect, pos, u, dl, dt, dr, db: INTEGER;
+				mon: INTEGER; scr: Gdk.GdkScreen;
+				r: Gdk.GdkRectangle;
+				gdkWin: Gdk.GdkWindow;
+				fallback: BOOLEAN;
+	BEGIN
+		fallback := FALSE;
+		scr := Gdk.gdk_screen_get_default();
+		IF scr # NIL THEN
+			IF first # NIL THEN
+				gdkWin := Gtk.gtk_widget_get_window(first);
+				IF gdkWin = NIL THEN
+					gdkWin := Gtk.gtk_widget_get_parent_window(first);
+					IF gdkWin = NIL THEN
+						gdkWin := Gtk.gtk_widget_get_root_window(first);
+					END
+				END;
+				IF gdkWin # NIL THEN
+					mon := Gdk.gdk_screen_get_monitor_at_window(scr, gdkWin);
+					Gdk.gdk_screen_get_monitor_geometry(scr, mon, SYSTEM.ADR(r));
+					scW := r.width; scH := r.height;
+					IF scW < 10 THEN
+						scW := Gdk.gdk_screen_width()
+					END;
+					IF scH < 10 THEN
+						scH := Gdk.gdk_screen_height()
+					END
+				ELSE
+					fallback := TRUE
+				END
+			ELSE
+				fallback := TRUE
+			END
+		ELSE
+			fallback := TRUE
+		END;
+		IF fallback THEN
+			scW := Gdk.gdk_screen_width();
+			scH := Gdk.gdk_screen_height();
+		END;
+		w := scW;
+		h := scH;
+	END GetBounds;
+
+	PROCEDURE (e: Ext) GetNumHeads (VAR count: INTEGER);
+		VAR screen: Gdk.GdkScreen; 
+	BEGIN 
+		screen := Gdk.gdk_display_get_default_screen(Gdk.gdk_display_get_default());
+		IF screen # NIL THEN count := Gdk.gdk_screen_get_n_monitors(screen) END
+	END GetNumHeads;
+
+	PROCEDURE (e: Ext) ToHead (wb: StdWindows.WindowBackend; head: INTEGER);	(* set but never used *)
+		VAR screen: Gdk.GdkScreen; rect: Gdk.GdkRectangle; n: INTEGER;
+	BEGIN
+		WITH wb: Backend DO 
+			screen := Gdk.gdk_display_get_default_screen(Gdk.gdk_display_get_default());
+			IF screen # NIL THEN 
+				n := Gdk.gdk_screen_get_n_monitors(screen);
+				IF 1 < n THEN
+					Gdk.gdk_screen_get_monitor_geometry(screen, 1, SYSTEM.ADR(rect));
+					Gtk.gtk_window_move(wb.wnd, rect.x, rect.y)
+				END
+			END
+		ELSE
+		END
+	END ToHead;
+	
+	PROCEDURE (e: Ext) Maximize (wb: StdWindows.WindowBackend);
+	BEGIN WITH wb: Backend DO Gtk.gtk_window_maximize(wb.wnd) ELSE END
+	END Maximize;
+
+
+	(* Command and aux procedures *)
+
+	PROCEDURE Dump (p: ANYPTR);
+		TYPE P = PROCEDURE(a: INTEGER; t: ARRAY OF CHAR);
+			V = RECORD (Meta.Value) p: P END;
+		VAR i: Meta.Item; ok: BOOLEAN; v: V;
+	BEGIN
+		IF p # NIL THEN Meta.Lookup("DevDebug", i);
+			IF i.obj = Meta.modObj THEN i.Lookup("ShowHeapObject", i);
+				IF i.obj = Meta.procObj THEN i.GetVal(v, ok);
+					IF ok THEN v.p(SYSTEM.VAL(INTEGER, p), "") END
+				END
+			END
+		END
+	END Dump;
+
+
+	PROCEDURE Init;
+		VAR dir: BackendDirectory; ext: Ext;
+	BEGIN
+		NEW(dir); StdWindows.SetBackendDir(dir);
+		dir.GetBounds(scW, scH);
+		unit := SHORT(ENTIER((Ports.point DIV 4 * 3 * 100) / Dialog.scaleFactor));
+		NEW(latterSentinel);
+		StdWindows.SetDumper(Dump);
+		NEW(ext); StdWindows.ext := ext;
+		NEW(cancelRefocus);
+		StdMenuTool.encodeShortcut := EncodeShortcut;
+	END Init;
+
+BEGIN
+	Init
+
+CLOSE 
+	IF SYSTEM.VAL(INTEGER, StdMenuTool.encodeShortcut) = SYSTEM.ADR(EncodeShortcut) THEN
+		StdMenuTool.encodeShortcut := NIL 
+	END
+END LinBackends.

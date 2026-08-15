@@ -704,3 +704,69 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
     free-блок: tag=b+8, stored size=total-8; array-блоки: tag|2.
     Cluster: size@0,next@4, блоки с base+24; кластеры 256КБ, mmap
     top-down (новые НИЖЕ).
+
+== Сессия 2026-08-15 (вторая половина): GUI ожил ==
+
+96. **MarkLocals: шаг 4, а не 8 (ЗАМЕНЯЕТ п.90 частично).** Выравнивание
+    на 8 из п.90 недостаточно: компилятор ПАКУЕТ 8-байтные поля записей
+    без 8-выравнивания (Cluster.next@4, max@12), поэтому указатели на
+    стеке (поля записей-локалов, напр. Stores.Reader) бывают на адресах
+    ≡ 4 (mod 8). Скан с шагом 8 любой фазы пропускает половину слотов.
+    Доказано в gdb: в фатальном collect якорь модели лежал ТОЛЬКО в
+    слоте ≡4 (mod 8) → Sweep освободил живой Piece → SEGV в
+    TextModels.Find (v.len при v=NIL). Фикс: `INC(sp,3); sp := sp DIV
+    4 * 4` + шаг 4. Техника охоты: watchpoint на trailer.next/tag блока
+    + счётчик collect'ей (Collect/FastCollect entry) + стек-скан из gdb.
+
+97. **Views.Overwritten: 32-битная реликвия.** SYSTEM.GET(TYP(v) - 4*(mno+1))
+    → метод-слоты 8-байтные: -8*(mno+1). Иначе мусор → ASSERT 20 в
+    View.CopyFrom при чтении меню (SIGILL trap 20).
+
+98. **HandleTrap: только fault-сигналы.** Вешался на ВСЕ сигналы
+    1.._NSIG-1 → ловил SIGCONT/SIGURG от glib-потоков (pango thread
+    pool) → каскад фальшивых трапов → "Recursive trap" abort. Теперь
+    только SIGINT/SIGILL/SIGFPE/SIGPIPE/SIGTERM (+SIGSEGV на altstack).
+
+99. **Try-машинерия на ADDRESS.** Kernel.TryHandler/Try, Platform.Try,
+    Setup OUT try: INTEGER→ADDRESS. Каскад правок: Kernel.ExecFinalizer/
+    TrapCleanup/Report (были (_,__,___: INTEGER)), Dialog.Exec,
+    Services.Try/TryRec (убраны SHORT вокруг ADR — усекали стековые
+    адреса → SEGV в Services.TryHandler), SafeRecAction.adr/typ →
+    Kernel.ADDRESS, StdTabViews.ExecNotifier (from,to → Kernel.ADDRESS,
+    тело SHORT(from/to)). CPB: StPar1 THISRECORD/THISARRAY разрешён
+    Int64 при processor=12 (было только Int32 → err 111).
+    УРОК: err 115 "parameter does not match" показывал позиции НЕ те
+    (начало следующей процедуры); нашли инструментацией
+    CPB.CheckParameters (печать имён через DevCPM.LogW*) — виновники
+    ExecFinalizer/TrapCleanup/Report.
+
+100. **КОРЕНЬ "errors detected in menu file": баг кодегена GenConOp
+    ripTrail.** CPLamd64.GenConOp: для `cmp byte-глобал, imm8`
+    (80H /7 id) ripTrail ставил 4 вместо 1 → loader считал disp32 =
+    target-(ladr+4+4) вместо (ladr+4+1) → ЧТЕНИЯ bool/byte/char8
+    глобалов съезжали на -3 (читали паддинг = 0 → всегда FALSE).
+    Записи были верны (GenMove имеет кейс `from.form <= Int8 → 1`,
+    GenConOp — нет). Проявление: `noerr := TRUE; IF noerr` → FALSE;
+    `boolVar & (strEq OR strEq)` неверно → StdMenuTool.ParseMenus
+    не входил в цикл → "MENU expected". Минимальный репробник:
+    ObxProbe17 (VAR g,g2: BOOLEAN; i: INTEGER). Диагностика:
+    ASSERT(g,77) в пробнике → SIGILL в gdb → runtime-дизасм write vs
+    read target; цепочки data-фиксапов из ocf (slot = next24+typ*2^24,
+    typ=106+immLen). ФИКС: GenConOp: `(s = 2) OR (src.form <= Int8) →
+    ripTrail := 1`. ПОСЛЕ ФИКСА — ПОЛНАЯ пересборка мира (баг зашит
+    во все ранее собранные ocf!), включая build-dev64.
+
+101. **Техника: отладка компилятора.** Инструментация DevCPB/DevCPP
+    принтами (DevCPM.LogWStr/LogW/LogWNum; ORD(BOOLEAN) = err 111,
+    нельзя; DevCPT.String = SHORTCHAR[] — печатать посимвольно LogW);
+    пересборка 32-бит: go32.sh DevCPX (грузится dev0 из Dev/Code);
+    probes: Obx/Mod/ProbeN.odc.txt → go64.sh → консольный прогон.
+    GUI-окна проверяются xwd-скриншотом (конверт в PNG вручную python).
+
+102. **subs64/test64 тонкости.** subs64 прячет bbcp64use/Dev →
+    ConsCompiler64 падает с err 249 (inconsistent import: берёт 32-бит
+    Dev-sym из bbcp) — артефакт тулинга, не регрессия; ConsCompiler64
+    собирается в build-dev64.sh. После смены интерфейса Kernel
+    (TryHandler) все зависимые ocf "illegal footprint" → обязательна
+    пересборка подсистем (subs64/test64), иначе loader молча скипает
+    модули → NIL-вызовы.

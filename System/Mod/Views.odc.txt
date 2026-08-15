@@ -1,0 +1,1570 @@
+MODULE Views;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="153293" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox2.0, diffs from 1.7.2 marked by green"
+	organization	= "www.oberon.ch, blackbox.oberon.org"
+	contributors	= "Oberon microsystems, Anton Dmitriev, Ketmar Dark"
+	version	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAALycAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACpJgAAAAAAAAAAeSUAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAMwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAARAAAAAAAAAADF0wIAiGMCAILyAAAAAAAAAADhJAAADAAAAMckAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAKkkAAAAAAAAAAA2AAAAAILyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAGkkAAD@DQlBRDogQW1lbmRtZW50IHByb3Bvc2FsOiBSb290RnJhbWVzIG1heSBiZSBlbWJlZGRlZCBpbnRvIEZyYW1lcyAoMjAxOS8xMSkNCVByZXZpb3VzbHksIFJvb3RGcmFtZXMgY291bGQgbm90IGJlIGluc3RhbGxlZCBpbnRvIG90aGVyIGZyYW1lczsgdGhleSB3ZXJlIG1lYW50IHRvIGJlIGNvbm5lY3RlZCBkaXJlY3RseSB0byBwb3J0cywgYW5kIHJlZmVyZW5jZWQgZGlyZWN0bHkgYnkgV2luZG93cy5XaW5kb3cgYW5kIGluc3RhbnRpYXRlZCBieSBEb2N1bWVudHMuRG9jdW1lbnQuR2V0TmV3RnJhbWUuIEEgUm9vdEZyYW1lIHdhcyBhbHdheXMgdGhlIHJvb3Qgb2YgYSB0cmVlIG9mIGZyYW1lcyBpbnNpZGUgb25lIHdpbmRvdy4gUm9vdEZyYW1lcyB3ZXJlIG5ldmVyIGNsb3NlZCBieSBWaWV3cywgdGhleSB3ZXJlIHBlcnNpc3RlbnQgdGhyb3VnaG91dCBhIHdpbmRvdy9kb2N1bWV0IGxpZmV0aW1lLCB1bmxpa2Ugb3RoZXIgZnJhbWVzIHRoYXQgd2VyZSBjcmVhdGVkIGFuZCBjbG9zZWQgYnkgVmlld3MgYXQgYW55IHRpbWUgYXQgaXQncyBvd24gZGlzY3JldGlvbiwgYW5kIHdlcmUgbm93aGVyZSBjbG9zZSB0byBwZXJzaXN0ZW50Lg0JTXkgYW1lbmRtZW50IGFsbG93cyBmb3IgUm9vdEZyYW1lcyB0byBiZSBpbnN0YWxsZWQgaW50byBvdGhlciBmcmFtZXMsIHBvc3NpYmx5IG90aGVyIFJvb3RGcmFtZXMuIFRoaXMsIEkgZmlndXJlZCwgaXMgYnkgZmFyIHRoZSBlYXNpZXN0IGFuZCBtb3N0IG9yZ2FuaWMgKHRvIEJsYWNrQm94IGZyYW1ld29yaykgd2F5IHRvIGFsbG93IHdpbmRvd3MgdG8gYmUgZGlzcGxheWVkIGluc2lkZSBvdGhlciB3aW5kb3dzIChhcyB3ZWxsIGFzIHNvbWUgb3RoZXIgcGxlYXNhbnQgcGVya3MsIHNlZSBXaW5kb3dzLkxheW91dCwgVHlsZXJXaW5kb3dzLkxheW91dCwgVHlsZXJXaW5kb3dzLlBhbmUpLiBJIGZpZ3VyZWQgdGhpcyBvdXQgYWZ0ZXIgdHdvIG90aGVyIGV4cGVyaW1lbnRzLiAxKSB3aXRoIEhvc3Qtb3Mgb2JqZWN0LCBpbiBteSBjYXNlLCBHVEsgRHJhd2luZyBBcmVhcy4gVGhpcyBwYXRoIGRlcGVuZHMgaGVhdmlseSBvbiBHVEsgd2hpY2ggaXMgYnVnZ3ksIHVucHJlZGljdGFibGUgYW5kIGFzeW5jaHJvbm91cyA9PiBjb21wbGV4LCBhbmQgcHJvZHVjZXMgSG9zdC1zcGVjaWZpYyB1bnBvcnRhYmxlIGNvZGUuIDIpIHdpdGggUHJveHlQb3J0czogYSBQcm94eVBvcnQgaXMgYSBQb3J0IHRoYXQgZGlyZWN0cyBhbGwgZHJhd2luZyBvcGVyYXRpb25zIG9udG8gYW5vdGhlciBhY3R1YWwgcG9ydC4gVGhpcyBwYXRoIHByb3ZpZGVzIGZvciBwb3J0YWJsZSBCbGFja0JveCBjb2RlOyBob3dldmVyLCBJIHJhbiBpbnRvIHRyb3VibGUgd2l0aCByb3VuZGluZyBlcnJvcnMuIEEgZ3Vlc3Qgd2luZG93ICh0aGUgb25lIGRpc3BsYXllZCBpbnNpZGUgYW5vdGhlciB3aW5kb3cpIGlzIGVtYmVkZGVkIGluIHNvbWUgdmlldywgYW5kIGl0J3MgbG9jYXRpb24gYW5kIHNpemUgYXJlIGRldGVybWluZWQgaW4gVW5pdmVyc2FsIENvb3JkaW5hdGVzLiBTbywgd2hlbiBhY3R1YWxseSByZXN0b3JpbmcgdGhlIGd1ZXN0IHdpbmRvdyBvbiB0aGUgaG9zdCB3aW5kb3csIHRoZSBjb252ZXJzaW9ucyB3b3VsZCBiZSBhcyBmb2xsb3dzOiAoR3Vlc3QgdmlldyBpbnNpZGUgZ3Vlc3Qgd2luZG93LCBVQ3MpID0!IFByb3h5UG9ydCwgcGl4ZWxzID0!IEhvc3QgdmlldyBpbnNpZGUgaG9zdCB3aW5kb3csIFVDcyA9PiBob3N0IHdpbmRvdydzIHBvcnQsIHBpeGVscy4gU29tZXdoZXJlIGFsb25nIHRoZSBsaW5lcyBvZiB0aGVzZSBjb3ZlcnNpb25zIGFuIGV4dHJhIGxpbmUgb2YgIm9ycGhhbmVkIiBwaXhlbHMgd291bGQgb2NjdXIgdW5kZXIgc29tZSBjb25kaXRpb25zOiBhIGxpbmUgdGhhdCB3b3VsZCBub3QgYmUgIm93bmVkIiBhbmQgcmVzdG9yZWQgYnkgZWl0aGVyIGd1ZXN0IG9yIGhvc3Qgd2luZG93LiBUaGlzIG9mIGNvdXJzZSBpcyBub3QgYWNjZXB0YWJsZSBpbiBhIFVJLCBzbyBJIGFiYW5kb25lZCB0aGlzIHBhdGguIEkgc3RpbGwgdGhpbmssIHRob3VnaCwgdGhhdCB0aGUgb3JwaGFlZCBwaXhlbCBwcm9ibGVtIGNvdWxkIGJlIGZpeGVkIGJ5IGEgbW9yZSB0aG9yb3VnaCByZXNlYXJjaGVyIHRoYW4gbXlzZWxmLCBhbmQgaGF2aW5nIGEgd29ya2luZyBQcm94eVBvcnQgbWlnaHQgb3BlbiBuZXcgcG9zc2liaWxpdGllcyBpbiBidWlsZGluZyBVSXMsIGluY2x1ZGluZyBvdmVyLXRoZS1uZXR3b3JrIFVJcy4NCUkgd2VudCB0aGUgdGhpcmQgcGF0aCBhbmQgYW1lbmRlZCBWaWV3cyB0byBhbGxvdyBSb290RnJhbWVzIHRvIGJlIGVtYmVkZGVkIGludG8gb3RoZXIgZnJhbWVzLiBPbiB0b3Agb2Ygc29sdmluZyB0aGUgdGFzayB0aGF0IHdhcyBpbiBmcm9udCBvZiBtZSAtIGEgdGlsaW5nIHdpbmRvdyBtYW5hZ2VyIGZvciBCQiAtIGl0IGJyb3VnaHQgc29tZSBvdGhlciBiZW5lZml0cy4gDQkxKSBBIEhvc3QtaW5kZXBlbmRlbnQgaW1wbGVtZW50YXRpb24gb2Ygc2Nyb2xsYmFycyBpbiB3aGljaCBzY3JvbGxiYXJzIGFyZSBmaXJzdC1jbGFzcyBCbGFja0JveCB2aWV3cyAtIHRoYXQgaXMsIHRoZXkgcmVjZWl2ZSBtZXNzYWdlcyBqdXN0IGFzIGFueSBvdGhlciBCQiB2aWV3LCBhbmQgdGhlIHNhbWUgcmVzdG9yYXRpb24gbWVjaGFuaXNtIGlzIHVzZWQuIFRoaXMgYWxsb3dzIGZvciB0aGUgc2FtZSBob3N0LWluZGVwZW5kZW50IHNjcm9sbGJhcnMgdG8gYmUgdXNlZCBpbiBjdXN0b20gdmlld3MgYW5kIGluIHdpbmRvd3MuIFRvIGhlbGwgd2l0aCBHVEshIA0JMikgQSB3aW5kb3cgbWF5IG5vdyBoYXZlIGFyYml0cmFyeSBzdHJ1Y3R1cmUgYW5kIG51bWJlciBvZiB2aWV3cyB0aGF0IGFyZSBwYXJ0IG9mIHRoZSB3aW5kb3csIGJ1dCBub3QgcGFydCBvZiB0aGUgZG9jdW1lbnQ7IHRoZXNlIGFyZSBmaXJzdC1jbGFzcyBCQiB2aWV3cywgdGhleSByZWNlaXZlIGFsbCBtZXNzYWdlcyBhbmQgQkIgcmVzdG9yYXRpb24gbWVjaGFuaXNtIGlzIHVzZWQgZm9yIHRoZW0uIFRoaXMgYWxsb3dzIHRvIGJ1aWxkIHRoaW5ncyBsaWtlIHdpbmRvdyB0b29sYmFycyBpbiB0aGUgQmxhY2tCb3ggd2F5OiBhIHRvb2xiYXIgaXMgYW4gYXJiaXRyYXJ5IFZpZXdzLlZpZXcgZXh0ZW5zaW9uOyBldmVuIGEgRm9ybXMuRm9ybSBjYW4gYmUgb3BlbmVkIGFzIGEgInBhbmUiICh0b29sYmFyKS4gTm93IGhvdyBhYm91dCB0aGF0ISBBIHBhcnRpY3VsYXIgY2FzZSBvZiBzdWNoIHBhbmVzIGlzIGEgbm9uLW1vZGFsIGRpYWxvZzsgb25lIHN1Y2ggZGlhbG9nIHRoYXQgSSBidWlsdCBpcyB0aGUgRmlsZSBDbG9zZSBkaWFsb2cgKHByZXNlbnRlZCB0byB0aGUgdXNlciB3aGVuIGhlIGF0dGVtcHRzIHRvIGNsb3NlIGEgImRpcnR5IiBkb2N1bWVudCkuIA0JQWxsIHRoaXMgdG8gc2F5LCBJJ20gaGFwcHkgd2l0aCB0aGUgdGhpcmQgcGF0aCBJIGV2ZW50dWFsbHkgY2hvc2UsIGFuZCBJJ20gbG9va2luZyBmb3J3YXJkIGZvciB0b29sYmFycyBhbmQgbm9ubW9kYWwgZGlhbG9ncyB0byBhcHBlYXIgYXMgZXh0ZXNpb25zIGFuZCBhcHBsaWNhdGlvbnMgb2YgbXkgd29yay4NCQ0JU28sIHVuZGVyIG15IGFtZW5kbWVudCwgdGhlIGZyYW1lIHRyZWUgY2FuIG5vdyBoYXZlIG11bHRpcGxlIFJvb3RGcmFtZXMuIFRoZSB0b3Btb3N0IFJvb3RGcmFtZSBpcyBjYWxsZWQgVWx0aW1hdGVSb290IGluIG1vZHVsZSB0ZXh0Lg0JVGhlIHZpZXdzIHN0cnVjdHVyZSBpcyBkZXRlcm1pbmVkIGJ5IGFwcGxpY2F0aW9ucyBhbmQgaXMgdGh1cyBwZXJtYW5lbnQsIGZyb20gdGhlIGZyYW1ld29yaydzIHBlcnNwZWN0aXZlOiB0aGUgYXBwbGljYXRpb24gZGVjaWRlcyB3aGVuIGEgdmlldyBpcyBjcmVhdGVkLCB3aGVuIGl0IGlzIHJlbW92ZWQsIGFuZCB3aGVyZSBpdCBpcyBlbWJlZGRlZC4gTW9kdWxlIFZpZXdzIGhhcyBubyBrbm93bGVkZ2UgYW5kIG1ha2VzIG5vIGFzc3VtcHRpb25zIGFib3V0IHRoZSBjcmVhdGlvbiwgcmVtb3ZhbCBhbmQgZW1iZWRkaW5nIG9mIHZpZXdzLiBWaWV3cyBpcyBhZ25vc3RpYyBvZiB0aGUgdmlldyBncmFwaC4gSG93ZXZlciwgdGhlIGZyYW1ld29yayBrbm93cyBldmVyeXRoaW5nIGFib3V0IHRoZSB2aXN1YWxpemF0aW9uIHN0cnVjdHVyZTsgYSBmcmFtZSBpcyB0aGUgY2VudHJhbCBlbGVtZW50IG9mIHRoZSB2aXN1YWxpemF0aW9uIHN0cnVjdHVyZS4gVGhlIGFwcCB0ZWxscyBWaWV3cyB3aGF0IHZpc3VhbGl6YXRpb24gc3RydWN0dXJlIGl0IHdhbnRzIGJ5IGNhbGxpbmcgVmlld3MuSW5zdGFsbEZyYW1lLiBXaGVuIGEgZnJhbWUgKGEgdmlldykgYmVjb21lcyBvYnNjdXJlZCAob3ZlcmxhaWQgYnkgYW5vdGhlciBmcmFtZS92aWV3IG9yIHNjcm9sbGVkIG91dCBpbnNpZGUgYSB3aW5kb3cgb3IgaXQncyBjb250YWluZXIpLCBWaWV3cyByZW1vdmVzIHRoZSBmcmFtZS4gQW5kIHRoaXMgaXMgdGhlIHByb2JsZW06IHVuZGVyIG15IGFtZW5kbWVudCwgUm9vdEZyYW1lcyBtYXkgYmUgZW1iZWRkZWQsIGFuZCBWaWV3cyBtYXkgd2FudCB0byByZW1vdmUgYSBSb290RnJhbWUuIFRoaXMgd291bGQgYnJlYWssIHdlbGwsIGV2ZXJ5dGhpbmc6IFdpbmRvd3MgYW5kIERvY3VtZW50cyBhc3NlcnQgdGhhdCBSb290RnJhbWVzIGFyZSBwZXJzaXN0ZW50LiBIZXJlIGlzIHdoeS4gRm9yIGluc3RhbmNlLCB3aGVuIGEgVGV4dFZpZXdzLlZpZXcgaXMgb3BlbmVkIGluIGEgd2luZG93LCB0aGUgZnJhbWUgdHJlZSBoYXMgYSBSb290RnJhbWUgKGRpc3BsYXlpbmcgdGhlIERvY3VtZW50KSwgYW5kIGEgZnJhbWUgZm9yIHRoZSBUZXh0VmlldywgYW5kIGZyYW1lcyBmb3IgZWFjaCBlbWJlZGRlZCB2aXNpYmxlKCEpIHZpZXcuIFRoaXMgc3RydWN0dXJlIGlzIHByZXNlcnZlZCBldmVuIHdoZW4gdGhlIHdpbmRvdyBpcyBvYnNjdXJlZCBieSBvdGhlciB3aW5kb3dzLCBvciB3aGVuIGl0IGlzIG1pbmltaXplZC4gVGhpcyBzdHJ1Y3R1cmUgaXMgbmVjZXNzYXJ5IGZvciBjcml0aWNhbCB0aGluZ3MgaW4gdGhlIGZyYW1ld29yayB0byB3b3JrOiBmb3IgZXhhbXBsZSwgd2hlbiB0aGUgRmluZCBkaWFsb2cgaXMgb3BlbmVkLCB0aGUgZGlhbG9nIGl0c2VsZiBpcyB0aGUgZnJvbnQgd2luZG93LCBhbmQgdGhlIHRleHQgaXMgdGhlIHRhcmdldCB3aW5kb3c7IGlmIHRoZSBGaW5kIGRpYWxvZyBvYnNjdXJlcyB0aGUgdGFyZ2V0IHdpbmRvdywgdGhlIHRhcmdldCdzIGZyYW1lIHN0cnVjdHVyZSBoYXMgdG8gYmUgcHJlc2VydmVkLCBvdGhlcndpc2UgdGhpbmdzIHRoYXQgZGVwZW5kIG9uIENvbnRyb2xsZXJzLkZvY3VzKENvbnRyb2xsZXJzLnRhcmdldFBhdGgpIHdpbGwgbm90IHdvcms6IENvbnRyb2xsZXJzLkZvY3VzKCkgc2VuZHMgbWVzc2FnZXMgaW50byB0aGUgdGFyZ2V0IHdpbmRvdywgYW5kIGlmIHRoZXJlIGlzIG5vIGZyYW1lIHRyZWUsIHdlbGwsIHRoZXJlJ3Mgbm8gb25lIHRvIHJlY2VpdmUgYW5kIHByb2Nlc3MgdGhlIG1lc3NhZ2VzLCB0aHVzLCBubyBmb2N1cyBmcmFtZS92aWV3Lg0JTWVyZWx5ICJ1bmluc3RhbGxpbmciIChkaXNlbWJlZGRpbmcpIGEgUm9vdEZyYW1lIGFuZCBwcmV2ZW50aW5nIGl0IGZyb20gYmVpbmcgcmVtb3ZlZCBhbmQgQ2xvc2VkIGRvZXNuJ3Qgd29yayBlaXRoZXIsIGFuZCBoZXJlJ3Mgd2h5LiBFdmVuIGlmIGEgUm9vdEZyYW1lIGlzICJ1bmluc3RhbGxlZCIgKHVucmVhY2hhYmxlIGZyb20gaXQncyBwcmV2aW91cyAtIG9yIGFueSAtIGVtYmVkZGluZyBmcmFtZSksIGl0IGlzIHN0aWxsIGNvbm5lY3RlZCB0byBhIFBvcnQuIFRodXMsIGFueSBhdHRlbXB0IHRvIGRyYXcgaW5zaWRlIHRoYXQgZnJhbWUgdHJlZSB3aWxsIHN1Y2NlZWQgLSByZXN1bHRpbmcgaW4gb2JzY3VyZWQgd2luZG93cyBkcmF3aW5nIG92ZXIgYW4gb3ZlcmxheWluZyB3aW5kb3cgLSBtZXNzISBUaHVzIHdoZW4gYSBSb290RnJhbWUgaXMgInVuaW5zdGFsbGVkIiwgYW55IGRyYXdpbmcgaW4gaXQncyBmcmFtZSB0cmVlIHNob3VsZCBiZSBzdXBwcmVzc2VkLiANCVRoaXMgY29uc3RpdHV0ZXMgYSBuZXcgImNvbmRpdGlvbiIgZm9yIGEgUm9vdEZyYW1lOiBhIFJvb3RGcmFtZSBiZWNvbWVzIG9ic2N1cmVkIHdoZW4gaXQgaXMgdW5pbnN0YWxsZWQgZnJvbSBpdCdzIGVtYmVkZGluZyB2aWV3LiBXaGVuIGEgUm9vdEZyYW1lIGlzIG9ic2N1cmVkLCBpdCdzIHJpZGVyJ3MgY2xpcHBpbmcgcmVjdGFuZ2xlIGlzIHNldCB0byBhbiBlbXB0eSByZWN0YW5nbGUgKDB4MCk7IGFsbCBVcGRhdGUgb3BlcmF0aW9ucyBhcmUgc3RvcmVkIGluIHRoZSBVcGRhdGUgUmVnaW9ucyAoaW4gdGhlIHVzdWFsIHdheSksIGFuZCBSZXN0b3JlIG9wZXJhdGlvbnMgbWFrZSBzdXJlIHRoYXQgdGhlIGNsaXBwaW5nIHJlY3RhbmdsZSBpcyBub3QgYWx0ZXJlZC4gVGh1cywgZHJhd2luZyBpbnRvIG9ic2N1cmVkIFJvb3RGcmFtZXMgaXMgc3VwcHJlc3NlZCBpbiBhIG1hbm5lciB0cmFuc3BhcmVudCB0byB0aGUgY2xpZW50cy4NCShNeSBvdGhlciBhdHRlbXB0IHRvIHNvbHZlIHRoaXMgcHJvYmxlbSB3YXMgdG8gdGVtcG9yYXJpbHkgZGlzY29ubmVjdCBvYnNjdXJlZCBSb290RnJhbWVzIGZyb20gdGhlaXIgcG9ydHMsIGJ1dCB0aGlzIHJlc3VsdHMgaW4gdHJhcHMgYmVjYXVzZSBjbGllbnRzIGV4cGVjdCBhIFJvb3RGcmFtZSB0byBiZSBwcm9wZXJseSBjb25uZWN0ZWQgdG8gYSBwb3J0KQ0JSSBmaWd1cmVkIGl0J3Mgbm90IG5lY2Vzc2FyeSB0byBpbnRyb2R1Y2UgYSBuZXcgY29uc3RhbnQgdG8gbWFyayBhbmQgaWRlbnRpZnkgdGhlIG9ic2N1cmVkIHN0YXRlOyBpdCBpcyBhbHdheXMgZGVkdWN0aWJsZSBmcm9tIHRoZSByZXN0IG9mIFJvb3RGcmFtZSBzdGF0ZTsgaG93ZXZlciwgaXQgaXMgcG9zc2libGUgdG8gaW50cm9kdWNlIHN1Y2ggYSBjb25zdGFudCBmb3IgdGhlIC5zdGF0ZSBmaWVsZCBpbiBvcmRlciB0byAocG9zc2libHkpIGluY3JlYXNlIGVmZmVjdGl2ZW5lc3M6IGl0IGlzIGNoZWFwZXIgdG8gY2hlY2sgdGhlIC5zdGF0ZSBmaWVsZCB0aGFuIGNhbGwgYSBwcm9jZWR1cmUgdGhhdCBkZWR1Y2VzIHRoZSBvYnNjdXJlZCBzdGF0ZS4NCU5vdywgdW5kZXIgbXkgYW1lbmRtZW50cywgUm9vdEZyYW1lcyBoYXZlIHRvIGJlIGNsb3NlZCBleHBsaWNpdGx5IGJ5IGNhbGxpbmcgQ2xvc2VSb290ICh0byBiZSByZXBsYWNlZCB3aXRoIHJvb3QuQ2xvc2UpLiBGb3JtZXJseSwgUm9vdEZyYW1lcyB3ZXJlIGNsb3NlZCBieSBWaWV3cyB3aGVuZXZlciB0aGVpciBjbGlwcGluZyByZWN0YW5nbGUgd2FzIHNldCB0byAoMCwgMCk7IHRoaXMgd2FzIGRvbmUgYXMgcGFydCBvZiB3aW5kb3cgY2xvc2luZy4gTm93IFJvb3RGcmFtZXMgbWF5IGJlIGVtYmVkZGVkIGludG8gb3RoZXIgZnJhbWVzLCBhbmQgaGF2aW5nIGFuZCBlbXB0eSBjbGlwcGluZyByZWN0YW5nbGUgZG9lcyBub3QgbmVjZXNzYXJpbHkgc2lnbmFsIGVuZC1vZi1saWZlIGZvciBSb290RnJhbWU7IHNvIGFuIGV4cGxpY2l0IHdheSB3YXMgaW50cm9kdWNlZCB0byB0ZWxsIFZpZXdzIHRoYXQgYSBSb290RnJhbWUgaGFzIHJlYWNoZWQgYW4gZW5kIG9mIGl0J3MgbGlmZS4NCU9uIG1lc3NhZ2luZy4gSXQgd2FzIHRoZSBhc3NlcnRpb24gb2YgVmlld3MgKGFuZCBhbGwgaXQncyBjbGllbnRzKSB0aGF0IEJyb2FkY2FzdHMgb25seSBydW4gZnJvbSBhIFJvb3RGcmFtZSBkb3duIHRvIHRoZSB1bmRlcmx5aW5nIGZyYW1lIHRyZWUsIHdoaWNoIGRpZCBub3QgaW5jbHVkZSBhbnkgb3RoZXIgUm9vdEZyYW1lcy4gSSBoYXZlIHByZXNlcnZlZCB0aGlzIGFzc3VtcHRpb246IG1lc3NhZ2VzIGFyZSBub3QgYnJvYWRjYXN0IGludG8gZW1iZWRkZWQgUm9vdFZpZXdzLiAoSG93IGRvIHRoZXkgZXZlciBnZXQgdGhlcmU@IFdlbGwsIHRoZSBtZXNzYWdlIHdvdWxkIGhhdmUgdG8gYmUgYnJvYWRjYXN0IGludG8gdGhlIChlbWJlZGRlZCkgd2luZG93IHRoYXQgaG9sZHMgcmVmZXJlbmNlIHRvIHRoZSAoZW1iZWRkZWQpIFJvb3RGcmFtZSAtIHdoaWNoIGFjdHVhbGx5IGlzIHRoZSBjYXNlIGFueXdheSB1bmRlciB0aGUgY3VycmVudCBpbXBsZW1lbnRhdGlvbiBvZiBXaW5kb3dzIGFuZCBTZXF1ZW5jZXJzKS4NCUFzIGZhciBhcyBDdHJsTWVzc2FnZXMgYXJlIGNvbmNlcm5lZCAtIHdlbGwsIGl0IGlzIG5vdCBkZWNpZGVkIGJ5IHRoZSBmcmFtZXdvcmsgYW55d2F5IHdoZXJlIHRvIGZvcndhcmQgYSBDdHJsTWVzc2FnZSwgc28gbm8gYXNzdW1wdGlvbnMgYXJlIGJyb2tlbiBoZXJlIGVpdGhlcjogaXQgaXMgdXAgdG8gdGhlIHJlY2VpdmVyIG9mIGEgQ3RybE1lc3NhZ2UgdG8gZGVjaWRlIHdoZXJlIHRvIGZvcndhcmQgaXQsIGlmIGF0IGFsbC4NCVRoZSBhc3N1bXB0aW9ucyBvZiBwcm9jZWR1cmVzIEhvc3RPZiBhbmQgUm9vdE9mIGhhdmUgYmVlbiBwcmVzZXJ2ZWQ6IHRoZXkgd29yayB0aGVpciB3YXkgdXAgdGhlIGZyYW1lIHRyZWUgdW50aWwgdGhleSBlbmNvdW50ZXIgYSBSb290RnJhbWUsIGF0IHdoaWNoIHBvaW50IHRoZXkgc3RvcCAtIGp1c3QgYXMgd2FzIHRoZSBjYXNlIGJlZm9yZSBteSBhbWVuZG1lbnRzLiBPbmUgY291bGQgc2F5IHRoZXkgc3RheSAid2l0aGluIiBvbmUgd2luZG93LCBldmVuIHdoZW4gaXQgaXMgZW1iZWRkZWQgaW4gYW5vdGhlciB3aW5kb3cuDQlUaGUgcmVzdG9yYXRpb24gcHJvY2VkdXJlcyBhcmUgdGhlIG9uZXMgdGhhdCBoYXZlIGJlZW4gY2hhbmdlZCB0aGUgbW9zdDogZW1iZWRkZWQgUm9vdEZyYW1lcyBhcmUgcmVzdG9yZWQgYXMgcGFydCBvZiB0aGVpciBlbWJlZGRlJ3MgcmVzdG9yYXRpb24gcHJvY2Vzcy4NCVVzYWdlOg0JVG8gY29uZWN0IGEgUm9vdEZyYW1lIHRvIGEgdmlldzogUFJPQ0VEVVJFIFNldFJvb3QNCVRvIGluc3RhbGwgYSBSb290RnJhbWUgaW50byBhbm90aGVyIGZyYW1lOiBQUk9DRURVUkUgSW5zdGFsbFJvb3QuIEl0IGlzIHNpbWlsYXIgaW4gcHVycG9zZSBhbmQgaW1wbGVtZW50YXRpb24gdG8gSW5zdGFsbEZyYW1lLCBidXQgdW5saWtlIEluc3RhbGxGcmFtZSBpdCB0YWtlcyBhIFJvb3RGcmFtZSwgbm90IGEgdmlldywgYW5kIGRvZXMgbm90IGNyZWF0ZSBhIG5ldyBmcmFtZS4NCVRyYWRpdGlvbmFsIHVzYWdlOiBTZXRSb290IGZvbGxvd2VkIGJ5IEFkYXB0Um9vdA0JQW1lbmRlZCBSb290RnJhbWUgdXNhZ2U6IFNldFJvb3QsIHRoZW4gQWRhcHRSb290IHdoZW5ldmVyIHRoZSBwb3NpdGlvbiBvciBzaXplIG9mIHRoZSBSb290RnJhbWUgY2hhbmdlczsgdGhlbiBJbnN0YWxsUm9vdCB0byBlbWJlZCB0aGUgUm9vdEZyYW1lIGludG8gYW5vdGhlciBmcmFtZS4gKFNldFJvb3QgYWxzbyBuZWVkcyB0byBiZSBjYWxsZWQgd2hlbiBhIFJvb3RGcmFtZSBiZWNvbWVzL3VuYmVjb21lcyBmb2N1cy4pADsAAAAAAAAAAMXTAgCIYwIAgvIAAAAAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAANgAAAD@DQktIDIwMTkuMTEsIGFkLCACQW1lbmRtZW50IHByb3Bvc2FsOiBSb290RnJhbWVzIG1heSBiZSBlbWJlZGRlZCBpbnRvIEZyYW1lcyACDQktIDIwMTkuMTIsIGFkLCBhbGxvdyByb290IHZpZXdzIHRvIHJlcXVlc3QgdHJhbnNwYXJlbnQgYmFja2dyb3VuZDsgUG9ydHMuYmFja2dyb3VuZCBpcyB1c2VkIHVuZGVyIHRoZSB0b3Agcm9vdCB2aWV3OyB0cmFuc3BhcmVudCBiYWNrZ3JvdW5kIGlzIHByb3ZpZGVkIGZvciByb290IHZpZXdzIGVtYmVkZGVkIGluIG90aGVyIHZpZXdzLg0JLSBZWVlZTU1ERCwgbm4sIC4uLg0J"/><odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAUgEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAADMAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAABxAAAA@w0JLSBmdW5kYW1lbnRhbGx5LCB1c2luZyBwdXJlbHkgaG9zdC1zcGVjaWZpYyBhcmVhLWludmFsaWRhdGlvbiB3b3VsZCBiZSBiZXR0ZXIsIGJ1dCB0aGF0IHdvdWxkIGJlIG1ham9yIGNoYW5nZQ0J"/><odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT SYSTEM, Kernel,
+		Log, Dialog, Files, Services, Fonts, Stores, Converters, Ports, Sequencers, Models;
+
+	CONST
+		(** View.Background color **)
+		transparent* = 0FF000000H;
+
+		(** Views.CopyModel / Views.CopyOf shallow **)
+		deep* = FALSE; shallow* = TRUE;
+
+		(** Update, UpdateIn rebuild **)
+		keepFrames* = FALSE; rebuildFrames* = TRUE;
+
+		(** Deposit, QualifiedDeposit, Fetch w, h **)
+		undefined* = 0;
+		
+		(** OldView, RegisterView ask **)
+		dontAsk* = FALSE; ask* = TRUE;
+
+		(* method numbers (UNSAFE!) *)
+		(* copyFrom = 1; *)
+		copyFromModelView = 7; copyFromSimpleView = 8;
+
+		(* Frame.state *)
+		new = 0; open = 1; closed = 2;
+		
+		maxN = 30;	(* max number of rects used to approximate a region *)
+
+		minVersion = 0; maxVersion = 0;
+		
+		(* actOp *)
+		handler = 1; restore = 2; externalize = 3;
+		
+		unloaded = 31;
+
+		markBorderSize = 2;
+
+		clean* = Sequencers.clean; 
+		notUndoable* = Sequencers.notUndoable;
+		invisible* = Sequencers.invisible; 
+
+		magic = -19780528;	(* used to SetRect and SetOffset on an obscured RootFrame, and to identify an obscured RootFrame; could be eliminated or replaced with a Frame.state constant *)
+		(* this is magic offset for new, but not yet "mapped" windows from tiler *)
+		hMagic = 0 - 03FFFFFFH;
+
+	TYPE
+	
+		(** views **)
+
+		View* = POINTER TO ABSTRACT RECORD (Stores.Store)
+			context-: Models.Context;	(** stable context # NIL **)
+			era: INTEGER;
+			guard: INTEGER;	(* = TrapCount()+1 if view is addressee of ongoing broadcast *)
+			bad: SET
+		END;
+
+		Alien* = POINTER TO LIMITED RECORD (View)
+			store-: Stores.Alien
+		END;
+
+		Title* = ARRAY 64 OF CHAR;
+
+		TrapAlien = POINTER TO RECORD (Stores.Store) END;
+
+
+		(** frames **)
+
+		Frame* = POINTER TO ABSTRACT RECORD (Ports.Frame)
+			l-, t-, r-, b-: INTEGER;	(** l < r, t < b **)
+			view-: View;	(** opened => view # NIL, view.context # NIL, view.seq # NIL **)
+			front-, mark-: BOOLEAN;
+			state: BYTE;
+			x, y: INTEGER;	(* origin in coordinates of environment *)	(** origin relative to host; gx, gy is relative to port! *)
+			gx0, gy0: INTEGER;	(* global origin w/o local subpixel scrolling compensation *)
+			sx, sy: INTEGER;	(* cumulated local sub-pixel scrolling compensation *)
+			next, down, up, focus: Frame;
+			level: INTEGER	(* used for partial z-ordering *)
+		END;
+		(** Views.Frame, unlike Ports.Frame, support the notion of nesting and hosting, cf.  Views.InstallFrame Views.HostOf, etc. *)
+
+		Message* = ABSTRACT RECORD
+			view-: View	(** view # NIL **)
+		END;
+
+		NotifyMsg* = EXTENSIBLE RECORD (Message)
+			id0*, id1*: INTEGER;
+			opts*: SET
+		END;
+		
+		NotifyHook = POINTER TO RECORD (Dialog.NotifyHook) END;
+		
+		UpdateCachesMsg* = EXTENSIBLE RECORD (Message) END;
+		
+		ScrollClassMsg* = RECORD (Message)
+			allowBitmapScrolling*: BOOLEAN (** OUT, preset to FALSE **)
+		END;
+
+
+		(** property messages **)
+
+		PropMessage* = ABSTRACT RECORD END;
+
+
+		(** controller messages **)
+
+		CtrlMessage* = ABSTRACT RECORD END;
+
+		CtrlMsgHandler* = PROCEDURE (op: INTEGER; f, g: Frame; VAR msg: CtrlMessage; 
+			VAR mark, front, req: BOOLEAN
+		);
+
+		UpdateMsg = RECORD (Message)
+			scroll, rebuild, all: BOOLEAN;
+			l, t, r, b, dx, dy: INTEGER
+		END;
+
+
+		Rect = RECORD
+			v: View;
+			rebuild: BOOLEAN;
+			l, t, r, b: INTEGER
+		END;
+
+		Region = POINTER TO RECORD
+			n: INTEGER;
+			r: ARRAY maxN OF Rect
+		END;
+
+		RootFrame* = POINTER TO RECORD (Frame)
+			flags-: SET;
+			update: Region	(* allocated lazily by SetRoot *)
+		END;
+		
+		StdFrame = POINTER TO RECORD (Frame) END;
+
+
+		(* view producer/consumer decoupling *)
+
+		QueueElem = POINTER TO RECORD
+			next: QueueElem;
+			view: View
+		END;
+		
+		GetSpecHook* = POINTER TO ABSTRACT RECORD END;
+		ViewHook* = POINTER TO ABSTRACT RECORD END;
+		MsgHook* = POINTER TO ABSTRACT RECORD END;
+		
+
+	VAR
+		HandleCtrlMsg-: CtrlMsgHandler;
+
+		domainGuard: INTEGER;	(* = TrapCount()+1 if domain is addressee of ongoing domaincast *)
+		
+		actView: View;
+		actFrame: RootFrame;
+		actOp: INTEGER;
+
+		copyModel: Models.Model;	(* context for (View)CopyFrom; reset by TrapCleanup *)
+
+		queue: RECORD
+			len: INTEGER;
+			head, tail: QueueElem
+		END;
+		
+		getSpecHook: GetSpecHook;
+		viewHook: ViewHook;
+		msgHook: MsgHook;
+		
+		rootToInstall: RootFrame;	(* parameter InstallRoot => InstallFrame *)
+		
+		
+	PROCEDURE Overwritten (v: View; mno: INTEGER): BOOLEAN;
+		VAR base, actual: PROCEDURE;
+	BEGIN
+		(* 64-бит: слоты таблицы методов 8-байтные, слот i по tag - 8*(i+1) *)
+		SYSTEM.GET(SYSTEM.TYP(View) - 8 * (mno + 1), base);
+		SYSTEM.GET(SYSTEM.TYP(v) - 8 * (mno + 1), actual);
+		RETURN actual # base
+	END Overwritten;
+
+	(** Hooks **)
+	
+	PROCEDURE (h: GetSpecHook) GetExtSpec* (s: Stores.Store; VAR loc: Files.Locator; 
+											VAR name: Files.Name; VAR conv: Converters.Converter), NEW, ABSTRACT;
+	PROCEDURE (h: GetSpecHook) GetIntSpec* (VAR loc: Files.Locator; VAR name: Files.Name; 
+											VAR conv: Converters.Converter), NEW, ABSTRACT;
+
+	PROCEDURE SetGetSpecHook*(h: GetSpecHook);
+	BEGIN
+		getSpecHook := h
+	END SetGetSpecHook;
+	
+	PROCEDURE (h: ViewHook) OldView* (loc: Files.Locator; VAR name: Files.Name; 
+				VAR conv: Converters.Converter): View, NEW, ABSTRACT;
+	PROCEDURE (h: ViewHook) Open* (s: View; title: ARRAY OF CHAR;
+				loc: Files.Locator; name: Files.Name; conv: Converters.Converter; 
+				asTool, asAux, noResize, allowDuplicates, neverDirty: BOOLEAN), NEW, ABSTRACT;
+	PROCEDURE (h: ViewHook) RegisterView* (s: View; loc: Files.Locator; 
+				name: Files.Name; conv: Converters.Converter), NEW, ABSTRACT;
+
+	PROCEDURE SetViewHook*(h: ViewHook);
+	BEGIN
+		viewHook := h
+	END SetViewHook;
+	
+	PROCEDURE (h: MsgHook) Omnicast* (VAR msg: ANYREC), NEW, ABSTRACT;
+	PROCEDURE (h: MsgHook) RestoreDomain* (domain: Stores.Domain), NEW, ABSTRACT;
+
+	PROCEDURE SetMsgHook*(h: MsgHook);
+	BEGIN
+		msgHook := h
+	END SetMsgHook;
+
+	
+	(** Model protocol **)
+
+	PROCEDURE (v: View) CopyFromSimpleView- (source: View), NEW, EMPTY;
+	PROCEDURE (v: View) CopyFromModelView- (source: View; model: Models.Model), NEW, EMPTY;
+
+	PROCEDURE (v: View) ThisModel* (): Models.Model, NEW, EXTENSIBLE;
+	BEGIN
+		RETURN NIL
+	END ThisModel;
+
+
+	(** Store protocol **)
+
+	PROCEDURE (v: View) CopyFrom- (source: Stores.Store);
+		VAR tm, fm: Models.Model; c: Models.Context;
+	BEGIN
+		tm := copyModel; copyModel := NIL;
+		WITH source: View DO
+			v.era := source.era;
+			actView := NIL;
+			IF tm = NIL THEN	(* if copyModel wasn't preset then use deep copy as default *)
+				fm := source.ThisModel();
+				IF fm # NIL THEN tm := Stores.CopyOf(fm)(Models.Model) END
+			END;
+			actView := v;
+			IF Overwritten(v, copyFromModelView) THEN	(* new View *)
+				ASSERT(~Overwritten(v, copyFromSimpleView), 20);
+				c := v.context;
+				v.CopyFromModelView(source, tm);
+				ASSERT(v.context = c, 60)
+			ELSE	(* old or simple View *)
+				(* IF tm # NIL THEN v.InitModel(tm) END *)
+				c := v.context;
+				v.CopyFromSimpleView(source);
+				ASSERT(v.context = c, 60)
+			END
+		END
+	END CopyFrom;
+
+	PROCEDURE (v: View) Internalize- (VAR rd: Stores.Reader), EXTENSIBLE;
+		VAR thisVersion: INTEGER;
+	BEGIN
+		v.Internalize^(rd);
+		IF rd.cancelled THEN RETURN END;
+		rd.ReadVersion(minVersion, maxVersion, thisVersion)
+	END Internalize;
+
+	PROCEDURE (v: View) Externalize- (VAR wr: Stores.Writer), EXTENSIBLE;
+	BEGIN
+		v.Externalize^(wr);
+		wr.WriteVersion(maxVersion)
+	END Externalize;
+
+
+	(** embedding protocol **)
+
+	PROCEDURE (v: View) InitContext* (context: Models.Context), NEW, EXTENSIBLE;
+	BEGIN
+		ASSERT(context # NIL, 21);
+		ASSERT((v.context = NIL) OR (v.context = context), 22);
+		v.context := context
+	END InitContext;
+
+	PROCEDURE (v: View) GetBackground* (VAR color: Ports.Color), NEW, EMPTY;
+	PROCEDURE (v: View) ConsiderFocusRequestBy- (view: View), NEW, EMPTY;
+	PROCEDURE (v: View) Neutralize*, NEW, EMPTY;
+
+
+	(** Frame protocol **)
+
+	PROCEDURE (v: View) GetNewFrame* (VAR frame: Frame), NEW, EMPTY;
+	PROCEDURE (v: View) Restore* (f: Frame; l, t, r, b: INTEGER), NEW, ABSTRACT;
+	PROCEDURE (v: View) RestoreMarks* (f: Frame; l, t, r, b: INTEGER), NEW, EMPTY;
+
+
+	(** handlers **)
+
+	PROCEDURE (v: View) HandleModelMsg- (VAR msg: Models.Message), NEW, EMPTY;
+	PROCEDURE (v: View) HandleViewMsg- (f: Frame; VAR msg: Message), NEW, EMPTY;
+	PROCEDURE (v: View) HandleCtrlMsg* (f: Frame; VAR msg: CtrlMessage; VAR focus: View), NEW, EMPTY;
+	PROCEDURE (v: View) HandlePropMsg- (VAR msg: PropMessage), NEW, EMPTY;
+
+
+	(** Alien **)
+
+	PROCEDURE (a: Alien) Externalize- (VAR wr: Stores.Writer);
+	BEGIN
+		HALT(100)
+	END Externalize;
+
+	PROCEDURE (a: Alien) Internalize- (VAR rd: Stores.Reader);
+	BEGIN
+		HALT(100)
+	END Internalize;
+
+	PROCEDURE (a: Alien) CopyFromSimpleView- (source: View);
+	BEGIN
+		a.store := Stores.CopyOf(source(Alien).store)(Stores.Alien); Stores.Join(a, a.store)
+	END CopyFromSimpleView;
+
+	PROCEDURE (a: Alien) Restore* (f: Frame; l, t, r, b: INTEGER);
+		VAR u, w, h: INTEGER;
+	BEGIN
+		u := f.dot; a.context.GetSize(w, h);
+		f.DrawRect(0, 0, w, h, Ports.fill, Ports.grey25);
+		f.DrawRect(0, 0, w, h, 2 * u, Ports.grey75);
+		f.DrawLine(0, 0, w - u, h - u, u, Ports.grey75);
+		f.DrawLine(w - u, 0, 0, h - u, u, Ports.grey75)
+	END Restore;
+	
+
+	(** TrapAlien **)
+
+	PROCEDURE (v: TrapAlien) Internalize (VAR rd: Stores.Reader);
+	BEGIN
+		v.Internalize^(rd);
+		rd.TurnIntoAlien(3)
+	END Internalize;
+	
+	PROCEDURE (v: TrapAlien) Externalize (VAR rd: Stores.Writer);
+	END Externalize;
+	
+	PROCEDURE (v: TrapAlien) CopyFrom (source: Stores.Store), EMPTY;
+
+
+	(** Frame **)
+
+	PROCEDURE (f: Frame) Close* (), NEW, EMPTY;
+
+
+	(* Rect, Region *)
+
+	PROCEDURE Union (VAR u: Rect; r: Rect);
+	BEGIN
+		IF r.v # u.v THEN u.v := NIL END;
+		IF r.rebuild THEN u.rebuild := TRUE END;
+		IF r.l < u.l THEN u.l := r.l END;
+		IF r.t < u.t THEN u.t := r.t END;
+		IF r.r > u.r THEN u.r := r.r END;
+		IF r.b > u.b THEN u.b := r.b END
+	END Union;
+
+	PROCEDURE Add (rgn: Region; v: View; rebuild: BOOLEAN; gl, gt, gr, gb: INTEGER);
+		(* does not perfectly maintain invariant of non-overlapping approx rects ... *)
+		VAR q: Rect; i, j, n: INTEGER; x: ARRAY maxN OF BOOLEAN;
+	BEGIN
+		q.v := v; q.rebuild := rebuild; q.l := gl; q.t := gt; q.r := gr; q.b := gb;
+		n := rgn.n + 1;
+		i := 0;
+		WHILE i < rgn.n DO
+			x[i] := (gl < rgn.r[i].r) & (rgn.r[i].l < gr) & (gt < rgn.r[i].b) & (rgn.r[i].t < gb);  
+			(* q INTERSECTS with r[i] *)
+			IF x[i] THEN Union(q, rgn.r[i]); DEC(n) END;
+			INC(i)
+		END;
+		IF n > maxN THEN
+			(* n = maxN + 1 -> merge q with arbitrarily picked rect and Add *)
+			Union(q, rgn.r[maxN - 1]); Add(rgn, v, q.rebuild, q.l, q.t, q.r, q.b)
+		ELSE
+			i := 0; WHILE (i < rgn.n) & ~x[i] DO INC(i) END;
+			rgn.r[i] := q; INC(i); WHILE (i < rgn.n) & ~x[i] DO INC(i) END;
+			j := i; WHILE (i < rgn.n) & x[i] DO INC(i) END;
+			WHILE i < rgn.n DO	(* ~x[i] *)
+				rgn.r[j] := rgn.r[i]; INC(j); INC(i);
+				WHILE (i < rgn.n) & x[i] DO INC(i) END
+			END;
+			rgn.n := n
+		END
+	END Add;
+
+	PROCEDURE AddRect (root: RootFrame; f: Frame; l, t, r, b: INTEGER; rebuild: BOOLEAN);
+		VAR rl, rt, rr, rb: INTEGER; i: INTEGER;
+	BEGIN
+		INC(l, f.gx); INC(t, f.gy); INC(r, f.gx); INC(b, f.gy);
+		rl := root.l + root.gx; rt := root.t + root.gy; rr := root.r + root.gx; rb := root.b + root.gy;
+		IF l < rl THEN l := rl END;
+		IF t < rt THEN t := rt END;
+		IF r > rr THEN r := rr END;
+		IF b > rb THEN b := rb END;
+		IF (l < r) & (t < b) THEN
+			Add(root.update, f.view, rebuild, l, t, r, b);
+			i := 0;
+			WHILE (i < root.update.n)
+				& (~root.update.r[i].rebuild OR (root.update.r[i].v # NIL)) DO INC(i) END;
+			IF i < root.update.n THEN
+				Add(root.update, root.view, TRUE, rl, rt, rr, rb)
+				(* Updates+Rebuilds the whole root frame *)
+			END
+		END
+	END AddRect;
+
+
+	(** miscellaneous **)
+
+	PROCEDURE RestoreDomain* (domain: Stores.Domain);
+	BEGIN
+		ASSERT(msgHook # NIL, 100);
+		msgHook.RestoreDomain(domain)
+	END RestoreDomain;
+
+	PROCEDURE MarkBorder* (host: Ports.Frame; view: View; l, t, r, b: INTEGER);
+		VAR s: INTEGER;
+	BEGIN
+		IF view # NIL THEN 
+			s := markBorderSize * host.dot;
+			host.MarkRect(l - s, t - s, r + s, b + s, s, Ports.dim50, Ports.show)
+		END
+	END MarkBorder;
+	
+
+
+	(** views **)
+
+	PROCEDURE SeqOf (v: View): Sequencers.Sequencer;
+		VAR (*c: Models.Context;*) d: Stores.Domain; seq: Sequencers.Sequencer; any: ANYPTR;
+	BEGIN
+		d := v.Domain(); seq := NIL;
+		IF d # NIL THEN
+			any := d.GetSequencer();
+			IF (any # NIL) & (any IS Sequencers.Sequencer) THEN
+				seq := any(Sequencers.Sequencer)
+			END
+		END;
+		RETURN seq
+	END SeqOf;
+
+
+	PROCEDURE Era* (v: View): INTEGER;
+	(** pre: v # NIL *)
+	(** post:
+		v.ThisModel() # NIL
+			in-synch(v) iff Era(v) = Models.Era(v.ThisModel())
+	**)
+	BEGIN
+		ASSERT(v # NIL, 20);
+		RETURN v.era
+	END Era;
+
+	PROCEDURE BeginScript* (v: View; name: Stores.OpName; OUT script: Stores.Operation);
+	(** pre: v # NIL *)
+	(** post: (script # NIL) iff (v.seq # NIL) **)
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN seq.BeginScript(name, script)
+		ELSE script := NIL
+		END
+	END BeginScript;
+
+	PROCEDURE Do* (v: View; name: Stores.OpName; op: Stores.Operation);
+	(** pre: v # NIL, op # NIL, ~op.inUse **)
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20); ASSERT(op # NIL, 21); (* ASSERT(~op.inUse, 22); *)
+		seq := SeqOf(v);
+		IF seq # NIL THEN seq.Do(v, name, op) ELSE op.Do END
+	END Do;
+
+	PROCEDURE LastOp* (v: View): Stores.Operation;
+	(** pre: v # NIL **)
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN RETURN seq.LastOp(v) ELSE RETURN NIL END
+	END LastOp;
+
+	PROCEDURE Bunch* (v: View);
+	(** pre: v # NIL **)
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v); ASSERT(seq # NIL, 21);
+		seq.Bunch(v)
+	END Bunch;
+
+	PROCEDURE StopBunching* (v: View);
+	(** pre: v # NIL **)
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN seq.StopBunching END
+	END StopBunching;
+
+	PROCEDURE EndScript* (v: View; script: Stores.Operation);
+	(** pre: (script # NIL) iff (v.seq # NIL) **)
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN ASSERT(script # NIL, 21); seq.EndScript(script)
+		ELSE ASSERT(script = NIL, 22)
+		END
+	END EndScript;
+
+
+	PROCEDURE BeginModification* (type: INTEGER; v: View);
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN seq.BeginModification(type, v) END
+	END BeginModification;
+
+	PROCEDURE EndModification* (type: INTEGER; v: View);
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN seq.EndModification(type, v) END
+	END EndModification;
+
+	PROCEDURE SetDirty* (v: View);
+		VAR seq: Sequencers.Sequencer;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		seq := SeqOf(v);
+		IF seq # NIL THEN seq.SetDirty(TRUE) END
+	END SetDirty;
+
+
+	PROCEDURE Domaincast* (domain: Stores.Domain; VAR msg: Message);
+		VAR g: INTEGER; seq: ANYPTR;
+	BEGIN
+		IF domain # NIL THEN
+			seq := domain.GetSequencer();
+			IF seq # NIL THEN
+				msg.view := NIL;
+				g := Kernel.trapCount + 1;
+				IF domainGuard > 0 THEN ASSERT(domainGuard # g, 20) END;
+				domainGuard := g;
+				seq(Sequencers.Sequencer).Handle(msg);
+				domainGuard := 0
+			END
+		END
+	END Domaincast;
+
+	PROCEDURE Broadcast* (v: View; VAR msg: Message);
+		VAR seq: Sequencers.Sequencer; g: INTEGER;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		msg.view := v;
+		seq := SeqOf(v);
+		IF seq # NIL THEN
+			g := Kernel.trapCount + 1;
+			IF v.guard > 0 THEN ASSERT(v.guard # g, 21) END;
+			v.guard := g;
+			seq.Handle(msg);
+			v.guard := 0
+		END
+	END Broadcast;
+
+
+	PROCEDURE Update* (v: View; rebuild: BOOLEAN);
+		VAR upd: UpdateMsg; 
+	BEGIN
+		ASSERT(v # NIL, 20);
+		upd.scroll := FALSE; upd.rebuild := rebuild; upd.all := TRUE;
+		Broadcast(v, upd)
+	END Update;
+
+	PROCEDURE UpdateIn* (v: View; l, t, r, b: INTEGER; rebuild: BOOLEAN);
+		VAR upd: UpdateMsg;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		upd.scroll := FALSE; upd.rebuild := rebuild; upd.all := FALSE;
+		upd.l := l; upd.t := t; upd.r := r; upd.b := b;
+		Broadcast(v, upd)
+	END UpdateIn;
+
+	PROCEDURE Scroll* (v: View; dx, dy: INTEGER);
+		VAR scroll: UpdateMsg;
+	BEGIN
+		ASSERT(v # NIL, 20); ASSERT(v.Domain() # NIL, 21);
+		RestoreDomain(v.Domain());
+		scroll.scroll := TRUE; scroll.dx := dx; scroll.dy := dy;
+		Broadcast(v, scroll)
+	END Scroll;
+
+	PROCEDURE CopyOf* (v: View; shallow: BOOLEAN): View;
+		VAR w, a: View; op: INTEGER; b: Alien;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		IF ~(handler IN v.bad) THEN
+			a := actView; op := actOp; actView := NIL; actOp := handler;
+			IF shallow THEN copyModel := v.ThisModel() END;
+			actView := v;
+			w := Stores.CopyOf(v)(View);
+			actView := a; actOp := op
+		ELSE
+			NEW(b); w := b; w.bad := {handler..externalize}
+		END;
+		IF shallow THEN Stores.Join(w, v) END;
+		RETURN w
+	END CopyOf;
+
+	PROCEDURE CopyWithNewModel* (v: View; m: Models.Model): View;
+		VAR w, a: View; op: INTEGER; b: Alien; fm: Models.Model;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		fm := v.ThisModel(); ASSERT(fm # NIL, 21);
+		ASSERT(m # NIL, 22);
+		ASSERT(Services.SameType(m, fm), 23);
+		IF ~(handler IN v.bad) THEN
+			a := actView; op := actOp; actView := v; actOp := handler;
+			copyModel := m;
+			w := Stores.CopyOf(v)(View);
+			actView := a; actOp := op
+		ELSE
+			NEW(b); w := b; w.bad := {handler..externalize}
+		END;
+		RETURN w
+	END CopyWithNewModel;
+
+	PROCEDURE ReadView* (VAR rd: Stores.Reader; OUT v: View);
+		VAR st: Stores.Store; a: Alien;
+	BEGIN
+		rd.ReadStore(st);
+		IF st = NIL THEN
+			v := NIL
+		ELSIF st IS Stores.Alien THEN
+			NEW(a);
+			a.store := st(Stores.Alien); Stores.Join(a, a.store);
+			v := a
+		ELSE
+			v := st(View)
+		END
+	END ReadView;
+
+	PROCEDURE WriteView* (VAR wr: Stores.Writer; v: View);
+		VAR a: TrapAlien; av: View; op: INTEGER;
+	BEGIN
+		IF v = NIL THEN wr.WriteStore(v)
+		ELSIF externalize IN v.bad THEN NEW(a); wr.WriteStore(a)
+		ELSIF v IS Alien THEN wr.WriteStore(v(Alien).store)
+		ELSE
+			av := actView; op := actOp; actView := v; actOp := externalize;
+			wr.WriteStore(v);
+			actView := av; actOp := op
+		END
+	END WriteView;
+
+
+	(* frames *)
+	
+	PROCEDURE SetClip (f: Frame; l, t, r, b: INTEGER);
+		VAR u: INTEGER;
+	BEGIN
+		ASSERT(f.rider # NIL, 20); ASSERT(l <= r, 21); ASSERT(t <= b, 22);
+		u := f.unit;
+		f.rider.SetRect((l + f.gx) DIV u, (t + f.gy) DIV u, (r + f.gx) DIV u, (b + f.gy) DIV u);
+		f.l := l; f.t := t; f.r := r; f.b := b
+	END SetClip;
+
+	PROCEDURE Close (f: Frame);	(* AD: RootFrames may only be closed by Views' clients thru .Close; in Views, Close is never called on a RootFrame except from RootFrame.Close. Instead, when RootFrames need to be 'closed', they are 'obscured', cf. Obscure *)
+	BEGIN 
+		IF f.state # closed (* recursion guard from RootFrame.Close *) THEN
+			f.Close
+		END;
+		f.state := closed;
+		f.up := NIL; f.down := NIL; f.next := NIL; f.view := NIL;
+		f.ConnectTo(NIL);
+	END Close;
+
+	PROCEDURE IsObscured* (r: RootFrame): BOOLEAN;
+	(** Returns TRUE if r is obscured - that is, 
+		not visible because overlayed by other frames *)
+	BEGIN
+		ASSERT(r # NIL, 20); ASSERT(r.rider # NIL, 21);
+		RETURN (r.gx = magic) & (r.gy = magic)
+	END IsObscured;
+
+	PROCEDURE Obscure* (r: RootFrame);
+	(** Instead of being closed (in response to Update(?, rebuildFrame)), root frames are 'obscured': disconnected from their embedding frame and siblings, and moved to a magic offset. Obscure is soecifically for use in StdTiles *)
+	BEGIN
+		r.up := NIL;
+		r.rider.SetRect(magic, magic, magic, magic);
+		r.SetOffset(magic, magic)
+	END Obscure;	(* it is the responsibility of some caller to r.next := NIL *) 
+
+
+	PROCEDURE AdaptFrameTo (f: Frame; orgX, orgY: INTEGER);
+	(** Adapt f's proper coordinates (global and relative position, clipping rectangle) and coordinates of it's embedded frames to f's origin (orgX, orgY) with respect to f's environment (port or embedding frame) *)
+		VAR e, g, p, q: Frame; port: Ports.Port;
+			w, h,  pl, pt, pr, pb,  gl, gt, gr, gb,  gx, gy: INTEGER;
+	BEGIN 
+		(* pre: environment (i.e. parent frame / port) has already been set up *)
+		ASSERT(f.view # NIL, 20); ASSERT(f.view.context # NIL, 21);
+		f.x := orgX; f.y := orgY;	(* set new origin *)
+		g := f.up; 
+		IF g # NIL THEN	(* parent frame is environment *)
+			f.gx0 := g.gx + orgX; f.gy0 := g.gy + orgY;
+			f.SetOffset(f.gx0 - f.sx, f.gy0 - f.sy);
+			pl := g.gx + g.l; pt := g.gy + g.t; pr := g.gx + g.r; pb := g.gy + g.b
+		ELSE	(* port is environment *)
+			f.gx0 := orgX; f.gy0 := orgY;
+				(* assumes that when port is environment, f.gx = 0, f.gy = 0 *)
+			f.SetOffset(f.gx0 - f.sx, f.gy0 - f.sy);	(* i.e. f.gx := f.gx0 - f.sx *)
+			port := f.rider.Base();
+			port.GetSize(w, h);
+			pl := 0; pt := 0; pr := w * f.unit; pb := h * f.unit
+		END;
+		(* (pl, pt, pr, pb) is parent clipping rectangle, in global coordinates, and in units *)
+		gx := f.gx; gy := f.gy; f.view.context.GetSize(w, h); 
+		gl := gx; gt := gy; gr := gx + w; gb := gy + h;
+		(* (gl, gt, gr, gb) is desired clipping rectangle, in global coordinates, and in units *)
+		IF gl < pl THEN gl := pl END;
+		IF gt < pt THEN gt := pt END;
+		IF gr > pr THEN gr := pr END;
+		IF gb > pb THEN gb := pb END;
+		IF (gl >= gr) OR (gt >= gb) THEN gr := gl; gb := gt END;
+		SetClip(f, gl - gx + f.sx, gt - gy + f.sy, gr - gx + f.sx, gb - gy + f.sy);
+		(* (f.l, f.t, f.r, f.b) is final clipping rectangle, in local coordinates, and in units *)
+		e := f.down; f.down := NIL; p := NIL;
+		WHILE e # NIL DO	(* adapt child frames *)
+			q := e.next; e.next := NIL;
+			AdaptFrameTo(e, e.x, e.y);
+			IF e.l = e.r THEN	(* empty child frame: remove *)
+				WITH e: RootFrame DO Obscure(e) ELSE Close(e) END
+			ELSE	(* insert in new frame list *)
+				IF p = NIL THEN f.down := e ELSE p.next := e END;
+				p := e
+			END;
+			e := q
+		END
+		(* post: frame is set; child frames are set, nonempty, and clipped to frame *)
+	END AdaptFrameTo;
+
+	PROCEDURE SetRoot* (root: RootFrame; view: View; front: BOOLEAN; flags: SET);
+	(** Connects root and view (if they are not yet connected) and sets auxiliary attributes front (indicating that this frame/view is on the front path) and flags (interpretation is left to clients). *)
+	BEGIN
+		ASSERT(root # NIL, 20); ASSERT(root.rider # NIL, 21);
+		ASSERT(view # NIL, 22); ASSERT(view.context # NIL, 23);
+		ASSERT(view.Domain() # NIL, 24);
+		ASSERT(root.state IN {new, open}, 25);
+		root.view := view;
+		root.front := front; root.mark := TRUE; root.flags := flags;
+		root.state := open;
+		IF root.update = NIL THEN NEW(root.update); root.update.n := 0 END
+	END SetRoot;
+
+	PROCEDURE AdaptRoot* (root: RootFrame);
+	BEGIN
+		ASSERT(root # NIL, 20);
+		IF root.state = open THEN AdaptFrameTo(root, root.x, root.y) END
+	END AdaptRoot;
+
+	(** A RootFrame is 'ultimate' if it is not embedded in any other frame. Returns the ultimate root that f is underneath, or f itself, if f is ultimate root. *)
+	PROCEDURE UltimateRootOf* (f: Frame): RootFrame;
+	BEGIN
+		WHILE f.up # NIL DO f := f.up END;
+		ASSERT(f IS RootFrame, 100);
+		RETURN f(RootFrame)
+	END UltimateRootOf;
+
+	PROCEDURE UpdateRoot* (root: RootFrame; l, t, r, b: INTEGER; rebuild: BOOLEAN);
+	BEGIN
+		ASSERT(root # NIL, 20); ASSERT(root.state = open, 21);
+		AddRect(UltimateRootOf(root), root, l, t, r, b, rebuild) 
+	END UpdateRoot;
+
+	PROCEDURE RootOf* (f: Frame): RootFrame;
+	BEGIN
+		ASSERT(f # NIL, 20); ASSERT(f.state = open, 21);
+		WHILE ~(f IS RootFrame) DO f := f.up END;
+		RETURN f(RootFrame)
+	END RootOf;
+
+	PROCEDURE HostOf* (f: Frame): Frame;
+		VAR host: Frame;
+	BEGIN
+		ASSERT(f # NIL, 20);
+		IF f IS RootFrame THEN host := NIL ELSE host := f.up END;
+		RETURN host
+	END HostOf;
+
+	PROCEDURE HostOfRoot* (f: RootFrame): Frame;
+	BEGIN RETURN f.up
+	END HostOfRoot;
+
+	PROCEDURE IsPrinterFrame* (f: Frame): BOOLEAN;
+		VAR p: Ports.Port;
+	BEGIN
+		ASSERT(f # NIL, 20); ASSERT(f.state = open, 21);
+		p := f.rider.Base();
+		RETURN Ports.IsPrinterPort(p)
+	END IsPrinterFrame;
+
+	PROCEDURE InstallFrame* (host: Frame; view: View; x, y, level: INTEGER; focus: BOOLEAN);
+		VAR e, f, g: Frame; w, h,  l, t, r, b: INTEGER; m: Models.Model; std: StdFrame;
+			msg: UpdateCachesMsg; a: View; op: INTEGER; 
+	BEGIN
+		ASSERT(host # NIL, 20); ASSERT(host.state = open, 21);
+		ASSERT(view # NIL, 22); ASSERT(view.context # NIL, 23);
+		ASSERT(view.Domain() # NIL, 24);
+		e := NIL; g := host.down; WHILE (g # NIL) & (g.view # view) DO e := g; g := g.next END;
+		IF g = NIL THEN	(* frame for view not yet in child frame list *)
+			view.context.GetSize(w, h);
+			IF w > MAX(INTEGER) DIV 2 THEN w := MAX(INTEGER) DIV 2 END;
+			IF h > MAX(INTEGER) DIV 2 THEN h := MAX(INTEGER) DIV 2 END;
+			l := x; t := y; r := x + w; b := y + h;
+			(* (l, t, r, b) is child frame rectangle, in local coordinates, and in units *)
+			IF (l < host.r) & (t < host.b) & (r > host.l) & (b > host.t) THEN	(* visible *)
+				IF rootToInstall # NIL THEN
+					g := rootToInstall; rootToInstall := NIL
+				ELSE
+					g := NIL; view.GetNewFrame(g); 
+					IF g = NIL THEN NEW(std); g := std END;
+					ASSERT(~(g IS RootFrame), 100)
+				END;
+				e := NIL; f := host.down; WHILE (f # NIL) & (f.level <= level) DO e := f; f := f.next END;
+				IF e = NIL THEN g.next := host.down; host.down := g ELSE g.next := e.next; e.next := g END;
+				g.down := NIL; g.up := host; g.level := level;
+				g.view := view;
+				g.ConnectTo(host.rider.Base());
+				g.state := open;
+				AdaptFrameTo(g, x, y);
+				IF ~(handler IN view.bad) THEN
+					a := actView; op := actOp; actView := view; actOp := handler;
+					view.HandleViewMsg(g, msg);
+					actView := a; actOp := op
+				END;
+				m := view.ThisModel();
+				IF m # NIL THEN view.era := Models.Era(m) END;
+			END
+		ELSE
+			IF g.level # level THEN	(* adapt to modified z-order *)
+				IF e = NIL THEN host.down := g.next ELSE e.next := g.next END;
+				e := NIL; f := host.down; WHILE (f # NIL) & (f.level <= level) DO e := f; f := f.next END;
+				IF e = NIL THEN g.next := host.down; host.down := g ELSE g.next := e.next; e.next := g END;
+				g.level := level
+			END;
+			AdaptFrameTo(g, x, y)
+			(* possibly optimize: don't call Adapt if x=g.x, y=g.y, "host.era=g.era" *)
+		END;
+		IF (g # NIL) & ~(g IS RootFrame) & (g.state = open) THEN
+			(* AD: for RootFrame,  .front and .mark setting is done in SetRoot *)
+			IF focus THEN
+				g.front := host.front; g.mark := host.mark
+			ELSE
+				g.front := FALSE; g.mark := FALSE
+			END
+		END
+	END InstallFrame;
+	
+	PROCEDURE RemoveAll (f: Frame);
+		VAR g, p: Frame;
+	BEGIN 
+		g := f.down;
+		WHILE g # NIL DO p := g.next; RemoveAll(g);
+			WITH g: RootFrame DO g.next := NIL; Obscure(g) ELSE Close(g) END;
+			g := p
+		END;
+		f.down := NIL
+	END RemoveAll;
+
+	PROCEDURE RemoveFrame* (host, f: Frame);
+	(* f.up = host => f.up # NIL: f is never an UltimateRoot *)
+		VAR g, h: Frame;
+	BEGIN
+		ASSERT(host # NIL, 20); 
+		ASSERT(host.state = open, 21);
+		ASSERT(f # NIL, 22); ASSERT(f.up = host, 23);
+		g := host.down; h := NIL;
+		WHILE (g # NIL) & (g # f) DO h := g; g := g.next END;
+		ASSERT(g = f, 24);
+		IF h = NIL THEN host.down := f.next ELSE h.next := f.next END;
+		RemoveAll(f); WITH f: RootFrame DO f.next := NIL; Obscure(f) ELSE Close(f) END
+	END RemoveFrame;
+
+	PROCEDURE RemoveFrames* (host: Frame; l, t, r, b: INTEGER);
+		VAR f, g: Frame; gl, gt, gr, gb: INTEGER;
+	BEGIN
+		ASSERT(host # NIL, 20); 
+		ASSERT(host.state = open, 21);
+		IF l < host.l THEN l := host.l END;
+		IF t < host.t THEN t := host.t END;
+		IF r > host.r THEN r := host.r END;
+		IF b > host.b THEN b := host.b END;
+		IF (l < r) & (t < b) THEN
+			gl := l + host.gx; gt := t + host.gy; gr := r + host.gx; gb := b + host.gy;
+			f := host.down;
+			WHILE f # NIL DO
+				g := f; f := f.next;
+				IF (gl < g.r + g.gx) & (g.l + g.gx < gr) & (gt < g.b + g.gy) & (g.t + g.gy < gb) THEN
+					RemoveFrame(host, g)
+				END
+			END
+		END
+	END RemoveFrames;
+	
+	PROCEDURE MergeUpdateRegions (to, from: Region);
+		VAR i: INTEGER;
+	BEGIN 
+		i := 0; WHILE i < from.n DO
+			Add(to, from.r[i].v, from.r[i].rebuild, from.r[i].l, from.r[i].t, from.r[i].r, from.r[i].b);
+			INC(i)
+		END;
+		from.n := 0;
+	END MergeUpdateRegions;
+
+	PROCEDURE InstallRoot* (f: Frame; root: RootFrame; x, y, level: INTEGER; focus: BOOLEAN);
+	(** Similar to InstallFrame, but for RootFrames. Installs root into f at position x, y at level, or, if root is installed in f already, adjusts it's position, level and focus path flag. If focus is set, root becomes the focus path in f. *)
+	BEGIN ASSERT(root # NIL, 20); ASSERT(f # NIL, 26);
+		ASSERT(root.state = open, 21); ASSERT(root.view # NIL, 22);
+		ASSERT(f.state = open, 23); ASSERT(f.rider # NIL, 24); 
+		IF root.rider = NIL THEN
+			root.ConnectTo(f.rider.Base())
+		ELSE
+			ASSERT(root.rider.Base() = f.rider.Base(), 25)
+		END;
+		rootToInstall := root; 
+		root.up := f (* AdaptFrameTo depends on this!! *);
+		root.SetOffset(f.gx + x, f.gy + y);
+		AdaptRoot(root);
+		InstallFrame(f, root.view, x, y, level, focus); 
+		MergeUpdateRegions(UltimateRootOf(root).update, root.update);
+		ASSERT(root.update.n = 0, 60);
+		rootToInstall := NIL
+	END InstallRoot;
+
+	PROCEDURE ThisFrame* (host: Frame; view: View): Frame;
+		VAR g: Frame;
+	BEGIN
+		ASSERT(host # NIL, 20); 
+		ASSERT(host.state = open, 21);
+		g := host.down; WHILE (g # NIL) & (g.view # view) DO g := g.next END;
+		RETURN g
+	END ThisFrame;
+
+	PROCEDURE FrameAt* (host: Frame; x, y: INTEGER): Frame;
+	(** return frontmost sub-frame of host that contains (x, y) **)
+		VAR g, h: Frame;
+	BEGIN
+		ASSERT(host # NIL, 20); 
+		ASSERT(host.state = open, 21);
+		g := host.down; h := NIL; INC(x, host.gx); INC(y, host.gy);
+		WHILE g # NIL DO
+			IF (g.gx + g.l <= x) & (x < g.gx + g.r) & (g.gy + g.t <= y) & (y < g.gy + g.b) THEN
+				h := g
+			END;
+			g := g.next
+		END;
+		RETURN h
+	END FrameAt;
+
+	PROCEDURE ShiftFrames (f: Frame; dx, dy: INTEGER);
+		VAR g, h: Frame;
+	BEGIN
+		g := f.down;
+		WHILE g # NIL DO
+			h := g; g := g.next;
+			AdaptFrameTo(h, h.x + dx, h.y + dy);
+			IF h.l = h.r THEN RemoveFrame(f, h) END
+		END
+	END ShiftFrames;
+
+	PROCEDURE UpdateExposedArea (f: Frame; dx, dy: INTEGER);
+		VAR root: RootFrame;
+	BEGIN
+		root := UltimateRootOf(f);
+		IF dy > 0 THEN
+			AddRect(root, f, f.l, f.t, f.r, f.t + dy, keepFrames);
+			IF dx > 0 THEN
+				AddRect(root, f, f.l, f.t + dy, f.l + dx, f.b, keepFrames)
+			ELSE
+				AddRect(root, f, f.r + dx, f.t + dy, f.r, f.b, keepFrames)
+			END
+		ELSE
+			AddRect(root, f, f.l, f.b + dy, f.r, f.b, keepFrames);
+			IF dx > 0 THEN
+				AddRect(root, f, f.l, f.t, f.l + dx, f.b + dy, keepFrames)
+			ELSE
+				AddRect(root, f, f.r + dx, f.t, f.r, f.b + dy, keepFrames)
+			END
+		END
+	END UpdateExposedArea;
+
+	PROCEDURE ScrollFrame (f: Frame; dx, dy: INTEGER);
+		VAR g: Frame; u, dx0, dy0: INTEGER; bitmapScrolling: BOOLEAN; msg: ScrollClassMsg;
+	BEGIN
+		g := f.up;
+		bitmapScrolling := Dialog.isMDI;  (* temporary until bitmap scrolling been fixed *)
+		IF (g # NIL) THEN
+			WHILE bitmapScrolling & (g.up # NIL) DO
+				msg.allowBitmapScrolling := FALSE; g.view.HandleViewMsg(g, msg);
+				bitmapScrolling := bitmapScrolling & msg.allowBitmapScrolling;
+				g  := g.up
+			END
+			(* by default, only root documents and their root views may be bitmap-scrolled: (f.up = NIL) OR (f.up.up = NIL) *)
+		END;
+		IF bitmapScrolling THEN
+			u := f.unit; dx0 := dx; dy0 := dy;
+			INC(dx, f.sx); INC(dy, f.sy); DEC(f.l, f.sx); DEC(f.t, f.sy); DEC(f.r, f.sx); DEC(f.b, f.sy);
+			f.sx := dx MOD u; f.sy := dy MOD u;
+			DEC(dx, f.sx); DEC(dy, f.sy); INC(f.l, f.sx); INC(f.t, f.sy); INC(f.r, f.sx); INC(f.b, f.sy);
+			f.SetOffset(f.gx0 - f.sx, f.gy0 - f.sy);
+			ShiftFrames(f, dx0, dy0);
+			f.Scroll(dx, dy);
+			UpdateExposedArea(f, dx, dy)
+		ELSE AddRect(UltimateRootOf(f), f, f.l, f.t, f.r, f.b, keepFrames)
+			;ShiftFrames(f, dx, dy)	(* need better calculation of shift vector ^ *)
+			(* experimental: don't dispose/close frames until you absolutely have to; rather, shift subframes; when shifting, all frames that are moved 'beyond' f's clip rect should be disposed and closed. (I hope they are; maybe they're just moved beyond the clip rect?) *)
+		END
+	END ScrollFrame;
+	
+
+	(* AD: it looks to me like root views (typically Documents) don't get their .era initialized (v.era := Models.Era(m) is done in InstallFrame, which is never called on root frames; instead, SetRoot is called on root frames, but it doesn't initialize v.era). So, my question is then, How are model messages delivered to root views, and why doesn't BMM? trap in halt 100? *)
+	PROCEDURE BroadcastModelMsg* (f: Frame; VAR msg: Models.Message);
+		VAR v, a: View; send: BOOLEAN; op: INTEGER;
+	BEGIN
+		ASSERT(f # NIL, 20); ASSERT(f.state = open, 21);
+		v := f.view;
+		IF ~(handler IN v.bad) THEN
+			a := actView; op := actOp; actView := v; actOp := handler;
+			IF msg.model # NIL THEN
+				IF (msg.model = v.ThisModel()) & (msg.era > v.era) THEN
+					send := (msg.era - v.era = 1);
+					v.era := msg.era;
+					IF ~send THEN
+						Log.synch := FALSE;
+						HALT(100)
+					END
+				ELSE send := FALSE
+				END
+			ELSE send := TRUE
+			END;
+			IF send THEN
+				WITH msg: Models.NeutralizeMsg DO
+					v.Neutralize
+				ELSE
+					 v.HandleModelMsg(msg)
+				END
+			END;
+			actView := a; actOp := op
+		END;
+		f := f.down; 
+		WHILE f # NIL DO
+			IF ~(f IS RootFrame) THEN
+				BroadcastModelMsg(f, msg)
+			END;
+			f := f.next
+		END
+	END BroadcastModelMsg;
+
+	PROCEDURE HandleUpdateMsg (f: Frame; VAR msg: UpdateMsg);
+		VAR root: RootFrame; g: Frame; l, t, r, b,  dx, dy: INTEGER;
+	BEGIN
+		root := UltimateRootOf(f);
+		IF msg.scroll THEN
+			IF root.update.n = 0 THEN
+				ScrollFrame(f, msg.dx, msg.dy)
+			ELSE
+				AddRect(root, f, f.l, f.t, f.r, f.b, msg.rebuild)
+			END
+		ELSE
+			IF msg.all THEN
+				IF f # root THEN g := f.up ELSE g := root END;
+				dx := f.gx - g.gx; dy := f.gy - g.gy;
+				AddRect(root, g, f.l + dx, f.t + dy, f.r + dx, f.b + dy, msg.rebuild)
+					(* AD: why does it add embedding frame (and view!) to rebuild region if msg.all = TRUE? I guess that's in order to let the embedding view NOT install a frame for view. So this is a little more efficient than doing rebuildFrames on v's contaier. Besides, v may not know it's container. This is cool about Views! Good job developers! However, this is not mentioned in the documentation, and may lead to unexpected behaviour smtms *)
+			ELSE
+				l := msg.l; t := msg.t; r := msg.r; b := msg.b;
+				IF l < f.l THEN l := f.l END;
+				IF t < f.t THEN t := f.t END;
+				IF r > f.r THEN r := f.r END;
+				IF b > f.b THEN b := f.b END;
+				AddRect(root, f, l, t, r, b, msg.rebuild)
+			END
+		END
+	END HandleUpdateMsg;
+
+	PROCEDURE BroadcastViewMsg* (f: Frame; VAR msg: Message);
+		VAR v, a: View; op: INTEGER;
+	BEGIN
+		ASSERT(f # NIL, 20); ASSERT(f.state = open, 21);
+		v := f.view;
+		IF (msg.view = v) OR (msg.view = NIL) THEN
+			WITH msg: UpdateMsg DO
+				HandleUpdateMsg(f, msg)
+			ELSE
+				IF ~(handler IN v.bad) THEN
+					a := actView; op := actOp; actView := v; actOp := handler;
+					v.HandleViewMsg(f, msg);
+					actView := a; actOp := op
+				END
+			END
+		END;
+		IF msg.view # v THEN
+			f := f.down; 
+			WHILE f # NIL DO
+				IF ~(f IS RootFrame) THEN BroadcastViewMsg(f, msg) END;
+				f := f.next
+			END
+		END
+	END BroadcastViewMsg;
+	
+
+	PROCEDURE ForwardCtrlMsg* (f: Frame; VAR msg: CtrlMessage);
+		CONST pre = 0; translate = 1; backoff = 2; final = 3;
+		VAR v, focus, a: View; g, h: Frame; op: INTEGER; req: BOOLEAN;
+	BEGIN
+		ASSERT(f # NIL, 20); ASSERT(f.state = open, 21); ASSERT(f.rider # NIL, 22);
+		v := f.view;
+		focus := NIL; IF f IS RootFrame THEN g := NIL ELSE g := f.up END; req := FALSE;
+		HandleCtrlMsg(pre, f, g, msg, f.mark, f.front, req); 
+		IF ~(handler IN v.bad) THEN
+			a := actView; op := actOp; actView := v; actOp := handler;
+			v.HandleCtrlMsg(f, msg, focus);
+			actView := a; actOp := op
+		END;
+		IF focus # NIL THEN	(* propagate msg to another view *)
+			(*
+			IF (f.focus # NIL) & (f.focus.view = focus) & (f.focus.up # NIL) THEN (* cache hit *)
+				(* the field .focus may point to a frame that used to display focus, but was later removed. Such a .focus is invalid, and sending the event down to that frame would result user seeing f.view become unresponsive - because all controller messages would be sent down to the wrong frame. This does not happen because (f.focus.view = focus) is checked: when a frame is removed, it's .view is reset, and thus this checks that the cached frame has not been removed (as well as that the cached frame displays the focus view). With my amendments, however, now RootFrames may be embedded, and thus .focus might point to a RootFrame. RootFrames are never removed, and their .view always points to their view, it's never reset to NIL. There is no easy way to check if the RootFrame has actually been removed (maybe RootFrame.up = NIL would help?); thus, I just 'mistrust' all RootFrames: the third condition ~(f.focus IS RootFrame) guarantees that for RootFrames the cache is never used, but an actual frame is fetched from f.down  *)
+				h := f.focus
+			ELSE	(* cache miss *)
+				h := f.down; WHILE (h # NIL) & (h.view # focus) DO h := h.next END
+			END;
+			*)
+			h := f.down; WHILE (h # NIL) & (h.view # focus) DO h := h.next END;
+			IF h # NIL THEN 
+				HandleCtrlMsg(translate, f, h, msg, f.mark, f.front, req);
+				f.focus := h; ForwardCtrlMsg(h, msg); 
+				HandleCtrlMsg(backoff, f, g, msg, f.mark, f.front, req)
+			END
+		ELSE
+			HandleCtrlMsg(final, f, g, msg, f.mark, f.front, req)
+		END;
+		IF req & (g # NIL) THEN g.view.ConsiderFocusRequestBy(f.view) END
+	END ForwardCtrlMsg;
+
+	PROCEDURE RestoreFrame (f: Frame; l, t, r, b: INTEGER);
+		VAR rd: Ports.Rider; g: Frame; v, a: View; op: INTEGER;
+			u, w, h,  cl, ct, cr, cb,  dx, dy: INTEGER; col: Ports.Color; 
+	BEGIN
+		(* WITH f: RootFrame DO ASSERT(~IsObscured(f), 20) ELSE END; *)
+		IF l < f.l THEN l := f.l END;
+		IF t < f.t THEN t := f.t END;
+		IF r > f.r THEN r := f.r END;
+		IF b > f.b THEN b := f.b END;
+		IF (l < r) & (t < b) THEN	(* non-empty rectangle to be restored *)
+			v := f.view; rd := f.rider; u := f.unit;
+			rd.GetRect(cl, ct, cr, cb);	(* save clip rectangle *)
+			rd.SetRect((f.gx + l) DIV u, (f.gy + t) DIV u, (f.gx + r) DIV u, (f.gy + b) DIV u);
+			IF ~(restore IN v.bad) THEN
+				a := actView; op := actOp; actView := v; actOp := restore;
+				col := transparent; v.GetBackground(col);
+				IF col # transparent THEN f.DrawRect(l, t, r, b, Ports.fill, col) END;
+				IF ~ (unloaded IN v.bad) THEN
+					IF Kernel.TypeOf(v).mod.refcnt >= 0 THEN
+						v.Restore(f, l, t, r, b)
+					ELSE
+						v.bad := v.bad + {unloaded}
+					END
+				END;
+				g := f.down;
+				WHILE g # NIL DO	(* loop over all subframes to handle overlaps *)
+					dx := f.gx - g.gx; dy := f.gy - g.gy;
+					
+					RestoreFrame(g, l + dx, t + dy, r + dx, b + dy);
+					
+					g := g.next
+				END;
+				v.RestoreMarks(f, l, t, r, b);
+				actView := a; actOp := op
+			END;
+			IF v.bad # {} THEN
+				IF externalize IN v.bad THEN
+					u := f.dot; v.context.GetSize(w, h);
+					f.DrawLine(0, 0, w - u, h - u, u, Ports.grey75);
+					f.DrawLine(w - u, 0, 0, h - u, u, Ports.grey75)
+				END;
+				f.MarkRect(l, t, r, b, Ports.fill, Ports.dim25, Ports.show)
+			END;
+			IF cl # magic THEN
+				rd.SetRect(cl, ct, cr, cb)	(* restore current clip rectangle *)
+			END
+		END
+	END RestoreFrame;
+
+	PROCEDURE RestoreRoot* (root: RootFrame; l, t, r, b: INTEGER);
+	(** Restore frame tree starting with root[l, t, r, b] *)
+		VAR port: Ports.Port; rd: Ports.Rider; ur: RootFrame; dx, dy: INTEGER;
+			u,  gl, gt, gr, gb: INTEGER; col: Ports.Color;
+	BEGIN
+		ASSERT(root # NIL, 20); ASSERT(root.state = open, 21);
+		ASSERT(~IsObscured(root), 23);
+		IF root.up # NIL THEN
+			ur := UltimateRootOf(root); ASSERT(~IsObscured(ur), 24);
+			dx := root.gx - ur.gx; dy := root.gy - ur.gy; 
+			INC(l, dx); INC(t, dy); INC(r, dx); INC(b, dy);
+			root := ur
+		END;
+		IF l < root.l THEN l := root.l END;
+		IF t < root.t THEN t := root.t END;
+		IF r > root.r THEN r := root.r END;
+		IF b > root.b THEN b := root.b END;
+		IF (l < r) & (t < b) THEN
+			u := root.unit;
+			gl := l + root.gx; gt := t + root.gy; gr := r + root.gx; gb := b + root.gy;
+			rd := root.rider; port := rd.Base();
+			actFrame := root;
+			IF ~IsPrinterFrame(root) THEN 
+				(* if a root is obscured, it SHOULD NOT open a buffer! An obscured root will have it's frame tree built, but will not be drawn because it's rider's clipping rectangle is set to zero rect (and cliprects of it's embedees are contained within their embedder's cliprect). However, if a buffer is open, in my case, a GTK buffer, it is pre-filled by GTK with widget's (DrawingArea's) default color. When the buffer is closed, this background color box appears on top of Blackbox's window. (It is in my case quickly overwritten by BB views, but the grey box flickers and makes it look upprofessional) *)
+				port.OpenBuffer(gl DIV u, gt DIV u, gr DIV u, gb DIV u) 
+			END;
+			col := transparent; root.view.GetBackground(col);
+			IF (col = transparent) & (root.up = NIL) THEN col := Ports.background END;
+			RestoreFrame(root, l, t, r, b);
+			IF ~IsPrinterFrame(root) THEN port.CloseBuffer END;
+			actFrame := NIL
+		END
+	END RestoreRoot;
+
+	(* k8: slightly more efficient variant of RestoreFrame *)
+	PROCEDURE RestoreFrame2 (f: Frame; l, t, r, b: INTEGER; depth: INTEGER);
+	VAR
+		rd: Ports.Rider;
+		g: Frame;
+		v, a: View;
+		op: INTEGER;
+		dx, dy: INTEGER;
+		col: Ports.Color;
+	BEGIN
+		(* WITH f: RootFrame DO ASSERT(~IsObscured(f), 20) ELSE END; *)
+		IF l < f.l THEN l := f.l END;
+		IF t < f.t THEN t := f.t END;
+		IF r > f.r THEN r := f.r END;
+		IF b > f.b THEN b := f.b END;
+		IF (l < r) & (t < b) THEN	(* non-empty rectangle to be restored *)
+			v := f.view; rd := f.rider;
+			IF ~(restore IN v.bad) THEN
+				a := actView; op := actOp; actView := v; actOp := restore;
+				col := transparent; v.GetBackground(col);
+				IF ~ (unloaded IN v.bad) THEN
+					IF Kernel.TypeOf(v).mod.refcnt >= 0 THEN
+						v.Restore(f, l, t, r, b)
+					ELSE
+						v.bad := v.bad + {unloaded}
+					END
+				END;
+				g := f.down;
+				WHILE g # NIL DO	(* loop over all subframes to handle overlaps *)
+					dx := f.gx - g.gx; dy := f.gy - g.gy;
+					RestoreFrame2(g, l + dx, t + dy, r + dx, b + dy, depth + 1);
+					g := g.next
+				END;
+				v.RestoreMarks(f, l, t, r, b);
+				actView := a; actOp := op
+			END
+		END
+	END RestoreFrame2;
+
+	(* k8: this is actually an internal procedure, but some modules need to call it.
+		DO NOT call it from your code, otherwise Bad Things will happen! *)
+	(* this procedure sets empty clip rect, and restores the frame. it is intended to be used
+		when a new window just created and needs to have its frame tree built. *)
+	PROCEDURE BuildFrameTree* (root: RootFrame; magicMove: BOOLEAN);
+	VAR frm: Frame;
+	BEGIN
+		ASSERT(root # NIL, 20); ASSERT(root.state = open, 21);
+		ASSERT(root.rider # NIL, 22); ASSERT(root.up = NIL, 23);
+		IF (root.l < root.r) & (root.t < root.b) THEN
+			(* need to move obscured root, otherwise restoration will fail *)
+			ASSERT(hMagic + (root.r - root.l) > hMagic, 100);
+			ASSERT(hMagic + (root.b - root.t) > hMagic, 101);
+			IF magicMove THEN root.SetOffset(hMagic, hMagic) END;
+			root.rider.SetRect(hMagic, hMagic, hMagic, hMagic);
+			(* now we can restore it *)
+			RestoreFrame2(root, root.l, root.t, root.r, root.b, 0);
+			(* find and set focused frame; we need this to make PollFocusMsg work *)
+			IF root.focus = NIL THEN
+				frm := root.down;
+				WHILE (frm # NIL) & (frm.focus # NIL) DO frm := frm.next END;
+				IF frm = NIL THEN frm := root.down END;
+				IF (frm # NIL) & (frm.view # NIL) THEN
+					root.view.ConsiderFocusRequestBy(frm.view)
+				END;
+			END
+			(* no need to move the windowd back, we need "unreally obscured" flag *)
+		END
+	END BuildFrameTree;
+
+	PROCEDURE HasAnyFrames* (root: RootFrame): BOOLEAN;
+	BEGIN ASSERT(root # NIL, 20); RETURN (root.down # NIL)
+	END HasAnyFrames;
+
+	PROCEDURE ThisCand (f: Frame; v: View): Frame;
+	(* find frame g with g.view = v *)
+		VAR g: Frame;
+	BEGIN
+		WHILE (f # NIL) & (f.view # v) DO
+			g := ThisCand(f.down, v);
+			IF g # NIL THEN f := g ELSE f := f.next END
+		END;
+		RETURN f
+	END ThisCand;
+
+	PROCEDURE ValidateRoot* (root: RootFrame);
+	(** Composite all regions under root requested for update with Views.Update and restore the resulting composition *)
+		VAR rgn: Region; f: Frame; v: View; i, n: INTEGER; ur: RootFrame;
+	BEGIN
+		ASSERT(root # NIL, 20); ASSERT(root.state = open, 21);
+		ur := UltimateRootOf(root); 
+		IF ur # root THEN ASSERT(root.update.n = 0, 100); root := ur END;
+		rgn := root.update; n := rgn.n; rgn.n := 0; i := 0;
+		WHILE i < n DO
+			IF rgn.r[i].rebuild THEN
+				v := rgn.r[i].v;
+				IF v # NIL THEN f := ThisCand(root, v) ELSE f := NIL END;
+				IF f = NIL THEN f := root END;
+				RemoveFrames(f, rgn.r[i].l - f.gx, rgn.r[i].t - f.gy, rgn.r[i].r - f.gx, rgn.r[i].b - f.gy)
+			END;
+			INC(i)
+		END;
+		i := 0;
+		WHILE i < n DO
+			RestoreRoot(root, rgn.r[i].l - root.gx, rgn.r[i].t - root.gy, rgn.r[i].r - root.gx, rgn.r[i].b - root.gy);
+			INC(i)
+		END
+	END ValidateRoot;
+
+	PROCEDURE MarkBordersIn (f: Frame);
+		VAR g: Frame; w, h: INTEGER;
+	BEGIN
+		g := f.down;
+		WHILE g # NIL DO
+			g.view.context.GetSize(w, h);
+			MarkBorder(f, g.view, g.x, g.y, g.x + w, g.y + h);
+			MarkBordersIn(g);
+			g := g.next
+		END
+	END MarkBordersIn;
+
+	PROCEDURE MarkBorders* (root: RootFrame);
+	BEGIN
+		MarkBordersIn(root)
+	END MarkBorders;
+
+	PROCEDURE ReadFont* (VAR rd: Stores.Reader; OUT f: Fonts.Font);
+		VAR version: INTEGER;
+			fingerprint, size: INTEGER; typeface: Fonts.Typeface; style: SET; weight: INTEGER;
+	BEGIN
+		rd.ReadVersion(0, 0, version);
+		rd.ReadInt(fingerprint);
+		rd.ReadXString(typeface); rd.ReadInt(size); rd.ReadSet(style); rd.ReadXInt(weight);
+		f := Fonts.dir.This(typeface, size, style, weight); ASSERT(f # NIL, 60);
+		IF f.IsAlien() THEN
+			Stores.Report("#System:AlienFont", typeface, "", "")
+		END
+	END ReadFont;
+
+	PROCEDURE WriteFont* (VAR wr: Stores.Writer; f: Fonts.Font);
+	BEGIN
+		ASSERT(f # NIL, 20);
+		wr.WriteVersion(0);
+		wr.WriteInt(0);
+		wr.WriteXString(f.typeface); wr.WriteInt(f.size);
+		wr.WriteSet(f.style); wr.WriteXInt(f.weight)
+	END WriteFont;
+
+
+	(** view/file interaction **)
+
+	PROCEDURE Old* (ask: BOOLEAN; VAR loc: Files.Locator;
+												VAR name: Files.Name; VAR conv: Converters.Converter): View;
+		VAR v: View;
+	BEGIN
+		ASSERT(ask OR (loc # NIL), 20);
+		ASSERT(ask OR (name # ""), 21);
+		IF ask THEN
+			ASSERT(getSpecHook # NIL, 101);
+			getSpecHook.GetIntSpec(loc, name, conv)
+		END;
+		IF (loc # NIL) & (name # "") THEN
+			ASSERT(viewHook # NIL, 100);
+			v := viewHook.OldView(loc, name, conv)
+		ELSE v := NIL
+		END;
+		RETURN v
+	END Old;
+	
+	PROCEDURE OldView* (loc: Files.Locator; name: Files.Name): View;
+		VAR conv: Converters.Converter;
+	BEGIN
+		conv := NIL;
+		RETURN Old(dontAsk, loc, name, conv)
+	END OldView;
+
+	PROCEDURE Register* (view: View; ask: BOOLEAN; VAR loc: Files.Locator;
+					VAR name: Files.Name; VAR conv: Converters.Converter; OUT res: INTEGER);
+	BEGIN
+		ASSERT(viewHook # NIL, 100);
+		ASSERT(getSpecHook # NIL, 101);
+		ASSERT(view # NIL, 20);
+		ASSERT(ask OR (loc # NIL), 22); ASSERT(ask OR (name # ""), 23);
+		IF ask OR (loc = NIL) OR (name = "") OR (loc.res = 77) THEN
+			getSpecHook.GetExtSpec(view, loc, name, conv)
+		END;
+		IF (loc # NIL) & (name # "") THEN
+			viewHook.RegisterView(view, loc, name, conv); res := loc.res
+		ELSE res := 7
+		END
+	END Register;
+
+	PROCEDURE RegisterView* (view: View; loc: Files.Locator; name: Files.Name);
+		VAR res: INTEGER; conv: Converters.Converter;
+	BEGIN
+		conv := NIL;
+		Register(view, dontAsk, loc, name, conv, res)
+	END RegisterView;
+
+	(** direct view opening **)
+
+	PROCEDURE Open* (view: View; loc: Files.Locator; name: Files.Name; conv: Converters.Converter);
+	BEGIN
+		ASSERT(view # NIL, 20); ASSERT((loc = NIL) = (name = ""), 21);
+		ASSERT(viewHook # NIL, 100);
+		viewHook.Open(view, name, loc, name, conv, FALSE, FALSE, FALSE, FALSE, FALSE)
+	END Open;
+
+	PROCEDURE OpenView* (view: View);
+	BEGIN
+		ASSERT(view # NIL, 20);
+		Open(view, NIL, "", NIL)
+	END OpenView;
+
+	PROCEDURE OpenAux* (view: View; title: Title);
+	BEGIN
+		ASSERT(view # NIL, 20); ASSERT(viewHook # NIL, 100);
+		IF title = "" THEN title := "#System:untitled" END;
+		viewHook.Open(view, title, NIL, "", NIL, FALSE, TRUE, FALSE, TRUE, TRUE)
+	END OpenAux;
+
+
+	(** view producer/consumer decoupling **)
+
+	PROCEDURE Deposit* (view: View);
+		VAR q: QueueElem;
+	BEGIN
+		ASSERT(view # NIL, 20);
+		NEW(q); q.view := view;
+		IF queue.head = NIL THEN queue.head := q ELSE queue.tail.next := q END;
+		queue.tail := q; INC(queue.len)
+	END Deposit;
+
+	PROCEDURE Fetch* (OUT view: View);
+		VAR q: QueueElem;
+	BEGIN
+		q := queue.head; ASSERT(q # NIL, 20);
+		DEC(queue.len); queue.head := q.next;
+		IF queue.head = NIL THEN queue.tail := NIL END;
+		view := q.view
+	END Fetch;
+
+	PROCEDURE Available* (): INTEGER;
+	BEGIN
+		RETURN queue.len
+	END Available;
+
+	PROCEDURE ClearQueue*;
+	BEGIN
+		queue.len := 0; queue.head := NIL; queue.tail := NIL;
+		actView := NIL	(* HACK! prevents invalidation of view due to trap in Dialog.Call *)
+	END ClearQueue;
+
+
+	(** attach controller framework **)
+
+	PROCEDURE InitCtrl* (p: CtrlMsgHandler);
+	BEGIN
+		ASSERT(HandleCtrlMsg = NIL, 20); HandleCtrlMsg := p
+	END InitCtrl;
+
+	PROCEDURE (h: NotifyHook) Notify (id0, id1: INTEGER; opts: SET);
+		VAR msg: NotifyMsg;
+	BEGIN
+		ASSERT(msgHook # NIL, 100);
+		msg.id0 := id0; msg.id1 := id1; msg.opts := opts;
+		msgHook.Omnicast(msg)
+	END Notify;
+	
+	PROCEDURE Omnicast* (VAR msg: ANYREC);
+	BEGIN
+		msgHook.Omnicast(msg)
+	END Omnicast;
+
+	PROCEDURE HandlePropMsg* (v: View; VAR msg: PropMessage);
+		VAR a: View; op: INTEGER;
+	BEGIN
+		IF ~(handler IN v.bad) & ~(unloaded IN v.bad) THEN
+			IF Kernel.TypeOf(v).mod.refcnt >= 0 THEN
+				a := actView; op := actOp; actView := v; actOp := handler;
+				v.HandlePropMsg(msg);
+				actView := a; actOp := op
+			ELSE
+				v.bad := v.bad + {unloaded}
+			END
+		END
+	END HandlePropMsg;
+	
+	
+	(* view invalidation *)
+	
+	PROCEDURE IsInvalid* (v: View): BOOLEAN;
+	BEGIN
+		RETURN v.bad # {}
+	END IsInvalid;
+	
+	PROCEDURE RevalidateView* (v: View);
+	BEGIN
+		v.bad := {};
+		Update(v, keepFrames)
+	END RevalidateView;
+	
+	PROCEDURE TrapCleanup;
+	BEGIN
+		copyModel := NIL;
+		IF actView # NIL THEN
+			INCL(actView.bad, actOp);
+			IF actFrame # NIL THEN
+				UpdateRoot(actFrame, actFrame.l, actFrame.t, actFrame.r, actFrame.b, keepFrames);
+				actFrame := NIL
+			END;
+			Update(actView, keepFrames);
+			actView := NIL
+		END
+	END TrapCleanup;
+	
+	PROCEDURE Init;
+		VAR h: NotifyHook;
+	BEGIN
+		NEW(h); Dialog.SetNotifyHook(h);
+		domainGuard := 0; ClearQueue;
+		Kernel.InstallTrapChecker(TrapCleanup)
+	END Init;
+	
+BEGIN
+	Init
+END Views.

@@ -524,7 +524,8 @@ MODULE DevCPLamd64;
 			IF src.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
 			DevCPE.GenByte(op + 4 + w); GenConst32(src, FALSE)
 		ELSE
-			IF s = 2 THEN ripTrail := 1 ELSIF dst.form IN {Int16, Char16} THEN ripTrail := 2 ELSE ripTrail := 4 END;
+			IF (s = 2) OR (src.form <= Int8) THEN ripTrail := 1	(* 64-бит: byte-формы — imm8 за disp32 (было 4: чтения bool/byte-глобалов съезжали на -3) *)
+			ELSIF dst.form IN {Int16, Char16} THEN ripTrail := 2 ELSE ripTrail := 4 END;
 			IF src.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;
 			DevCPE.GenByte(80H + s + w); GenCExt(op, dst); GenConst32(src, TRUE);
 			ripTrail := 0

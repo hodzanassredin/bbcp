@@ -161,7 +161,9 @@ MODULE Kernel;
 			next: TrapCleaner
 		END;
 
-		TryHandler* = PROCEDURE (a, b, c: INTEGER);
+		ADDRESS* = LONGINT;	(* экспорт: иначе в osf уходит отдельный тип, несовместимый с LONGINT при вызовах *)
+
+		TryHandler* = PROCEDURE (a, b, c: ADDRESS);
 
 
 		(* meta extension suport *)
@@ -176,7 +178,6 @@ MODULE Kernel;
 			ext*: ItemExt
 		END;
 
-		ADDRESS* = LONGINT;	(* экспорт: иначе в osf уходит отдельный тип, несовместимый с LONGINT при вызовах *)
 		FrameDesc = RECORD 	(** Record for iterating over call stack, cf. GetRefFrame *)
 			sentry: Sentry;	(* FrameDesc may be created in the stack, thus .sentinel = NIL is the only way to detect that FrameDesc hasn't been initialized (because a pointer field is the only one that the Language Report guarantees a preset value). *)
 			lo: ADDRESS;	(* the lower boundary of the scanned stack *)
@@ -274,7 +275,7 @@ MODULE Kernel;
 			Ln*: PROCEDURE;
 			gradualCommit: BOOLEAN;
 			(* TRUE => a cluster's virtual memory is committed gradually on demand rather than at once upon reserving address space (MEM_COMMIT and MEM_RESERVE are separate). If TRUE, .Commit should be implemented. *)
-			Try*: PROCEDURE (h: TryHandler; a, b, c: INTEGER);	(* hook for implementation of PROCEDURE Try *)
+			Try*: PROCEDURE (h: TryHandler; a, b, c: ADDRESS);	(* hook for implementation of PROCEDURE Try *)
 	(*		AllocateMem*: PROCEDURE ((*adr: ADDRESS; *)VAR size: INTEGER; forHeap: BOOLEAN; OUT addr: ADDRESS);
 			(** Allocate at least size bytes of memory (address space); forHeap => for heap use, otherwise module memory. If ~forHeap, then the platform may allocate a greater size, 'cause it will be used as a heap cluster. The base address addr and size of allocated bytes are returned; addr = 0, allocation failed, and size is unchanged *)
 			(* ? rename to AllocAddressSpace? *)
@@ -1140,7 +1141,7 @@ MODULE Kernel;
 		loader := h
 	END SetLoaderHook;
 	
-	PROCEDURE^ Try* (h: TryHandler; a, b, c: INTEGER);	(* COMPILER DEPENDENT *)
+	PROCEDURE^ Try* (h: TryHandler; a, b, c: ADDRESS);	(* COMPILER DEPENDENT *)
 
 	PROCEDURE InitModule (mod: Module);	(* initialize linked modules *)
 		VAR body: Command;
@@ -1829,8 +1830,11 @@ MODULE Kernel;
 		VAR sp, p, min, max: LONGINT; c: Cluster; ar: AdrRef;
 	BEGIN
 		S.GETREG(FP, sp);
-		INC(sp, 7); sp := sp DIV 8 * 8;	(* 64-бит: указатели на стеке 8-выровнены, FP может быть ≡ 4 (mod 8);
-			скан с FP сдвигал все 8-байтные чтения на 4 → якоря не находились (use-after-free) *)
+		INC(sp, 3); sp := sp DIV 4 * 4;	(* 64-бит: шаг 4, а не 8! Компилятор ПАКУЕТ 8-байтные поля
+			без 8-выравнивания (Cluster.next@4), поэтому указатели на стеке (поля записей-
+			локалов, напр. Stores.Reader) бывают на адресах ≡ 4 (mod 8). Скан с шагом 8
+			(любой фазы) пропускал половину слотов → живые объекты собирались Sweep
+			(use-after-free в StdConfig.Setup: модель жила только в слоте ≡4 (mod 8)). *)
 		nofcand := 0; c := root;
 		WHILE c.next # NIL DO c := c.next END;
 		min := S.VAL(LONGINT, root); max := S.VAL(LONGINT, c) + c.size;
@@ -1840,7 +1844,7 @@ MODULE Kernel;
 				candidates[nofcand] := p; INC(nofcand);
 				IF nofcand = LEN(candidates) - 1 THEN CheckCandidates; nofcand := 0 END
 			END;
-			INC(sp, 8)
+			INC(sp, 4)
 		END;
 		candidates[nofcand] := max; INC(nofcand);	(* ensure complete scan for interface mark*)
 		IF nofcand > 0 THEN CheckCandidates END
@@ -1885,7 +1889,7 @@ MODULE Kernel;
 		WHILE h # NIL DO Mark(h.blk); h := h.next END
 	END CheckFinalizers;
 
-	PROCEDURE ExecFinalizer (a, _, __: INTEGER);
+	PROCEDURE ExecFinalizer (a, _, __: ADDRESS);
 		VAR f: FList; fin: PROCEDURE(this: ANYPTR); ar: AdrRef;
 	BEGIN
 		f := S.VAL(FList, a);
@@ -1904,7 +1908,7 @@ MODULE Kernel;
 	BEGIN
 		WHILE hotFinalizers # NIL DO
 			f := hotFinalizers; hotFinalizers := hotFinalizers.next;
-			Try(ExecFinalizer, S.VAL(INTEGER, f), 0, 0)
+			Try(ExecFinalizer, S.VAL(ADDRESS, f), 0, 0)
 		END;
 		wouldFinalize := FALSE
 	END CallFinalizers;
@@ -2296,7 +2300,7 @@ MODULE Kernel;
 		(*EXCL(dirty, defLogger)*)
 	END LogThisStack;
 	
-	PROCEDURE TrapCleanup (_, __, ___: INTEGER);
+	PROCEDURE TrapCleanup (_, __, ___: ADDRESS);
 		VAR t: TrapCleaner; u: INTEGER;
 	BEGIN
 		(*INCL(dirty, cleanup);*)
@@ -2314,7 +2318,7 @@ MODULE Kernel;
 		guarded := on
 	END SetTrapGuard;
 
-	PROCEDURE Try* (h: TryHandler; a, b, c: INTEGER);
+	PROCEDURE Try* (h: TryHandler; a, b, c: ADDRESS);
 	BEGIN
 		IF ~platform.initialized THEN
 			BString('Fatal: No Platform hook installed into Kernel'); BLn; Quit(1)
@@ -2395,7 +2399,7 @@ MODULE Kernel;
 		BString("********* TRAP REPORT - END *********"); BLn;
 	END SigRepFooter;
 
-	PROCEDURE Report (_, __, ___: INTEGER);
+	PROCEDURE Report (_, __, ___: ADDRESS);
 		VAR u: INTEGER;
 	BEGIN
 		(*INCL(dirty, viewer);*)
@@ -2480,7 +2484,7 @@ MODULE Kernel;
 		(* ;debug := FALSE *)
 	END InitHeap;
 	
-	PROCEDURE (VAR p: Platform) Setup* (baseStack: LONGINT; opts: SET; OUT id: INTEGER; OUT eoln: Eoln; VAR monoClusterMem: BOOLEAN; OUT gradualCommit: BOOLEAN; VAR physicalMemory: INTEGER; OUT try: PROCEDURE (h: TryHandler; a, b, c: INTEGER)), NEW, ABSTRACT;
+	PROCEDURE (VAR p: Platform) Setup* (baseStack: LONGINT; opts: SET; OUT id: INTEGER; OUT eoln: Eoln; VAR monoClusterMem: BOOLEAN; OUT gradualCommit: BOOLEAN; VAR physicalMemory: INTEGER; OUT try: PROCEDURE (h: TryHandler; a, b, c: ADDRESS)), NEW, ABSTRACT;
 	
 	PROCEDURE SetPlatform* (p: POINTER TO Platform);
 		VAR opts: SET;

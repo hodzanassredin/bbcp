@@ -1,0 +1,26 @@
+MODULE ObxProbe17;
+
+	IMPORT Console, Strings, SYSTEM;
+
+	VAR g: BOOLEAN; i: INTEGER; g2: BOOLEAN;
+
+	PROCEDURE T*;
+		VAR base, a: LONGINT; b: BYTE; t: ARRAY 32 OF CHAR;
+	BEGIN
+		g := TRUE; i := 42; g2 := TRUE;
+		ASSERT(g, 77);
+		base := SYSTEM.ADR(i);
+		a := base - 16;
+		WHILE a <= base + 24 DO
+			SYSTEM.GET(a, b);
+			Strings.IntToString(SHORT(a - base), t); Console.WriteStr(t); Console.WriteStr("=");
+			Strings.IntToString(b, t); Console.WriteStr(t); Console.WriteStr("  ");
+			INC(a)
+		END;
+		Console.WriteLn;
+		IF g THEN Console.WriteStr("g=ok") ELSE Console.WriteStr("g BAD") END;
+		IF g2 THEN Console.WriteStr(" g2=ok") ELSE Console.WriteStr(" g2 BAD") END;
+		Console.WriteLn
+	END T;
+
+END ObxProbe17.

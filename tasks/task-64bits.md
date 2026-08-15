@@ -410,3 +410,30 @@ Stores-чтения (ReadInt/версии/rd-era); (3) трап-репортер
 падает (мусорный sp) — маскирует трапы; (4) первое окно GUI;
 (5) in-BB компиляция не пишет .ocf (п.82); (6) GTK-нити/HandleTrap
 (п.84). НЕ ЗАБЫТЬ: коммит сессии.
+
+== 2026-08-15 (2): серия корневых фиксов — меню читаются, GUI рисует ==
+1. MarkLocals: шаг 4 (не 8) — указатели на стеке бывают ≡4 (mod 8)
+   (упакованные поля записей). КОРЕНЬ use-after-free всей недели.
+   Доказано gdb-сканом стека в фатальном collect (KB п.96).
+2. Views.Overwritten: -4*(mno+1) → -8*(mno+1) (KB п.97).
+3. HandleTrap только на fault-сигналы (SIGCONT от glib-потоков убит)
+   (KB п.98).
+4. Try-машинерия INTEGER→ADDRESS: Kernel.TryHandler/Try, ExecFinalizer/
+   TrapCleanup/Report, Dialog.Exec, Services (SHORT убран), TabViews.
+   ExecNotifier, CPB StPar1 THISRECORD Int64 (KB п.99). Урок: err 115
+   позиции вводят в заблуждение — инструментировать CheckParameters.
+5. КОРЕНЬ "errors detected in menu file": CPLamd64.GenConOp ripTrail=4
+   вместо 1 для byte-форм (cmp bool-глобала с imm8) → чтения bool/byte
+   глобалов съезжали на -3 → StdMenuTool.noerr читался как FALSE.
+   Фикс + полная пересборка мира (KB п.100).
+6. КОРЕНЬ SEGV в pango_layout_get_text: SysVPostCall не снимал слоты
+   аргументов (mov rsp,r12; pop r12 оставлял их на стеке) → при
+   ВЛОЖЕННОМ ccall (ccall-результат как аргумент) слоты внутреннего
+   вызова сдвигали аргументы внешнего: pixel_extents получал
+   (line, мусор, NIL) вместо (line, NIL, &rect) → pango писал
+   logical_rect в чужой объект → портил g_class layout'а. Фикс:
+   SysVPostCall(nslots) + add rsp, nslots*8 (KB будет п.103).
+После всего: мир пересобран, GUI доходит до отрисовки текста.
+Открытые: трап-репортер рекурсия; in-BB компиляция (п.82);
+ObxCompileLog/ObxTaAdr (err 249/220); Gtk64-Audit остатки (ccall16
+миграция, REAL-аргументы, callbacks).

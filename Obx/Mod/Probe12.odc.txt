@@ -1,0 +1,33 @@
+MODULE ObxProbe12;
+
+	TYPE
+		TryHandler = PROCEDURE (a, b, c: LONGINT);
+		Platform = RECORD
+			Try: PROCEDURE (h: TryHandler; a, b, c: INTEGER)
+		END;
+
+	VAR platform: POINTER TO Platform;
+
+	PROCEDURE^ Try (h: TryHandler; a, b, c: INTEGER);
+
+	PROCEDURE (VAR p: Platform) Setup (OUT try: PROCEDURE (h: TryHandler; a, b, c: INTEGER)), NEW;
+	BEGIN
+		try := p.Try
+	END Setup;
+
+	PROCEDURE Try (h: TryHandler; a, b, c: INTEGER);
+	BEGIN
+		platform.Try(h, a, b, c)
+	END Try;
+
+	PROCEDURE SetPlatform (p: POINTER TO Platform);
+	BEGIN
+		platform := p;
+		p.Setup(p.Try)
+	END SetPlatform;
+
+	PROCEDURE T*;
+	BEGIN
+	END T;
+
+END ObxProbe12.

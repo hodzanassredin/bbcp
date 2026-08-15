@@ -2111,10 +2111,21 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		GenB(31H); GenB(0C0H)	(* xor eax, eax: AL = 0 vector regs для variadic *)
 	END SysVPreCall;
 
-	PROCEDURE SysVPostCall;
+	PROCEDURE SysVPostCall (nslots: INTEGER);
+		VAR n: INTEGER;
 	BEGIN
 		GenB(4CH); GenB(89H); GenB(0E4H);	(* mov rsp, r12 *)
-		GenB(41H); GenB(5CH)				(* pop r12 *)
+		GenB(41H); GenB(5CH);				(* pop r12 *)
+		(* 64-бит: снять и слоты аргументов! Иначе при ВЛОЖЕННОМ ccall (ccall-результат
+		   как аргумент другого ccall) остатки слотов внутреннего вызова сдвигают
+		   аргументы внешнего (поймано: pango_layout_line_get_pixel_extents(
+		   pango_layout_get_line(...), NIL, rect) — rect уезжал в 4-й слот). *)
+		n := nslots * 8;
+		IF n > 0 THEN
+			IF n < 128 THEN GenB(48H); GenB(83H); GenB(0C4H); GenB(n)	(* add rsp, imm8 *)
+			ELSE GenB(48H); GenB(81H); GenB(0C4H); GenD(n)	(* add rsp, imm32 *)
+			END
+		END
 	END SysVPostCall;
 	
 	PROCEDURE Call* (VAR x, tag: DevCPLamd64.Item);	(* TProc: tag.typ = actual receiver type *)
@@ -2138,7 +2149,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 			DevCPLamd64.GenCall(x);
 			IF (x.obj.sysflag = ccall) OR (x.obj.sysflag = ccall16) THEN
 				IF (x.obj.sysflag = ccall) THEN 
-					SysVPostCall
+					SysVPostCall(CCallSlots(x.obj, NIL))
 				ELSE (* ccall16*)
 					n:=CCallParSize(x.obj, NIL);
 					PostCcall16(n)
@@ -2194,7 +2205,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 			DevCPLamd64.GenCall(x); Free(x);
 			IF (x.typ.sysflag = ccall) OR (x.typ.sysflag = ccall16) THEN	
 				IF x.typ.sysflag = ccall THEN 
-					SysVPostCall
+					SysVPostCall(CCallSlots(NIL, x.typ))
 				ELSE (* ccall16*)
 					n:=CCallParSize(NIL, x.typ);
 					PostCcall16(n)
@@ -2494,6 +2505,14 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 			IF (~empty OR NeedOutPtrInit(proc)) & (proc.sysflag # noframe) THEN
 				IF proc.sysflag = ccall THEN	(* SysV Enter: регистровые аргументы (C->BB) -> cdecl-стек *)
 					GenB(41H); GenB(5BH);	(* pop r11 (ret) *)
+					(* 64-бит: сохранить callee-saved SysV (rbx, r12-r15) — CP-код использует
+					   их как scratch (BX в static-link/interфейсах, r12 в SysV-блоках);
+					   C-вызывающий (GTK) ждёт их нетронутыми после callback'а *)
+					GenB(41H); GenB(57H);	(* push r15 *)
+					GenB(41H); GenB(56H);	(* push r14 *)
+					GenB(41H); GenB(55H);	(* push r13 *)
+					GenB(41H); GenB(54H);	(* push r12 *)
+					GenB(53H);	(* push rbx *)
 					GenB(41H); GenB(51H);	(* push r9 *)
 					GenB(41H); GenB(50H);	(* push r8 *)
 					GenB(51H);	(* push rcx *)
@@ -2588,7 +2607,18 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					END;
 					DevCPLamd64.GenPop(fp)
 				END;
-				IF proc.sysflag = ccall THEN DevCPLamd64.GenReturn(0)
+				IF proc.sysflag = ccall THEN
+					(* восстановить callee-saved из слотов над аргументами (см. Enter) *)
+					GenB(48H); GenB(8BH); GenB(5CH); GenB(24H); GenB(56);	(* mov rbx, [rsp+56] *)
+					GenB(4CH); GenB(8BH); GenB(64H); GenB(24H); GenB(64);	(* mov r12, [rsp+64] *)
+					GenB(4CH); GenB(8BH); GenB(6CH); GenB(24H); GenB(72);	(* mov r13, [rsp+72] *)
+					GenB(4CH); GenB(8BH); GenB(74H); GenB(24H); GenB(80);	(* mov r14, [rsp+80] *)
+					GenB(4CH); GenB(8BH); GenB(7CH); GenB(24H); GenB(88);	(* mov r15, [rsp+88] *)
+					(* выход из C-callback: ret-адрес в r11, снять слот ret+6 рег-аргументов
+					   +5 слотов сохранения (96 байт) — иначе C-стек копит мусор *)
+					GenB(4CH); GenB(8BH); GenB(1CH); GenB(24H);	(* mov r11, [rsp] *)
+					GenB(48H); GenB(83H); GenB(0C4H); GenB(96);	(* add rsp, 96 *)
+					GenB(41H); GenB(0FFH); GenB(0E3H)	(* jmp r11 *)
 				ELSE DevCPLamd64.GenReturn(proc.conval.intval - 16)
 				END
 			END

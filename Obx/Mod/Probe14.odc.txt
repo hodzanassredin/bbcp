@@ -1,0 +1,36 @@
+MODULE ObxProbe14;
+
+	IMPORT Files, Views, TextModels, TextViews, TextMappers, Console, Strings;
+
+	PROCEDURE P (IN s: ARRAY OF CHAR; x: INTEGER);
+		VAR t: ARRAY 32 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END P;
+
+	PROCEDURE T*;
+		VAR loc: Files.Locator; v: Views.View; m: TextModels.Model;
+			s: TextMappers.Scanner; n, p: INTEGER; ch: CHAR;
+	BEGIN
+		loc := Files.dir.This("System"); loc := loc.This("Rsrc");
+		v := Views.OldView(loc, "Menus");
+		m := v(TextViews.View).ThisModel();
+		s.ConnectTo(m); s.SetPos(0); n := 0;
+		s.Scan;
+		WHILE (n < 6) & (s.type # TextMappers.eot) DO
+			P("tok type=", s.type);
+			IF s.type = TextMappers.string THEN
+				p := s.rider.Pos() - 1;
+				P("  rider.Pos-1=", p);
+				IF ~s.rider.eot THEN DEC(p) END;
+				P("  after eot-dec p=", p);
+				s.rider.SetPos(p); s.rider.ReadChar(ch); s.rider.Read;
+				Console.WriteStr("  re-read ch="); Console.WriteChar(ch); Console.WriteLn;
+				IF ch # '"' THEN Console.WriteStr("  => keyword") ELSE Console.WriteStr("  => string") END;
+				Console.WriteLn
+			END;
+			INC(n); s.Scan
+		END
+	END T;
+
+END ObxProbe14.

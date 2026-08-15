@@ -1,0 +1,28 @@
+MODULE ObxProbe15;
+
+	IMPORT Console;
+
+	PROCEDURE Eq (IN a: ARRAY OF CHAR; IN b: ARRAY OF CHAR): BOOLEAN;
+	BEGIN
+		RETURN a = b
+	END Eq;
+
+	PROCEDURE T*;
+		VAR a: ARRAY 8 OF CHAR; b: ARRAY 256 OF CHAR;
+	BEGIN
+		a := "MENU"; b := "MENU";
+		IF a = "MENU" THEN Console.WriteStr("lit: EQ") ELSE Console.WriteStr("lit: NE") END;
+		Console.WriteLn;
+		IF Eq(a, b) THEN Console.WriteStr("proc: EQ") ELSE Console.WriteStr("proc: NE") END;
+		Console.WriteLn;
+		IF a = b THEN Console.WriteStr("var: EQ") ELSE Console.WriteStr("var: NE") END;
+		Console.WriteLn;
+		b := "MENX";
+		IF a = b THEN Console.WriteStr("neq: EQ") ELSE Console.WriteStr("neq: NE") END;
+		Console.WriteLn;
+		b := "MENUXX";
+		IF a = b THEN Console.WriteStr("long: EQ") ELSE Console.WriteStr("long: NE") END;
+		Console.WriteLn
+	END T;
+
+END ObxProbe15.

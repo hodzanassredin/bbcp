@@ -1,0 +1,27 @@
+MODULE ObxProbe16;
+
+	IMPORT Console, Strings, SYSTEM;
+
+	VAR noerr: BOOLEAN;
+		s: RECORD type: INTEGER; string: ARRAY 256 OF CHAR END;
+		after: INTEGER;
+
+	PROCEDURE P (IN s: ARRAY OF CHAR; x: LONGINT);
+		VAR t: ARRAY 32 OF CHAR;
+	BEGIN
+		Strings.IntToString(SHORT(x), t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END P;
+
+	PROCEDURE T*;
+	BEGIN
+		P("adr(s)=", SYSTEM.ADR(s));
+		P("adr(s.type)=", SYSTEM.ADR(s.type));
+		P("adr(s.string)=", SYSTEM.ADR(s.string));
+		P("adr(noerr)=", SYSTEM.ADR(noerr));
+		P("adr(after)=", SYSTEM.ADR(after));
+		noerr := TRUE;
+		IF noerr THEN Console.WriteStr("noerr=TRUE") ELSE Console.WriteStr("noerr=FALSE") END;
+		Console.WriteLn
+	END T;
+
+END ObxProbe16.

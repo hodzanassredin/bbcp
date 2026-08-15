@@ -1,0 +1,457 @@
+MODULE LinFonts;
+
+	IMPORT SYSTEM,
+		Kernel, Fonts, Dialog, Ports, 
+		StdRegistry, StdCFrames,  
+		Pango := LinGtk2Pango, GLib := LinGtk2GLib, Gdk := LinGtk2Gdk;
+
+	CONST
+		defSize = 10 * Fonts.point;	(* size of default font *)
+		dlgSize = 10 * Fonts.point;	(* size of dialog font *)
+		defFontInit = "Verdana";
+		dlgFontInit = "Sans";
+		
+	TYPE
+		Typeface = Fonts.Typeface;
+
+		Font* = POINTER TO RECORD (Fonts.Font)
+			asc*, dsc*, w: INTEGER;
+			desc-: Pango.PangoFontDescription;
+			alias-: Fonts.Typeface;	(* alias # typeface & typeface # "*" == alien font *)
+		END;
+
+		Directory = POINTER TO RECORD (Fonts.Directory) END;
+		
+		Identifier = RECORD (Kernel.Identifier)
+			tface: Fonts.Typeface;
+			size: INTEGER;
+			style: SET;
+			weight: INTEGER;
+		END;
+
+		Counter = RECORD (Kernel.Identifier)
+			count: INTEGER
+		END;
+		
+		Traverser = RECORD (Kernel.Identifier)
+		END;
+		
+		FontsHook = POINTER TO RECORD (Dialog.FontsHook) END;
+		
+	VAR
+		dir: Directory;
+		defFont-, dlgFont-: Font;
+		defFontName, dlgFontName: Fonts.Typeface;
+		defFontSize, dlgFontSize, dlgFontWght: INTEGER;
+		dlgFontStyle: SET;
+		pixel-: INTEGER;	(* screen resolution *)
+		context-:Pango.PangoContext;
+		layout-:Pango.PangoLayout;
+		fontsHook*: FontsHook;
+		
+		
+	
+	PROCEDURE IntToString (x: INTEGER; OUT s: ARRAY OF SHORTCHAR);
+		VAR j, k: INTEGER; ch: SHORTCHAR; a: ARRAY 32 OF SHORTCHAR;
+	BEGIN
+		ASSERT(x >= 0, 20);
+		k := 0;
+		j := 0; 
+		REPEAT 
+			a[j] := SHORT(CHR(x MOD 10 + ORD("0"))); 
+			x := x DIV 10; 
+			INC(j) 
+		UNTIL x = 0;
+		ASSERT(k + j < LEN(s), 20);
+		REPEAT DEC(j); ch := a[j]; s[k] := ch; INC(k) UNTIL j = 0;
+		s[k] := 0X
+	END IntToString;
+	
+	PROCEDURE ParsePangoString* (IN str: ARRAY OF SHORTCHAR; 
+										OUT typeface: Typeface; OUT size: INTEGER; 
+										OUT style: SET; OUT weight: INTEGER);
+	VAR 
+			fdesc:Pango.PangoFontDescription;
+	BEGIN
+		fdesc := Pango.font_description_from_string(str);
+		typeface := Pango.font_description_get_family(fdesc)$;
+		size := (Pango.font_description_get_size(fdesc)+512) DIV 1024 * Fonts.point;
+		weight := Pango.font_description_get_weight(fdesc);
+		style:={};
+		CASE Pango.font_description_get_style(fdesc) OF
+		| Pango.STYLE_NORMAL : 
+		| Pango.STYLE_OBLIQUE,
+		 Pango.STYLE_ITALIC : INCL(style,Fonts.italic)
+		ELSE
+		END;
+	END ParsePangoString;
+
+	PROCEDURE MakePangoString* (typeface: Typeface; size: INTEGER; style: SET; weight: INTEGER; 
+															OUT str: ARRAY OF SHORTCHAR);
+	VAR s_size, s_weight, s_slant: ARRAY 10 OF SHORTCHAR;
+	BEGIN
+		IF typeface = Fonts.default THEN	typeface := defFontName$	END;
+		IF weight = Fonts.bold THEN s_weight := "Bold" ELSE s_weight := "" END;
+		IF Fonts.italic IN style THEN s_slant := "Italic" ELSE s_slant := "" END;
+		IF size#0 THEN 
+			IntToString(size DIV Fonts.point, s_size)
+		ELSE 
+			s_size := "" 
+		END;
+		str := SHORT(typeface) + " " + s_weight + " " + s_slant + " " + s_size;
+	END MakePangoString;
+
+	PROCEDURE Cleanup (f: Font);
+	BEGIN
+		Pango.font_description_free(f.desc);
+		f.desc := NIL
+	END Cleanup;
+
+	(* width methods for unicode *)
+	PROCEDURE (f: Font) wTab* (ch: CHAR): INTEGER, NEW;
+	BEGIN
+		RETURN 0 (* ??? *)
+	END wTab;
+
+	PROCEDURE (f: Font) fTab* (ch: CHAR): INTEGER, NEW;
+	BEGIN
+		RETURN 0
+	END fTab;
+
+	PROCEDURE (f: Font) tTab* (ch: CHAR): INTEGER, NEW;
+	BEGIN
+		RETURN 0
+	END tTab;
+	
+
+	(** Font **)
+	PROCEDURE (f: Font) GetBounds* (OUT asc, dsc, w: INTEGER);
+	BEGIN
+		asc := f.asc; dsc := f.dsc; w := f.w
+	END GetBounds;
+	
+
+	PROCEDURE ShapeUString (layout:Pango.PangoLayout; us: GLib.PString; font: Fonts.Font);
+	VAR attrs: Pango.PangoAttrList; attr: Pango.PangoAttribute; i: INTEGER;
+	BEGIN
+		(* replace digit-space to non-break space *)
+		i := 1;
+		WHILE i < LEN(us$) DO
+			IF (us[i - 1] = 0C2X) & (us[i] = 08FX) THEN us[i] := 0A0X END;
+			INC(i)
+		END;
+		
+		Pango.layout_set_text(layout, us,-1);
+		attrs:= Pango.attr_list_new();
+		IF font#NIL THEN
+			Pango.layout_set_font_description(layout, font(Font).desc);
+			IF Fonts.underline IN font.style THEN
+				attr:= Pango.attr_underline_new(1);
+			ELSE	
+				attr:= Pango.attr_underline_new(0);
+			END;
+			attr.start_index:=0;
+			attr.end_index:= LEN(us$);
+			Pango.attr_list_insert(attrs,attr);
+		END;
+		IF Fonts.strikeout IN font.style THEN
+            attr := Pango.pango_attr_strikethrough_new(1);
+            Pango.attr_list_insert(attrs, attr)
+         END;
+		Pango.layout_set_attributes(layout, attrs);
+		Pango.attr_list_unref(attrs);
+	END ShapeUString;
+
+
+	PROCEDURE ShapeString* (layout:Pango.PangoLayout; IN s: ARRAY OF CHAR; font: Fonts.Font);
+	VAR us: GLib.PString;
+	BEGIN
+		us :=GLib.g_utf16_to_utf8(s,-1,NIL,NIL,NIL);
+		IF us= NIL THEN (*!!!*)
+			ShapeUString(layout,'',NIL);
+		ELSE	
+			ShapeUString(layout,us,font);
+			GLib.g_free(SYSTEM.VAL(GLib.gpointer, us))
+		END
+	END ShapeString;
+
+	PROCEDURE ShapeSString* (layout:Pango.PangoLayout; IN s: ARRAY OF SHORTCHAR; font: Fonts.Font);
+	VAR us: GLib.PString;
+	BEGIN
+		us:=GLib.g_locale_to_utf8(s,-1,NIL,NIL,NIL);
+		IF us= NIL THEN (*!!!*)
+			ShapeUString(layout,'',NIL)
+		ELSE
+			ShapeUString(layout,us,font);
+			GLib.g_free(SYSTEM.VAL(GLib.gpointer, us))
+		END
+	END ShapeSString;
+
+	PROCEDURE (font: Font) StringWidth* (IN s: ARRAY OF CHAR): INTEGER;
+	VAR rect: Pango.PangoRectangle;
+	BEGIN
+		ShapeString(layout,s,font);
+		Pango.layout_line_get_pixel_extents(
+			Pango.layout_get_line(layout,0),NIL,rect);
+		RETURN (rect.x + rect.width) * pixel
+	END StringWidth;
+
+	PROCEDURE (font: Font) SStringWidth* (IN s: ARRAY OF SHORTCHAR): INTEGER;
+	VAR rect: Pango.PangoRectangle;
+	BEGIN
+		ShapeUString(layout,s,font);
+		Pango.layout_line_get_pixel_extents(
+			Pango.layout_get_line(layout,0),NIL,rect);
+		RETURN (rect.x + rect.width) * pixel
+	END SStringWidth;
+
+	PROCEDURE (f: Font) IsAlien* (): BOOLEAN;
+	BEGIN
+		RETURN (f.typeface # Fonts.default) & (f.alias # f.typeface)
+	END IsAlien;
+	
+	PROCEDURE (f: Font) FINALIZE-;
+	BEGIN
+		Cleanup(f)
+	END FINALIZE;
+
+	PROCEDURE SetupFont(font: Font);
+	VAR metrics: Pango.PangoFontMetrics; language: Pango.PangoLanguage;
+	BEGIN
+		font.desc := Pango.font_description_new();
+		Pango.font_description_set_family(font.desc, SHORT(font.alias));
+		IF Fonts.italic IN font.style THEN 
+			Pango.font_description_set_style(font.desc, Pango.STYLE_ITALIC);
+		END;
+		Pango.font_description_set_weight(font.desc, font.weight);
+		
+		Pango.font_description_set_absolute_size (font.desc, (font.size * Pango.SCALE) DIV pixel);
+		
+		language :=Pango.context_get_language(context); (* !!! *)
+		metrics := Pango.context_get_metrics (context, font.desc, language);
+		font.asc := (Pango.font_metrics_get_ascent(metrics) * pixel) DIV Pango.SCALE ;
+		font.dsc := (Pango.font_metrics_get_descent(metrics) * pixel) DIV 950; 
+		(* 
+			950 selected empiricaly to solve the problem of trash on the texts because of rounding fonts size
+			TODO:  find better solution issue	
+		*)
+		font.w := (Pango.font_metrics_get_approximate_char_width(metrics) * pixel) DIV Pango.SCALE;
+		Pango.font_metrics_unref(metrics);
+		
+	END SetupFont;
+
+	
+	PROCEDURE NewFont (typeface: Fonts.Typeface; size: INTEGER; style: SET; weight: INTEGER): Font;
+	VAR font: Font; 
+	BEGIN
+		NEW(font);
+		IF typeface = Fonts.default THEN
+			font.alias := defFontName$;
+		ELSE
+			font.alias := typeface$;
+		END;
+		font.Init(typeface, size, style, weight);
+		SetupFont(font);
+		RETURN font
+	END NewFont;
+
+
+	PROCEDURE (VAR id: Identifier) Identified (): BOOLEAN;
+		VAR f: Font;
+	BEGIN
+		f := id.obj(Font);
+		RETURN (f.typeface = id.tface) & (f.size = id.size) 
+				 & (f.style = id.style) & (f.weight = id.weight)
+	END Identified;
+
+(* Directory *)
+	PROCEDURE (d: Directory) This (typeface: Fonts.Typeface; size: INTEGER; style: SET; weight: INTEGER): Font;
+		VAR f: Font; i: Identifier; p: ANYPTR;
+	BEGIN
+		ASSERT(size > 0, 20);
+		style := style * {Fonts.italic, Fonts.underline, Fonts.strikeout};
+		i.tface := typeface$; 
+		i.size := size; i.style := style; i.weight := weight;
+		i.typ := SYSTEM.TYP(Font);
+		p := Kernel.ThisFinObj(i);
+		IF p # NIL THEN (* found in cache *)
+			f := p(Font)
+		ELSIF typeface = "" THEN
+			f := defFont
+		ELSE
+			f := NewFont(typeface, size, style, weight);
+		END;
+		RETURN f
+	END This;
+
+	PROCEDURE (d: Directory) Default (): Fonts.Font;
+	BEGIN
+		RETURN defFont
+	END Default;
+
+	PROCEDURE (d: Directory) TypefaceList* (): Fonts.TypefaceInfo;
+	TYPE
+		PtrSTR = POINTER TO ARRAY [untagged] OF SHORTCHAR;
+		StrArray = POINTER TO ARRAY [untagged] OF PtrSTR;
+	CONST maxFonts = 32767; (* taken from the Gtk FontPicker *)
+	VAR xFontNames: StrArray; 
+				numFonts, fmLen, fndLen, i, j, k: INTEGER;
+			typefaceInfo, t, q: Fonts.TypefaceInfo; 
+			familyName, foundryName: ARRAY 256 OF CHAR;
+	BEGIN
+		typefaceInfo := NIL;
+		(* TODO: <odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAOgcAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAC0BgAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAABZBgAA@w0JCXhGb250TmFtZXMgOj0gTGluWDExLlhMaXN0Rm9udHMoR2RrLmdka19kaXNwbGF5LCAiLSoiLCBtYXhGb250cywgbnVtRm9udHMpOw0JCWkgOj0gMDsgDQkJV0hJTEUgaSA8IG51bUZvbnRzIERPDQkJCUlGIHhGb250TmFtZXNbaV1bMF0gPSAiKyIgVEhFTg0JCQkJKCogVGhlIFhMRkQgc3RhbmRhcmQgY2FsbHMgZm9yIHRoZSBwb3NzaWJpbGl0eSBvZiBhIHZlcnNpb24gc3RyaW5nICopDQkJCQkoKiBiZWdpbm5pbmcgd2l0aCAiKyIgcHJlcGVuZGVkIHRvIHRoZSBjdXJyZW50IFhMRkQgbmFtZSwgYW5kICopDQkJCQkoKiAgcmVzZXJ2ZWQgZm9yIHBvc3NpYmxlIGZ1dHVyZSB1c2UuIEZvciBub3cgd2Ugb21pdCB0aGVzZSBuYW1lcy4gKikNCQkJCSgqIElmIHRoZXkgYXBwZWFyIGluIHRoZSBmdXR1cmUgd2UgbWF5IG5lZWQgdG8gaW5jbHVkZSB0aGVtLiAqKQ0JCQlFTFNJRiB4Rm9udE5hbWVzW2ldWzBdID0gIi0iIFRIRU4NCQkJCSgqIEZpcnN0IGNoYXIgbXVzdCBiZSAiLSIuIFNraXAgaWxsZWdhbCBYTEZEIG5hbWUuICopDQkJCQlqIDo9IDA7IGsgOj0gMTsNCQkJCVdISUxFIChrIDwgMjU1KSAmICh4Rm9udE5hbWVzW2ldW2tdICMgIi0iKSBETw0JCQkJCWZvdW5kcnlOYW1lW2pdIDo9IFN0cmluZ3MuTG93ZXIoeEZvbnROYW1lc1tpXVtrXSk7IElOQyhqKTsgSU5DKGspDQkJCQlFTkQ7DQkJCQlmb3VuZHJ5TmFtZVtqXSA6PSAwWDsNCQkJCWogOj0gMDsgSU5DKGspOw0JCQkJV0hJTEUgKGsgPCAyNTUpICYgKHhGb250TmFtZXNbaV1ba10gIyAiLSIpIERPDQkJCQkJZmFtaWx5TmFtZVtqXSA6PSBTdHJpbmdzLkxvd2VyKHhGb250TmFtZXNbaV1ba10pOyBJTkMoaik7IElOQyhrKQ0JCQkJRU5EOw0JCQkJZmFtaWx5TmFtZVtqXSA6PSAwWDsNCQkJCWZtTGVuIDo9IExFTihmYW1pbHlOYW1lJCk7IGZuZExlbiA6PSBMRU4oZm91bmRyeU5hbWUkKTsNCQkJCUlGIGZtTGVuIDwgTEVOKEZvbnRzLlR5cGVmYWNlKSBUSEVODQkJCQkJSUYgZm1MZW4gKyBmbmRMZW4gKyAxIDwgTEVOKEZvbnRzLlR5cGVmYWNlKSBUSEVODQkJCQkJCWZhbWlseU5hbWUgOj0gZmFtaWx5TmFtZSArICItIiArIGZvdW5kcnlOYW1lDQkJCQkJRU5EOw0JCQkJCXEgOj0gTklMOyB0IDo9IHR5cGVmYWNlSW5mbzsNCQkJCQlXSElMRSAodCAjIE5JTCkgJiAodC50eXBlZmFjZSA8IGZhbWlseU5hbWUpIERPDQkJCQkJCXEgOj0gdDsgdCA6PSB0Lm5leHQNCQkJCQlFTkQ7DQkJCQkJSUYgcSA9IE5JTCBUSEVODQkJCQkJCUlGICh0ID0gTklMKSBPUiAodC50eXBlZmFjZSAjIGZhbWlseU5hbWUpIFRIRU4gKCogYXQgZnJvbnQgKikNCQkJCQkJCU5FVyhxKTsgcS50eXBlZmFjZSA6PSBmYW1pbHlOYW1lJDsNCQkJCQkJCXEgLiBuZXh0IDo9IHQ7IHR5cGVmYWNlSW5mbyA6PSBxDQkJCQkJCUVORA0JCQkJCUVMU0lGICh0ID0gTklMKSBPUiAodC50eXBlZmFjZSAjIGZhbWlseU5hbWUpIFRIRU4gKCogYWZ0ZXIgcSAqKQ0JCQkJCQlORVcodCk7IHQudHlwZWZhY2UgOj0gZmFtaWx5TmFtZSQ7DQkJCQkJCXQubmV4dCA6PSBxLm5leHQ7IHEubmV4dCA6PSB0DQkJCQkJRU5EDQkJCQlFTkQ7DQkJCUVORDsNCQkJSU5DKGkpDQkJRU5EOw0JCUxpblgxMS5YRnJlZUZvbnROYW1lcyAoeEZvbnROYW1lcyk7DQkJ"/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>*)
+		RETURN typefaceInfo
+	END TypefaceList;
+
+
+	(** miscellaneous **)
+
+	PROCEDURE (VAR id: Counter) Identified (): BOOLEAN;
+	BEGIN
+		INC(id.count); RETURN FALSE
+	END Identified;
+
+	PROCEDURE NofFonts* (): INTEGER;
+		VAR p: ANYPTR; cnt: Counter;
+	BEGIN
+		cnt.typ := SYSTEM.TYP(Font);
+		cnt.count := 0;
+		p := Kernel.ThisFinObj(cnt);
+		RETURN cnt.count
+	END NofFonts;
+
+	PROCEDURE InstallDir*;
+	BEGIN
+		Fonts.SetDir(dir)
+	END InstallDir;
+
+	
+	PROCEDURE (VAR id: Traverser) Identified (): BOOLEAN;
+		VAR f: Font;
+	BEGIN
+		f := id.obj(Font);
+		IF (f.typeface = Fonts.default) & (f.alias # defFontName) THEN
+			Cleanup(f);
+			f.alias := defFontName$;
+			SetupFont(f);
+		END;
+		RETURN FALSE
+	END Identified;
+
+	PROCEDURE (h: FontsHook) SetDefaultFont (tf: Fonts.Typeface; size: INTEGER);
+		VAR t: Traverser; p: ANYPTR;
+	BEGIN
+		ASSERT(tf # "", 20); ASSERT(size > 0, 21);
+		IF tf = Fonts.default THEN tf := defFontName$ END;
+		IF (defFontName # tf) OR (defFontSize # size) THEN
+			defFontName := tf$; defFontSize := size;
+			t.typ := SYSTEM.TYP(Font); p := Kernel.ThisFinObj(t);
+			defFont := dir.This(Fonts.default, defFontSize, {}, Fonts.normal);
+			StdRegistry.WriteString("DefFontName", defFontName);
+			StdRegistry.WriteInt("DefFontSize", defFontSize);
+		END
+	END SetDefaultFont;
+	
+	
+
+	PROCEDURE (h: FontsHook) SetDialogFont (tf: Fonts.Typeface; size: INTEGER; style: SET; weight: INTEGER);
+		VAR i: INTEGER;
+	BEGIN
+		ASSERT(tf # "", 20); ASSERT(size > 0, 21);
+		IF (dlgFontName # tf) OR (dlgFontSize # size) 
+			OR (dlgFontStyle # style) OR (dlgFontWght # weight)
+		THEN
+			dlgFontName := tf$; dlgFontSize := size; 
+			dlgFontStyle := style; dlgFontWght := weight;
+			dlgFont := dir.This(dlgFontName, dlgFontSize, dlgFontStyle, dlgFontWght);		
+			StdRegistry.WriteString("DlgFontName", dlgFontName);
+			StdRegistry.WriteInt("DlgFontSize", dlgFontSize);
+			i := 0;
+			IF Fonts.italic IN dlgFontStyle THEN INC(i, 1) END;
+			IF Fonts.underline IN dlgFontStyle THEN INC(i, 2) END;
+			IF Fonts.strikeout IN dlgFontStyle THEN INC(i, 4) END;
+			IF dlgFontWght > Fonts.normal THEN INC(i, 8) END;
+			StdRegistry.WriteInt("DlgFontStyle", i);
+			
+			StdCFrames.defaultFont := dlgFont;
+			StdCFrames.defaultLightFont := Fonts.dir.This(dlgFont.typeface, dlgFont.size, dlgFont.style, Fonts.normal);
+			
+			Dialog.Call("StdMenus.SetFontFromDialogFont", "", i);
+		END
+	END SetDialogFont;
+	
+	
+	PROCEDURE (h: FontsHook) GetDefaultFont (VAR tf: Fonts.Typeface; VAR size: INTEGER);
+	BEGIN
+		tf := defFont.alias;
+		size := defFont.size;
+	END GetDefaultFont;
+
+	PROCEDURE (h: FontsHook) GetDialogFont (VAR tf: Fonts.Typeface; VAR size: INTEGER; VAR style: SET; VAR weight: INTEGER);
+	BEGIN
+		tf := dlgFont.typeface;
+		size := dlgFont.size;
+		style := dlgFont.style;
+		weight := dlgFont.weight;
+	END GetDialogFont;
+
+
+	PROCEDURE Init;
+		VAR i, res: INTEGER;
+	BEGIN
+		
+		StdRegistry.ReadInt("scaleFactor", i, res);
+			IF (res = 0) & (i > 10) & (i <= 500) THEN Dialog.scaleFactor := i END;
+		
+		pixel := SHORT(ENTIER((Ports.point DIV 4 * 3 * 100) / Dialog.scaleFactor));
+		
+		context := Gdk.gdk_pango_context_get();
+		layout := Pango.layout_new (context);
+		NEW(dir); Fonts.SetDir(dir);
+		dlgFontStyle := {}; 
+		dlgFontWght := Fonts.normal; 
+		
+		StdRegistry.ReadString("DefFontName", defFontName, res);
+		IF (res # 0) OR (defFontName = "") THEN defFontName := defFontInit END;
+		
+		StdRegistry.ReadString("DlgFontName", dlgFontName, res);
+		IF (res # 0) OR (dlgFontName = "") THEN dlgFontName := defFontInit END;
+		
+		StdRegistry.ReadInt("DlgFontStyle", i, res);
+		IF res = 0 THEN
+			IF ODD(i) THEN INCL(dlgFontStyle, Fonts.italic) END;
+			IF ODD(i DIV 2) THEN INCL(dlgFontStyle, Fonts.underline) END;
+			IF ODD(i DIV 4) THEN INCL(dlgFontStyle, Fonts.strikeout) END;
+			IF ODD(i DIV 8) THEN dlgFontWght := Fonts.bold END;
+		END;
+		
+		StdRegistry.ReadInt("DefFontSize", i, res);
+		IF res = 0 THEN defFontSize := i END;
+		IF (defFontSize < 5 * Fonts.point) OR (defFontSize > 100 * Fonts.point) THEN
+			defFontSize := defSize
+		END;
+		
+		StdRegistry.ReadInt("DlgFontSize", i, res);
+		IF res = 0 THEN dlgFontSize := i END;
+		IF (dlgFontSize < 5 * Fonts.point) OR (dlgFontSize > 100 * Fonts.point) THEN
+			dlgFontSize := dlgSize
+		END;
+		
+		defFont := dir.This(Fonts.default, defFontSize, {}, Fonts.normal);
+		dlgFont := dir.This(dlgFontName, dlgFontSize, dlgFontStyle, dlgFontWght);
+		
+		StdCFrames.defaultFont := dlgFont;
+		StdCFrames.defaultLightFont := Fonts.dir.This(dlgFont.typeface, dlgFont.size, dlgFont.style, Fonts.normal);
+		
+		NEW(fontsHook);
+		Dialog.SetFontsHook(fontsHook);
+		
+		
+		
+	END Init;
+
+BEGIN
+	Init
+END LinFonts.
+

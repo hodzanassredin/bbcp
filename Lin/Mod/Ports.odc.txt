@@ -1,0 +1,777 @@
+MODULE LinPorts; 
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="172844" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0"
+	organization	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly93d3cub2Jlcm9uLmNoJykA"/>Oberon microsystems<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAPQAAAAAAAAE1AAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9ibGFja2JveGZyYW1ld29yay5vcmcnKQA="/>BBWFC<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9vYmVyb25jb3JlLnJ1JykA"/>OberonCore<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANwAAAAAAAAEvAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9naXRodWIuY29tL2JiY2InKQA="/>BBCP Team<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	contributors	= "Oberon microsystems, A.Shiryaev, A.Dmitriev, I.Denisov, Ketmar Dark"
+	version	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="242362" h="169150" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAvQEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAA3AQAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAADcAAAA@w0JLSAyMDIzMDIxMCwgazgsIGFkZGVkIHBhdHRlcm5zIHN1cHBvcnQgdG8gTWFya1JlY3QNCS0gMjAyMzAyMjgsIGs4LCByZXdyaXR0ZW4gYERyYXdTcGFjZSgpYCB1c2luZyB0aGUgaGFjaywgdG8gYXZvaWQgcm91bmRpbmcgZXJyb3JzDQktIDIwMjQwNTIxLCBkaWEsIGNoYW5nZXMgSW5wdXQgdG8gY2xlYXIgZXZlbnRzIGZvciBhcHAgbm90IG1hcmtlZCBieSBPUyBhcyBoYW5naW5nDQk="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAApAEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAAeAQAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAADDAAAA@w0JLSBPcGVuQnVmZmVyIGNhbiBiZSBvcHRpbWl6ZWQgdG8gb25seSBvcGVuIGEgYnVmZmVyIGxhcmdlIGVub3VnaCBmb3IgdGhlIGNsaXBpbmdyZWN0YW5nbGUgDQktIE1hcmtSZWN0IG5lZWRzIHRvIGJlIGxvb2tlZCBhdCBmb3Igc29tZSBwYXJhbWV0ZXIgdmFsdWVzDQktIFJlc2V0Q29sb3JzIHNob3VsZCBmaW5kIHN5c3RlbSB2YWx1ZXMNCQ=="/><odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT SYSTEM, 
+		Gdk := LinGtk2Gdk,
+		Gtk := LinGtk2Gtk,
+		Pango := LinGtk2Pango,
+		Dialog, Ports, Fonts,
+		HostFonts := LinFonts, GObject := LinGtk2GObject,
+		StdWindows, Services;
+
+	CONST
+		(** buttons **)
+		left* = 16; middle* = 17; right* = 18;
+		shift* = 24; ctrl* = 25; opt* = 26; cmd* = 27; alt* = 28;
+		focusPat* = 5;
+		
+		resizeHCursor* = 16; resizeVCursor* = 17; resizeLCursor* = 18; 
+		resizeRCursor* = 19; resizeCursor* = 20;
+		busyCursor* = 21; stopCursor* = 22;
+		moveCursor* = 23; copyCursor* = 24; linkCursor* = 25; pickCursor* = 26;
+	
+		extend = 1; modify = 2; popup = 3; pick = 4; (* same as Controllers.extend, .modify, .popup, and .pick ! *)
+
+		off=0; on=1;
+		
+	TYPE
+		Pixels = INTEGER;
+		
+		Port* = POINTER TO RECORD (Ports.Port)
+			w, h: INTEGER; (* size of port *)
+			da-: Gtk.GtkDrawingArea; (* drawing widget *)
+			fixed-: Gtk.GtkFixed; (* fixed container for absolute positioning *)
+		END;
+		
+		Rider* = POINTER TO RECORD (Ports.Rider)
+			l-, t-, r-, b-: INTEGER;
+			dx, dy: INTEGER;	(* scroll offset *)
+			port-: Port; (* port for the rider *)
+			map: Gdk.GdkPixmap;	(* save bitmap in SaveRect/RestoreRect *)
+			gc: Gdk.GdkGC;	(* save gc *)
+			sl, st, sr, sb: INTEGER	(* save rect *)
+		END;
+	
+	VAR
+		(* system colors *)
+		textCol-, selBackground-, selTextCol-,
+		dialogTextCol-, dialogShadowCol-, dialogLightCol-: Ports.Color;
+		
+		mx_, my_: INTEGER;	(* actual mouse coordinates *)
+		mb: SET;	(* actual mouse buttons & modifiers *)	
+		
+		cursors-: ARRAY 32 OF Gdk.GdkCursor;
+		
+		dim25pat, dim50pat, dim75pat, otherPat: ARRAY [untagged] 8 OF SHORTCHAR;
+
+	
+	(* Auxiliary procedures *)
+	
+	PROCEDURE UnsignedShortInt(i: INTEGER): SHORTINT;
+	BEGIN<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAHgEAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACYAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAA9AAAA@w0JCUFTU0VSVChpIDwgMiAqIE1BWChTSE9SVElOVCkgKyAyLCAyMCk7DQkJUkVUVVJOIChTSE9SVChpKSk="/>
+		ASSERT(i <= ORD(MAX(CHAR)), 20); 
+		RETURN SYSTEM.VAL(SHORTINT, CHR(i))<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
+	END UnsignedShortInt;
+	
+	PROCEDURE AllocateColor (bbColor: Ports.Color; VAR gdkColor: Gdk.GdkColor);
+		VAR cm: Gdk.GdkColormap; i: INTEGER;
+	BEGIN
+		cm := Gdk.gdk_colormap_get_system(); (* TODO: keep in global variable? *)
+		i := bbColor MOD 256; 
+			gdkColor.red := UnsignedShortInt(i * 257);
+		i := (bbColor DIV 256) MOD 256; 
+			gdkColor.green := UnsignedShortInt(i * 257);
+		i := (bbColor DIV (256 * 256)) MOD 256; 
+			gdkColor.blue := UnsignedShortInt(i * 257);
+		IF ~Gdk.gdk_colormap_alloc_color(cm, gdkColor, 1, 1)  THEN
+			Dialog.ShowMsg("gdk_colormap_alloc_color failed")
+		END
+	END AllocateColor;
+	
+	(* Port *)
+	
+	PROCEDURE (p: Port) OpenBuffer* (l, t, r, b: INTEGER);
+		VAR rect: Gdk.GdkRectangle;
+	BEGIN
+		rect.x := l; rect.y := t; rect.width := r - l; rect.height := b - t;
+		Gdk.gdk_window_begin_paint_rect(p.da.window, SYSTEM.ADR(rect))
+	END OpenBuffer;
+		
+	PROCEDURE (p: Port) CloseBuffer*;
+	BEGIN
+		Gdk.gdk_window_end_paint(p.da.window)
+	END CloseBuffer;
+
+	PROCEDURE (p: Port) SetSize* (w, h: INTEGER);
+	BEGIN
+		ASSERT(w >= 0, 20); ASSERT(h >= 0, 21);
+		p.w := w; p.h := h
+	END SetSize;
+	
+	PROCEDURE (p: Port) GetSize* (OUT w, h: INTEGER);
+	BEGIN 
+		w := p.w; h := p.h
+	END GetSize;
+	
+	PROCEDURE (p: Port) NewRider* (): Rider;
+		VAR h: Rider;
+	BEGIN
+		NEW(h); h.port := p; RETURN h
+	END NewRider;
+	
+	PROCEDURE (p: Port) SetDA* (da: Gtk.GtkDrawingArea), NEW;
+	BEGIN
+		p.da := da
+	END SetDA;
+	
+	PROCEDURE (p: Port) SetFW* (fixed: Gtk.GtkFixed), NEW;
+	BEGIN
+		p.fixed := fixed
+	END SetFW;
+	
+
+	(* Rider *)
+
+	PROCEDURE (rd: Rider) InitPort* (port: Port), NEW;
+	BEGIN
+		ASSERT(rd.port = NIL, 20); ASSERT(port # NIL, 21); ASSERT(port.da # NIL, 22);
+		rd.port := port; rd.dx := 0; rd.dy := 0
+	END InitPort;
+	
+	PROCEDURE (rd: Rider) Move* (dx, dy: INTEGER);
+	BEGIN
+		INC(rd.dx, dx); INC(rd.dy, dy)
+	END Move;
+	
+	
+	PROCEDURE (rd: Rider) DrawingBuf (VAR map: Gdk.GdkDrawable; VAR gc: Gdk.GdkGC), NEW;
+		VAR r: Gdk.GdkRectangle;
+	BEGIN
+		ASSERT(rd.port # NIL, 20);
+		map := rd.port.da.window; gc := Gdk.gdk_gc_new(map);
+		r.x := (rd.l); 
+		r.y := (rd.t); 
+		r.width := (rd.r - rd.l); 
+		r.height := (rd.b - rd.t);
+		Gdk.gdk_gc_set_clip_rectangle(gc, SYSTEM.ADR(r));
+		Gdk.gdk_gc_set_clip_origin(gc, 0, 0)
+	END DrawingBuf;
+	
+	PROCEDURE (rd: Rider) Base* (): Ports.Port;
+	BEGIN
+		RETURN rd.port
+	END Base;
+
+	PROCEDURE (rd: Rider) SetRect* (l, t, r, b: INTEGER);
+	BEGIN
+		ASSERT((l <= r) & (t <= b), 20);
+		ASSERT(rd.port # NIL, 21);
+		rd.l := l; rd.t := t; rd.r := r; rd.b := b
+	END SetRect;
+
+	PROCEDURE (rd: Rider) GetRect* (OUT l, t, r, b: INTEGER);
+	BEGIN
+		l := rd.l; t := rd.t; r := rd.r; b := rd.b
+	END GetRect;
+	
+	PROCEDURE (rd: Rider) DrawLine* (x0, y0, x1, y1, s: INTEGER; col: Ports.Color);
+		VAR gdkColor: Gdk.GdkColor; map: Gdk.GdkDrawable; gc: Gdk.GdkGC;
+	BEGIN  
+		ASSERT(s >= 0, 21); ASSERT(rd.port # NIL, 100);
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor); 
+		Gdk.gdk_gc_set_line_attributes(gc, s, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_ROUND);
+		Gdk.gdk_draw_line(map, gc, x0, y0, x1, y1);
+		Gdk.gdk_gc_unref(gc)
+	END DrawLine;
+	
+	PROCEDURE (rd: Rider) DrawOval* (l, t, r, b, s: INTEGER; col: Ports.Color);
+		VAR gdkColor: Gdk.GdkColor; map: Gdk.GdkDrawable; gc: Gdk.GdkGC; h: INTEGER;
+	BEGIN
+		ASSERT(rd.port # NIL, 20); 
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor); 
+		Gdk.gdk_gc_set_background(gc, gdkColor); 
+		IF s = Ports.fill THEN
+			Gdk.gdk_gc_set_line_attributes(gc, 1, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_ROUND);
+			Gdk.gdk_draw_arc(map, gc, on,  l, t, r - l, b - t, 0, 360 * 64)
+		ELSE
+			IF s = 0 THEN s := 1 END;
+			h := s DIV 2; INC(l, h); INC(t, h); 
+			h := (s-1) DIV 2; DEC(r, h); DEC(b, h);
+			(* ShiryaevAV: *)
+				IF r < l THEN h := l; l := r; r := h END;
+				IF b < t THEN h := t; t := b; b := h END;
+			Gdk.gdk_gc_set_line_attributes(gc, s, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_ROUND);
+			Gdk.gdk_draw_arc(map, gc, off,  l, t, r - l, b - t, 0, 360  * 64)
+		END;
+		Gdk.gdk_gc_unref(gc)
+	END DrawOval;
+	
+	PROCEDURE (rd: Rider) DrawPath* (IN pts: ARRAY OF Ports.Point; n, s: INTEGER; col: Ports.Color; path: INTEGER);
+		TYPE
+			PAP = POINTER TO Gdk.GdkPoints;
+		VAR
+			i, j, k: INTEGER; 
+			map: Gdk.GdkDrawable; gc: Gdk.GdkGC;
+			gdkColor: Gdk.GdkColor;
+			polyBuf: ARRAY 256 OF Gdk.GdkPoint;
+			polyPtr: POINTER TO ARRAY OF Ports.Point; 
+			polyLen: INTEGER;
+			pap: PAP; 
+
+		PROCEDURE Bezier(x0, y0, xd0, yd0, x1, y1, xd1, yd1: INTEGER);
+			VAR x, y, xd, yd, i: INTEGER;
+		BEGIN
+			IF ABS(xd0 - xd1) + ABS(yd0 - yd1) < 8 THEN
+				IF k > polyLen - 2 THEN
+					NEW(polyPtr, polyLen * 2);
+					i := 0; WHILE i < polyLen DO 
+						polyPtr[i] := SYSTEM.VAL(Ports.Point, pap[i]); INC(i) 
+					END;
+					polyLen := polyLen * 2; pap := SYSTEM.VAL(PAP, SYSTEM.ADR(polyPtr^))
+				END;
+				pap[k].x := (x0); pap[k].y := (y0); INC(k)
+			ELSE
+				x := ((xd0 - xd1) DIV 4 + x0 + x1 + 1) DIV 2;
+				y := ((yd0 - yd1) DIV 4 + y0 + y1 + 1) DIV 2;
+				xd := ((x1 - x0) * 3 - (xd0 + xd1) DIV 2 + 2) DIV 4;
+				yd := ((y1 - y0) * 3 - (yd0 + yd1) DIV 2 + 2) DIV 4;
+				Bezier(x0, y0, xd0 DIV 2, yd0 DIV 2, x, y, xd, yd);
+				Bezier(x, y, xd, yd, x1, y1, xd1 DIV 2, yd1 DIV 2)
+			END
+		END Bezier;
+	
+	BEGIN
+		ASSERT(rd.port # NIL, 20); 
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor); 
+		
+		ASSERT(n >= 0, 20); ASSERT(n <= LEN(pts), 21);
+		ASSERT(s >= Ports.fill, 23);
+		IF s < 0 THEN
+			Gdk.gdk_gc_set_line_attributes(gc, 1, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_ROUND);
+			Gdk.gdk_gc_set_background(gc, gdkColor); 
+			IF path = Ports.closedPoly THEN
+				ASSERT(n >= 2, 20);
+				Gdk.gdk_draw_polygon(map, gc, on, SYSTEM.VAL(Gdk.GdkPoints, pts), n)
+			ELSE
+				ASSERT(n >= 3, 20);
+				ASSERT(path = Ports.closedBezier, 22);
+				ASSERT(n MOD 3 = 0, 24);
+				pap := SYSTEM.VAL(PAP, SYSTEM.ADR(polyBuf)); polyLen := LEN(polyBuf);
+				i := 0; k := 0;
+				WHILE i < n DO
+					j := i+3;
+					IF j = n THEN j := 0 END;
+					Bezier(pts[i].x, pts[i].y, (pts[i+1].x - pts[i].x) * 3, (pts[i+1].y - pts[i].y) * 3,
+							pts[j].x, pts[j].y, (pts[j].x - pts[i+2].x) * 3, (pts[j].y - pts[i+2].y) * 3);
+					INC(i, 3)
+				END;
+				Gdk.gdk_draw_polygon(map, gc, on, pap, k);
+			END;
+		ELSE
+			Gdk.gdk_gc_set_line_attributes(gc, s, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_ROUND);
+			IF s = 0 THEN s := 1 END;
+			IF path = Ports.closedPoly THEN
+				ASSERT(n >= 2, 20);
+				Gdk.gdk_draw_polygon(map, gc, off, SYSTEM.VAL(Gdk.GdkPoints, pts), n);
+			ELSIF path = Ports.openPoly THEN
+				ASSERT(n >= 2, 20);
+				Gdk.gdk_draw_lines(map, gc,  SYSTEM.VAL(Gdk.GdkPoints, pts), n);
+			ELSE
+				IF path = Ports.closedBezier THEN
+					ASSERT(n >= 3, 20);
+					ASSERT(n MOD 3 = 0, 24)
+				ELSE
+					ASSERT(n >= 4, 20);
+					ASSERT(path = Ports.openBezier, 25);
+					ASSERT(n MOD 3 = 1, 24)
+				END;
+				pap := SYSTEM.VAL(PAP, SYSTEM.ADR(polyBuf)); polyLen := LEN(polyBuf);
+				i := 0;
+				WHILE i < n-2 DO
+					k := 0; j := i+3;
+					IF j = n THEN j := 0 END;
+					Bezier(pts[i].x, pts[i].y, (pts[i+1].x - pts[i].x) * 3, (pts[i+1].y - pts[i].y) * 3,
+							pts[j].x, pts[j].y, (pts[j].x - pts[i+2].x) * 3, (pts[j].y - pts[i+2].y) * 3);
+					pap[k].x := (pts[j].x); 
+					pap[k].y := (pts[j].y); 
+					INC(k);
+					Gdk.gdk_draw_lines(map, gc, pap, k);
+					INC(i, 3)
+				END
+			END;
+		END;
+		Gdk.gdk_gc_unref(gc)
+	END DrawPath;
+	
+	PROCEDURE (rd: Rider) DrawRect* (l, t, r, b, s: INTEGER; col: Ports.Color);
+		VAR gdkColor: Gdk.GdkColor; map: Gdk.GdkDrawable; gc: Gdk.GdkGC; h: INTEGER;
+	BEGIN 
+		ASSERT(rd.port # NIL, 20); 
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor); 
+		Gdk.gdk_gc_set_background(gc, gdkColor); 
+		IF s = Ports.fill THEN
+			Gdk.gdk_gc_set_line_attributes(gc, 1, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_MITER);
+			Gdk.gdk_draw_rectangle(map, gc, on,  l, t, r - l, b - t)
+		ELSE
+			IF s > 0 THEN
+				h := s DIV 2; INC(l, h); INC(t, h);
+				h := (s-1) DIV 2; DEC(r, h); DEC(b, h);
+			ELSE
+				s := 1
+			END;
+			Gdk.gdk_gc_set_line_attributes(gc, s, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_ROUND, Gdk.GDK_JOIN_MITER);
+			Gdk.gdk_draw_rectangle(map, gc, off,  l, t, r - l - 1, b - t - 1)
+			(*
+			https://developer.gnome.org/gdk2/stable/gdk2-Drawing-Primitives.html
+			A rectangle drawn filled is 1 pixel smaller in both dimensions than a rectangle outlined. Calling gdk_draw_rectangle (window, gc, TRUE, 0, 0, 20, 20) results in a filled rectangle 20 pixels wide and 20 pixels high. Calling gdk_draw_rectangle (window, gc, FALSE, 0, 0, 20, 20) results in an outlined rectangle with corners at (0, 0), (0, 20), (20, 20), and (20, 0), which makes it 21 pixels wide and 21 pixels high.
+			*)
+		END;
+		Gdk.gdk_gc_unref(gc)
+	END DrawRect;
+	
+	PROCEDURE (rd: Rider) DrawSString* (x, y: INTEGER; col: Ports.Color; IN s: ARRAY OF SHORTCHAR; font: Fonts.Font);
+	VAR gdkColor: Gdk.GdkColor; map: Gdk.GdkDrawable; gc: Gdk.GdkGC; 
+			layout:Pango.PangoLayout;
+	BEGIN
+		ASSERT(rd.port # NIL, 20); 
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor);
+		layout := HostFonts.layout; (* (layout); *)
+		HostFonts.ShapeSString(layout, s, font);
+		Gdk.gdk_draw_layout_line(map, gc, x, y, Pango.layout_get_line(layout,0));
+		(* GLib.g_object_unref(layout); *)
+		Gdk.gdk_gc_unref(gc);
+	END DrawSString;
+	
+	PROCEDURE (rd: Rider) DrawString* (x, y: INTEGER; col: Ports.Color; IN s: ARRAY OF CHAR; font: Fonts.Font);
+	VAR gdkColor: Gdk.GdkColor; map: Gdk.GdkDrawable; gc: Gdk.GdkGC; 
+			layout:Pango.PangoLayout;
+	BEGIN
+		ASSERT(rd.port # NIL, 20); 
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor);
+		layout := HostFonts.layout;
+		HostFonts.ShapeString(layout, s, font);
+		Gdk.gdk_draw_layout_line(map, gc, x, y, Pango.layout_get_line(layout,0));
+		(* GLib.g_object_unref(layout); *)
+		Gdk.gdk_gc_unref(gc);
+	END DrawString;
+		
+	PROCEDURE (rd: Rider) DrawSpace* (x, y, w: INTEGER; col: Ports.Color; font: Fonts.Font);
+	VAR
+		gdkColor: Gdk.GdkColor;
+		map: Gdk.GdkDrawable;
+		gc: Gdk.GdkGC;
+		layout: Pango.PangoLayout;
+		x1, sw: INTEGER;
+		rect: Gdk.GdkRectangle;
+		prect: Pango.PangoRectangle;
+	BEGIN
+		ASSERT(rd.port # NIL, 20);
+		rd.DrawingBuf(map, gc);
+		AllocateColor(col, gdkColor);
+		Gdk.gdk_gc_set_foreground(gc, gdkColor);
+		x1 := x + w;
+		IF x <= x1 THEN
+			(* sadly, font underline info is not reliable due to rounding; so let's use the hack:
+				shape one space, and draw it until we fill the whole area *)
+			INC(x1);
+			IF (x1 > rd.l) & (x < rd.r) THEN
+				layout := HostFonts.layout;
+				HostFonts.ShapeString(layout, " ", font); (* force underline *)
+				rect.x := MAX(rd.l, x);
+				rect.y := rd.t;
+				rect.width := MIN(rd.r - rect.x, x1 - x);
+				rect.height := rd.b - rd.t;
+				IF rect.width > 0 THEN
+					Gdk.gdk_gc_set_clip_rectangle(gc, SYSTEM.ADR(rect));
+					Gdk.gdk_gc_set_clip_origin(gc, 0, 0);
+					(* draw many spaces *)
+					Pango.layout_line_get_pixel_extents(
+						Pango.layout_get_line(layout, 0), NIL, prect);
+					sw := (prect.x + prect.width);
+					WHILE x < x1 DO
+						Gdk.gdk_draw_layout_line(map, gc, x, y, Pango.layout_get_line(layout, 0));
+						INC(x, sw)
+					END
+				END
+			END
+		END;
+		Gdk.gdk_gc_unref(gc)
+	END DrawSpace;
+
+	PROCEDURE (rd: Rider) CharPos* (x, index: INTEGER; IN s: ARRAY OF CHAR; font: Fonts.Font): INTEGER;
+	VAR layout:Pango.PangoLayout;
+			x_pos: INTEGER;
+			
+	PROCEDURE ShortLen (IN f: ARRAY OF CHAR; fLen: INTEGER): INTEGER;
+		VAR i, j: INTEGER;
+	BEGIN
+		i := 0; j := 0;
+		WHILE i < fLen DO
+			CASE ORD(f[i]) OF 00H..7FH: INC(j)
+			| 80H..7FFH: INC(j, 2)
+			ELSE (* | 800H..0FFFFH *) INC(j, 3)
+			END;
+			INC(i)
+		END;
+		RETURN j
+	END ShortLen;
+	
+	BEGIN
+		ASSERT(rd.port # NIL, 100); ASSERT(index <= LEN(s), 101);
+
+		layout := HostFonts.layout;
+		HostFonts.ShapeString(layout, s, font);
+
+		Pango.layout_line_index_to_x(
+			Pango.layout_get_line(layout,0), ShortLen(s,index), 0, x_pos);
+		RETURN x + x_pos DIV Pango.SCALE;
+	END CharPos;
+
+	PROCEDURE (rd: Rider) SCharPos* (x, index: INTEGER; IN s: ARRAY OF SHORTCHAR; font: Fonts.Font): INTEGER;
+	VAR layout:Pango.PangoLayout;
+			x_pos: INTEGER;
+	BEGIN
+		ASSERT(rd.port # NIL, 100); ASSERT(index <= LEN(s), 101);
+
+		layout := HostFonts.layout;
+		HostFonts.ShapeSString(layout, s, font);
+
+		Pango.layout_line_index_to_x(
+			Pango.layout_get_line(layout,0),index,0,x_pos);
+		RETURN x + x_pos DIV Pango.SCALE;
+	END SCharPos;
+
+	PROCEDURE (rd: Rider) CharIndex* (x, pos: INTEGER; IN s: ARRAY OF CHAR; font: Fonts.Font): INTEGER;
+	VAR layout:Pango.PangoLayout;
+			x_pos, shortIndex, index, trailing: INTEGER; out_: BOOLEAN;
+	
+	BEGIN
+		ASSERT(rd.port # NIL, 100);
+
+		layout := HostFonts.layout;
+		HostFonts.ShapeString(layout, s, font);
+		x_pos:=(pos-x) * Pango.SCALE;
+		out_ := Pango.layout_line_x_to_index(
+			Pango.layout_get_line(layout,0), x_pos, shortIndex, trailing);
+		
+		(* utf8 *)
+		index := 0;
+		WHILE shortIndex > 0 DO
+			CASE ORD(s[index]) OF 00H..7FH: DEC(shortIndex)
+			| 80H..7FFH: DEC(shortIndex, 2)
+			ELSE (* | 800H..0FFFFH *) DEC(shortIndex, 3)
+			END;
+			INC(index)
+		END;
+		
+		RETURN index
+	END CharIndex;
+
+	PROCEDURE (rd: Rider) SCharIndex* (x, pos: INTEGER; IN s: ARRAY OF SHORTCHAR; font: Fonts.Font): INTEGER;
+	VAR layout:Pango.PangoLayout;  
+			x_pos, index,trailing: INTEGER; out_: BOOLEAN;
+	BEGIN
+		ASSERT(rd.port # NIL, 100);
+
+		layout := HostFonts.layout;
+		HostFonts.ShapeSString(layout, s, font);
+		x_pos := (pos - x) * Pango.SCALE; 
+		out_ := Pango.layout_line_x_to_index(
+			Pango.layout_get_line(layout,0),x_pos ,index,trailing);
+		RETURN index
+	END SCharIndex;
+
+	PROCEDURE SetMouseState* (x, y: INTEGER; but: SET; isDown_: BOOLEAN);
+	BEGIN
+		mx_ := x; my_ := y; mb := but
+	END SetMouseState;
+	
+	PROCEDURE SetPixmap (map: Gdk.GdkDrawable; mode: INTEGER): Gdk.GdkPixmap;
+	VAR white, black: Gdk.GdkColor;
+	BEGIN
+		AllocateColor(Ports.white, white);
+		AllocateColor(Ports.black, black);
+		CASE mode OF
+		| Ports.dim25:
+			RETURN Gdk.gdk_pixmap_create_from_data(map, dim25pat, 8, 8, -1, black, white)
+		| Ports.dim50:
+			RETURN Gdk.gdk_pixmap_create_from_data(map, dim50pat, 8, 8, -1, black, white)
+		| Ports.dim75:
+			RETURN Gdk.gdk_pixmap_create_from_data(map, dim75pat, 8, 8, -1, black, white)
+		ELSE
+			RETURN Gdk.gdk_pixmap_create_from_data(map, otherPat, 8, 8, -1, black, white)
+		END
+	END SetPixmap;
+	
+	PROCEDURE (rd: Rider) MarkRect* (l, t, r, b, s, mode: INTEGER; show_: BOOLEAN);
+	VAR gdkColor: Gdk.GdkColor; gc: Gdk.GdkGC; rect: Gdk.GdkRectangle;
+			vals: Gdk.GdkGCValues; map: Gdk.GdkDrawable;
+			h: INTEGER;
+			pxm: Gdk.GdkPixmap;
+	BEGIN
+		map := rd.port.da.window;
+		
+		(* k8: fix insane argument *)
+		IF (s >= 0) & (MAX(1, s) * 2 > MIN(r - l, b - t)) THEN s := Ports.fill END;
+		
+		AllocateColor(Ports.white, gdkColor);
+		vals.foreground := gdkColor;
+		vals.function := Gdk.GDK_XOR;
+		vals.line_style := Gdk.GDK_LINE_SOLID;
+		vals.line_width := 1;
+		vals.subwindow_mode := Gdk.GDK_INCLUDE_INFERIORS;
+		gc := Gdk.gdk_gc_new_with_values(map, vals,
+			Gdk.GDK_GC_FOREGROUND + Gdk.GDK_GC_LINE_WIDTH +
+			Gdk.GDK_GC_LINE_STYLE + Gdk.GDK_GC_SUBWINDOW + Gdk.GDK_GC_FUNCTION);
+
+		(* k8: windows backend treats "inverse" and "hilite" as the same thing, so do we *)
+		IF (mode # Ports.invert) & (mode # Ports.hilite) THEN
+			pxm := SetPixmap(map, mode);
+			IF pxm # NIL THEN (* just in case *)
+				Gdk.gdk_gc_set_fill(gc, Gdk.GDK_TILED);
+				Gdk.gdk_gc_set_tile(gc, pxm)
+			END
+		ELSE
+			pxm := NIL
+		END;
+
+		rect.x := rd.l;
+		rect.y := rd.t;
+		rect.width := rd.r - rd.l;
+		rect.height := rd.b - rd.t;
+		Gdk.gdk_gc_set_clip_rectangle(gc, SYSTEM.ADR(rect));
+		Gdk.gdk_gc_set_clip_origin(gc, 0, 0);
+
+		IF s <= Ports.fill THEN
+			Gdk.gdk_gc_set_line_attributes(gc, 0, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_BUTT, Gdk.GDK_JOIN_MITER);
+			(* the filled rectangle is one pixel smaller in both dimensions, exactly as we need it to be *)
+			Gdk.gdk_draw_rectangle(map, gc, on,  l, t, r - l, b - t)
+		ELSE
+			IF s > 1 THEN
+				h := s DIV 2; INC(l, h); INC(t, h);
+				h := (s-1) DIV 2; DEC(r, h); DEC(b, h)
+			ELSE s := 1
+			END;
+			IF b - t - 1 > 0 THEN
+			(* the rectangle outline covers the whole rect, and we need it to be one pixel smaller *)
+				Gdk.gdk_gc_set_line_attributes(gc, s, Gdk.GDK_LINE_SOLID, Gdk.GDK_CAP_BUTT, Gdk.GDK_JOIN_MITER);
+				Gdk.gdk_draw_rectangle(map, gc, off,  l, t, r - l - 1, b - t - 1)
+			END
+		END;
+
+		Gdk.gdk_gc_unref(gc);
+		(* k8: it is prolly better to do it here, after freeing a gc; dunno if we have to free it at all, though *)
+		IF pxm # NIL THEN GObject.g_object_unref(pxm) END
+		
+	END MarkRect;
+
+
+	PROCEDURE (rd: Rider) SaveRect* (l, t, r, b: INTEGER; VAR res: INTEGER);
+		VAR p: Port;
+	BEGIN
+		res := 1; p := rd.port;
+		IF l < 0 THEN l := 0 END;
+		IF t < 0 THEN t := 0 END;
+		IF r > p.w THEN r := p.w END;
+		IF b > p.h THEN b := p.h END;
+		IF (l < r) & (t < b) THEN
+			rd.sl := l; rd.st := t; rd.sr := r; rd.sb := b;
+			rd.gc := Gdk.gdk_gc_new(p.da.window);
+			IF rd.gc # NIL THEN
+				rd.map := Gdk.gdk_pixmap_new(p.da.window, r - l, b - t, -1);
+				IF rd.map # NIL THEN
+					Gdk.gdk_gc_set_exposures(rd.gc, TRUE);
+					Gdk.gdk_draw_drawable(rd.map, rd.gc, p.da.window, l, t, 0, 0, r - l, b- t);
+					res := 0
+				ELSE
+					Gdk.gdk_gc_unref(rd.gc); 
+					rd.gc := NIL
+				END
+			END
+		END
+	END SaveRect;
+
+	PROCEDURE (rd: Rider) RestoreRect* (l, t, r, b: INTEGER; dispose: BOOLEAN);
+	BEGIN
+		IF rd.gc # NIL THEN
+			IF l < rd.sl THEN l := rd.sl END;
+			IF t < rd.st THEN t := rd.st END;
+			IF r > rd.sr THEN r := rd.sr END;
+			IF b > rd.sb THEN b := rd.sb END;
+			Gdk.gdk_draw_drawable(rd.port.da.window, rd.port.da.style.white_gc,
+				rd.map, l - rd.sl, t - rd.st, l, t, r - l, b - t);
+			IF dispose THEN
+				Gdk.gdk_drawable_unref(rd.map);
+				rd.map := NIL;
+				Gdk.gdk_gc_unref(rd.gc); 
+				rd.gc := NIL
+			END
+		END
+	END RestoreRect;
+		
+
+	PROCEDURE (rd: Rider) Scroll* (dx, dy: INTEGER);
+		VAR width, height, x, y, sx, sy: INTEGER; gc: Gdk.GdkGC; 
+	BEGIN
+		ASSERT(rd.port # NIL, 100);
+		IF dx < 0 THEN
+			sx := rd.l - dx; x := rd.l; width := rd.r - rd.l + dx
+		ELSE
+			sx := rd.l; x := rd.l + dx; width := rd.r - rd.l - dx
+		END;
+		IF dy < 0 THEN
+			sy := rd.t - dy; y := rd.t; height := rd.b - rd.t + dy
+		ELSE
+			sy := rd.t; y := rd.t + dy; height := rd.b - rd.t - dy
+		END;
+		gc := Gdk.gdk_gc_new(rd.port.da.window);
+		Gdk.gdk_gc_set_exposures(gc, TRUE);
+		INC(width); INC(height);
+		Gdk.gdk_draw_drawable(rd.port.da.window, gc,
+			rd.port.da.window, sx, sy, x, y, width, height);
+		Gdk.gdk_gc_unref(gc);
+		
+		(* Invalidate the new area *)
+
+		IF dy < 0 THEN
+			Gtk.gtk_widget_queue_draw_area(rd.port.da, rd.l, rd.b + dy, rd.r - rd.l + 1,  -dy + 1)
+		ELSIF dy > 0 THEN
+			Gtk.gtk_widget_queue_draw_area(rd.port.da, rd.l, rd.t, rd.r - rd.l + 1,  dy + 1)
+		END; 
+		IF dx < 0 THEN
+			Gtk.gtk_widget_queue_draw_area(rd.port.da, rd.r + dx, rd.t, -dx + 1, rd.b - rd.t + 1)
+		ELSIF dx > 0 THEN
+			Gtk.gtk_widget_queue_draw_area(rd.port.da, rd.l, rd.t, dx + 1,  rd.b - rd.t + 1)
+		END; 
+
+		(* pattern origin correction *)
+		INC(rd.dx, dx); INC(rd.dy, dy)
+	END Scroll;
+	
+	PROCEDURE (rd: Rider) SetCursor* (cursor: INTEGER);
+	BEGIN
+		Gdk.gdk_window_set_cursor(rd.port.da.window, cursors[cursor]);
+	END SetCursor;
+	
+	PROCEDURE (rd: Rider) Input* (OUT x, y: INTEGER; OUT modifiers: SET; OUT isDown: BOOLEAN);
+		VAR fake_: Gdk.GdkWindow; e: Gdk.GdkEvent; state: SET; over: BOOLEAN; res_: INTEGER;
+	BEGIN
+		fake_ := Gdk.gdk_window_get_pointer(rd.port.da.window, x, y, state); 
+		mb := {};
+		IF Gdk.GDK_SHIFT_BIT IN state THEN mb := mb + {shift, extend} END;
+		IF Gdk.GDK_CONTROL_BIT IN state THEN mb := mb + {ctrl, modify} END;
+		IF Gdk.GDK_MOD1_BIT IN state THEN INCL(mb, alt) END;
+		IF Gdk.GDK_BUTTON1_BIT IN state THEN INCL(mb, left) END;
+		IF Gdk.GDK_BUTTON2_BIT IN state THEN INCL(mb, middle); INCL(mb, pick) END;
+		IF Gdk.GDK_BUTTON3_BIT IN state THEN INCL(mb, right); INCL(mb, popup) END;
+		modifiers := mb;
+		isDown := mb * {left, middle, right} # {};
+		Services.actionHook.StepInsistent;
+		REPEAT
+			e := Gdk.gdk_event_get();
+			over := e = NIL; IF ~over THEN Gdk.gdk_event_free(e) END;
+		UNTIL over
+	END Input;
+
+	PROCEDURE ResetColors* (basewidget: Gtk.GtkWidget);
+	BEGIN
+		ASSERT(basewidget # NIL, 20);
+		
+	(* TODO: Use the actual system colors  *)
+	
+		textCol := Ports.black;
+		selBackground := Ports.black;
+		selTextCol := Ports.white;
+		
+		Ports.dialogBackground := Ports.RGBColor(
+			(basewidget.style.bg[Gtk.GTK_STATE_NORMAL].red DIV 256) MOD 256,
+			(basewidget.style.bg[Gtk.GTK_STATE_NORMAL].green DIV 256) MOD 256, 
+			(basewidget.style.bg[Gtk.GTK_STATE_NORMAL].blue DIV 256) MOD 256);
+		dialogTextCol := Ports.black;
+		dialogShadowCol := Ports.grey75;
+		dialogLightCol := Ports.grey50;
+	END ResetColors;
+
+	PROCEDURE PortOrigin (p: Ports.Port; OUT xRoot, yRoot: Pixels): BOOLEAN;
+		VAR res: BOOLEAN;
+	BEGIN
+		res := FALSE;
+		WITH p: Port DO 
+			IF p.da # NIL THEN
+				Gdk.gdk_window_get_root_coords(p.da.window, 0, 0, xRoot, yRoot);
+				res := TRUE
+			END
+		ELSE
+		END;
+		RETURN res
+	END PortOrigin;
+		
+	PROCEDURE Init;
+		VAR i: INTEGER; wnd: Gtk.GtkWidget;
+	BEGIN
+		wnd := Gtk.gtk_window_new(Gtk.GTK_WINDOW_TOPLEVEL);
+		Gtk.gtk_widget_ref(wnd);
+		ResetColors(wnd);
+		Gtk.gtk_widget_unref(wnd);
+		cursors[Ports.arrowCursor] := Gdk.gdk_cursor_new(Gdk.GDK_LEFT_PTR);
+		cursors[Ports.textCursor] := Gdk.gdk_cursor_new(Gdk.GDK_XTERM);
+		cursors[Ports.graphicsCursor] := Gdk.gdk_cursor_new(Gdk.GDK_CROSSHAIR);
+		cursors[Ports.bitmapCursor] := Gdk.gdk_cursor_new(Gdk.GDK_CROSSHAIR);
+		cursors[Ports.tableCursor] := Gdk.gdk_cursor_new(Gdk.GDK_CROSS);
+		cursors[Ports.refCursor] := Gdk.gdk_cursor_new(Gdk.GDK_HAND2);
+		cursors[resizeHCursor] := Gdk.gdk_cursor_new(Gdk.GDK_SB_H_DOUBLE_ARROW);
+		cursors[resizeVCursor] := Gdk.gdk_cursor_new(Gdk.GDK_SB_V_DOUBLE_ARROW);
+		cursors[resizeLCursor] := Gdk.gdk_cursor_new(Gdk.GDK_TOP_LEFT_CORNER);
+		cursors[resizeRCursor] := Gdk.gdk_cursor_new(Gdk.GDK_TOP_RIGHT_CORNER);
+		cursors[resizeCursor] := Gdk.gdk_cursor_new(Gdk.GDK_FLEUR);
+		cursors[busyCursor] := Gdk.gdk_cursor_new(Gdk.GDK_WATCH);
+		cursors[stopCursor] := Gdk.gdk_cursor_new(Gdk.GDK_CIRCLE);
+		(* TODO: On windows these are bitmaps stored as resources... *)
+		cursors[moveCursor] := Gdk.gdk_cursor_new(Gdk.GDK_SAILBOAT);
+		cursors[copyCursor] := Gdk.gdk_cursor_new(Gdk.GDK_SAILBOAT);
+		cursors[linkCursor] := Gdk.gdk_cursor_new(Gdk.GDK_SAILBOAT);
+		cursors[pickCursor] := Gdk.gdk_cursor_new(Gdk.GDK_SAILBOAT);
+		i := 0;
+		WHILE i < LEN(cursors) DO
+			IF cursors[i] = NIL THEN cursors[i] := cursors[Ports.arrowCursor] END;
+			INC(i)
+		END;
+		StdWindows.PortOrigin := PortOrigin;
+		
+		dim25pat[0] := 077X; dim25pat[1] := 0DDX; 
+		dim25pat[2] := 0BBX; dim25pat[3] := 0EEX; 
+		dim25pat[4] := 077X; dim25pat[5] := 0DDX; 
+		dim25pat[6] := 0BBX; dim25pat[7] := 0EEX; 
+			
+		dim50pat[0] := 055X; dim50pat[1] := 0AAX; 
+		dim50pat[2] := 055X; dim50pat[3] := 0AAX; 
+		dim50pat[4] := 055X; dim50pat[5] := 0AAX;
+		dim50pat[6] := 055X; dim50pat[7] := 0AAX; 
+		
+		dim75pat[0] := 088X; dim75pat[1] := 022X;
+		dim75pat[2] := 044X; dim75pat[3] := 011X;
+		dim75pat[4] := 088X; dim75pat[5] := 022X;
+		dim75pat[6] := 044X; dim75pat[7] := 011X;
+		
+		otherPat[0] := 077X; otherPat[1] := 0BBX;
+		otherPat[2] := 0DDX; otherPat[3] := 0EEX;
+		otherPat[4] := 077X; otherPat[5] := 0BBX;
+		otherPat[6] := 0DDX; otherPat[7] := 0EEX;
+	
+	END Init;
+	
+BEGIN
+	Init
+END LinPorts.

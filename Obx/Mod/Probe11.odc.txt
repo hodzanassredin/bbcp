@@ -1,0 +1,34 @@
+MODULE ObxProbe11;
+
+	IMPORT Files, Views, TextModels, TextViews, Console, Strings;
+
+	PROCEDURE P (IN s: ARRAY OF CHAR; x: INTEGER);
+		VAR t: ARRAY 32 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END P;
+
+	PROCEDURE T*;
+		VAR loc: Files.Locator; v: Views.View; m: TextModels.Model;
+			rd: TextModels.Reader; ch: CHAR; n: INTEGER;
+	BEGIN
+		loc := Files.dir.This("System");
+		P("loc System res=", loc.res);
+		loc := loc.This("Rsrc");
+		P("loc Rsrc res=", loc.res);
+		v := Views.OldView(loc, "Menus");
+		IF v = NIL THEN Console.WriteStr("P11 view=NIL"); Console.WriteLn; RETURN END;
+		Console.WriteStr("P11 view opened"); Console.WriteLn;
+		IF v IS TextViews.View THEN
+			m := v(TextViews.View).ThisModel();
+			P("P11 text len=", m.Length());
+			rd := m.NewReader(NIL); rd.SetPos(0); n := 0;
+			rd.ReadChar(ch);
+			WHILE ~rd.eot DO INC(n); rd.ReadChar(ch) END;
+			P("P11 scanned chars=", n)
+		ELSE
+			Console.WriteStr("P11 not a text view"); Console.WriteLn
+		END
+	END T;
+
+END ObxProbe11.

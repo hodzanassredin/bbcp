@@ -137,10 +137,9 @@ MODULE Services;
 			IF (~onlyInsistentActions OR (p IS InsistentAction))
 				& ((0 <= p.notBefore) & (p.notBefore <= time)
 					OR (p.notBefore <= time) & (time < 0)) THEN
-				p.next := NIL; Exec(p);	(* warning: p may call DoLater or RemoveAction,
-																		which change the lists! *)
+				p.next := NIL; Exec(p);	(* warning: p may call DoLater or RemoveAction, which change the lists! *)
 			ELSE
-				p.next := actions; actions := p		(* move to actions list for later processing *)
+				p.next := actions; actions := p;	(* move to actions list for later processing *)
 			END
 		END
 	END IterateOverActions;

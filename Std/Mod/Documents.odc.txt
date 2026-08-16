@@ -1,0 +1,1955 @@
+MODULE StdDocuments;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="181410" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0, new module"
+	organization	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly93d3cub2Jlcm9uLmNoJykA"/>Oberon microsystems<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAPQAAAAAAAAE1AAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9ibGFja2JveGZyYW1ld29yay5vcmcnKQA="/>BBWFC<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9vYmVyb25jb3JlLnJ1JykA"/>OberonCore<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANwAAAAAAAAEvAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9naXRodWIuY29tL2JiY2InKQA="/>BBCP Team<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	contributors	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAQQAAAAAAAAE5AAAAU3RkQ21kcy5PcGVuQnJvd3NlcignRG9jdS9Db250cmlidXRvcnMnLCAnQ29udHJpYnV0b3JzJykA"/>Contributors<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, Anton Dmitriev, Ivan Denisov, Ketmar Dark"
+	version	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="218880" h="175260" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAxAEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAAA!AQAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAADjAAAA@w0JLSAyMDA3MDMyNiwgYmgsIFNldFBhZ2UgY29ycmVjdGVkDQktIDIwMDcwMzI3LCBiaCwgU2V0T3JpZW50YXRpb24gY2FsbHMgYWRkZWQNCS0gMjAxOTEyMDEsIEFELCBEb2N1bWVudC5HZXRCYWNrZ3JvdW5kIG5vdyByZXR1cm5zIFZpZXdzLnRyYW5zcGFyZW50DQktIDIwMjMwNTIwLCBrOCwgc2Nyb2xsYmFyIGZpeGVzDQktIDIwMjQwNTIxLCBkaWEsIHByZXZlbnQgZmFsbCBpbiBEb1JlY2FsYw0J"/><odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA6gAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABkAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAJAAAA@w0JLSAuLi4NCQ=="/><odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT
+		Files, Ports, Printers, Documents, Services, Windows, 
+		Stores, Models, Views, Controllers, Properties, 
+		Printing, Containers, StdScrollbars;
+
+	CONST
+		(** Controller.opts **)
+		pageWidth = Documents.pageWidth; pageHeight = Documents.pageHeight;
+		winWidth = Documents.winWidth; winHeight = Documents.winHeight;
+		
+		forceRecalc = TRUE;	(* for PROCEDURE DoRecalc *)
+
+		mm = Ports.mm;
+
+		defB = 8 * Ports.point;	(* defB also used by HostWindows in DefBorders *)
+
+		scrollUnit = 16 * Ports.point;
+
+		resizingKey = "#System:Resizing";
+		pageSetupKey = "#System:PageSetup";
+		
+		docTag = 6F4F4443H; docVersion = 0; modelVersion = 0;
+
+		minVersion = 0; maxModelVersion = 0; 
+		maxDocVersion = 0; maxCtrlVersion = 0;
+		
+		(* Constants for Document.frame.flags that indicate it ? to front or target path *)
+		front* = 20; target* = 21;
+
+		left* = TRUE; right* = ~left;	(** Constants for Param.sbSide *)
+		
+		center* = -1;	(* possible value for l, t in PROCEDURE InsertOverlaid *)
+		
+		(* Context.align *)
+		noalign* = 0; top* = 1; bottom* = 2;
+
+		(* OverlayProposal.op *)
+		show* = 0; hide* = 1; poll* = 2; pollFrame* = 3;
+
+	TYPE
+		Context* = POINTER TO ABSTRACT RECORD (Documents.Context) 
+			l*, t*, w*, h*, (** bounding box, w = 0 => not restored (not Views.InstallFrame'd) *)
+			level*: INTEGER; (** z-ordering, passed into Views.InstallFrame *)
+			view*: Views.View;
+		END;
+		
+		StdContext = POINTER TO EXTENSIBLE RECORD (Context)
+			next: StdContext;
+			model: StdModel;
+			align: INTEGER;
+			overlaid: BOOLEAN;
+			(* modal: BOOLEAN; *)
+			owner: Views.View; (* optional owner of an overlaid view, will receive msgs *)
+			par: ANYPTR;
+		END;
+				(* merge these types? *)
+		SBContext = POINTER TO RECORD (StdContext) END; 
+		(* this type is for the sake of Consider'ing a StdScrollbars.Proposal *)
+		
+		Directory* = POINTER TO ABSTRACT RECORD (Documents.Directory) END;
+
+		Model* = POINTER TO ABSTRACT RECORD (Containers.Model)
+		(** responsible for allocating and positioning auxiliary views *)
+			view: Views.View;
+			l, t, r, b: INTEGER;	(* possibly  r, b >= Views.infinite *)	(* the box occupied by .view *)
+			(* l, t: constant (= defB) *)
+			(* r-l, b-t: invalid in some cases, use PollRect *)
+			doc-: Document;	(* one-to-one relationship *)
+			(* parameters to .Recalc: *)
+			ocw-, och-, 		(* last obtained original's context w, h,*)
+			unit-: INTEGER;		(* frame unit,  (backup unit size, for situations when Recalc is requested while it's frame is not provided (i.e. when .Recalc is called from PollRect) *)
+			opts-: SET;			(* and original's controllers opts *)
+		END;
+
+		Document* = POINTER TO RECORD (Documents.Document)
+			model: Model;	(* one-to-one relationship *)
+			original: Document;	(* original # NIL => d IS copy of original *)
+			pw, ph, pl, pt, pr, pb: INTEGER;	(* invalid if original # NIL, use PollPage *)
+			decorate: BOOLEAN;
+			x, y: INTEGER;	(* scroll state *)
+			clipper: RootContext;	(* clipping box for doc's view in this ACTUAL (not original) document. This clipping box is different from the view's box obtained thru PollRect, 'cause in case of winWidth, winHeight options, the view's box depends on the ORIGINAL doc's context, not the ACTUAL doc's context. At the time, .clipper.view = NIL *)
+			prevW, prevH: INTEGER;
+		END;
+
+		RootContext = POINTER TO RECORD (Context)
+			model: Model
+		END;
+
+		SetRectOp = POINTER TO RECORD (Stores.Operation)
+			model: Model;
+			w, h: INTEGER
+		END;
+		SetPageOp = POINTER TO RECORD (Stores.Operation)
+			d: Document;
+			pw, ph, pl, pt, pr, pb: INTEGER;
+			decorate: BOOLEAN
+		END;
+		ReplaceViewOp = POINTER TO RECORD (Stores.Operation)
+			model: Model;
+			new: Views.View
+		END;
+
+		UpdateMsg = RECORD (Views.Message)
+			doc: Document
+		END;
+		
+		Param* = POINTER TO RECORD
+			sbSide*: BOOLEAN;	(** left = TRUE; right = FALSE *)
+			sbThickness*: INTEGER;
+			debug*: BOOLEAN;
+			InitDefaults-, Init-: PROCEDURE (par: ANYPTR)
+		END;
+		
+		OverlayProposal* = RECORD (Models.Proposal)
+			op*,
+			x*, y*: INTEGER;
+			owner*,				(* optional owner for .view, will receive some related msgs *)
+			view*: Views.View;		(* view to be shown if .op = show *)
+			frame*: Views.Frame;	(* valid iff .op = pollFrame; IN: .owner's frame OUT: overlay's frame *)
+		END;
+		
+		UCs = INTEGER;
+		Pixels = INTEGER;
+		
+		PollOptsMsg* = RECORD (Views.Message)
+			opts*: SET
+		END;
+
+		PanWindowPref* = RECORD (Properties.Preference)	(* relocate? cf. TylerMenus, LinWindows*)
+			atLocation*: BOOLEAN;
+			x*, y*: INTEGER;
+			panWindow*: BOOLEAN	(* callee => caller *)
+		END;
+			
+		StdModel = POINTER TO RECORD (Model)
+			param: Param;
+			sbV, sbH: StdContext;
+			sbVv, sbHv: StdScrollbars.Scrollbar;
+			showV, showH: BOOLEAN;
+			aux: StdContext; 	(* linked list of aux views *)
+		END;
+		
+		Controller = POINTER TO RECORD (Containers.Controller)
+			doc: Document;
+			model: StdModel;
+			overlaid: StdContext;
+		END;
+		
+		StdDirectory = POINTER TO RECORD (Directory) END;
+		
+		ResetBarAction = POINTER TO RECORD (Services.Action) END;
+		
+		RemoveOverlayMsg* = RECORD (Views.Message) END;
+		(** Informs the overlaid owner view of the fact the overlay is removed *)
+		
+		Backdrop = POINTER TO RECORD (Views.View) 
+			view: Views.View;
+		END;
+		
+		BackdropContext = POINTER TO RECORD (Models.Context)
+			backdrop: Backdrop
+		END;
+
+	VAR
+		dir-, stdDir-: Directory;
+		param*: Param;
+		resetBar: ResetBarAction;
+		bar: StdContext;
+		par-: ANYPTR;	(* optional parameter of currently activated pane *)
+	
+	PROCEDURE (c: Context) Normalize* (): BOOLEAN; BEGIN RETURN TRUE END Normalize;
+	PROCEDURE (c: Context) GetSize* (OUT w, h: INTEGER), EXTENSIBLE;
+	BEGIN w := c.w; h := c.h
+	END GetSize;
+	
+
+	(* Model *)
+
+	PROCEDURE (lo: Model) First* (): Context, NEW, ABSTRACT;
+	(** First aux view context for doc *)
+	PROCEDURE (lo: Model) Next* (c: Context): Context, NEW, ABSTRACT;
+	(** Linked list of contexts for aux views *)
+	PROCEDURE (m: Model) Recalc- (clipper: Context), NEW, ABSTRACT;
+	(** Recalculate aux views boxes for m. m.ocw, .och, .unit, .opts are parameters to Recalc, their valid values are guaranteed by the caller. clipper is the clipping rectangle for document's view: it may exclude the space occupied by tiled auxiliary views and is the box in which the view is placed. The view's rect (cf. PollRect, SetRect) is a rect inside clipper *)
+	
+	PROCEDURE (m: Model) Internalize2- (VAR rd: Stores.Reader), NEW, EMPTY;
+	PROCEDURE (m: Model) Externalize2- (VAR wr: Stores.Writer), NEW, EMPTY;
+	PROCEDURE (m: Model) CopyFrom2- (source: Stores.Store), NEW, EMPTY;
+	
+	
+	PROCEDURE (m: Model) Internalize- (VAR rd: Stores.Reader);
+		VAR c: RootContext; thisVersion: INTEGER; l, t, r, b: INTEGER;
+	BEGIN
+		m.Internalize^(rd);
+		IF rd.cancelled THEN RETURN END;
+		rd.ReadVersion(minVersion, maxModelVersion, thisVersion);
+		IF rd.cancelled THEN RETURN END;
+		Views.ReadView(rd, m.view);
+		rd.ReadInt(l); rd.ReadInt(t); rd.ReadInt(r); rd.ReadInt(b);
+		m.l := defB; m.t := defB; m.r := defB + r - l; m.b := defB + b - t;
+		NEW(c); c.model := m; m.view.InitContext(c);
+		m.Internalize2(rd)
+	END Internalize;
+
+	PROCEDURE (m: Model) Externalize- (VAR wr: Stores.Writer);
+	BEGIN
+		ASSERT(m.doc.original = NIL, 100);
+		m.Externalize^(wr);
+		wr.WriteVersion(maxModelVersion);
+		Views.WriteView(wr, m.view);
+		wr.WriteInt(m.l); wr.WriteInt(m.t); wr.WriteInt(m.r); wr.WriteInt(m.b);
+		m.Externalize2(wr)
+	END Externalize;
+
+	PROCEDURE (m: Model) CopyFrom- (source: Stores.Store);
+		VAR c: RootContext;
+	BEGIN
+		WITH source: Model DO
+			m.view := Stores.CopyOf(source.view)(Views.View);
+			m.l := source.l; m.t := source.t; m.r := source.r; m.b := source.b;
+			NEW(c); c.model := m; m.view.InitContext(c);
+			m.CopyFrom2(source)
+		END
+	END CopyFrom;
+	
+	PROCEDURE (m: Model) InitFrom- (source: Containers.Model);
+		VAR c: RootContext;
+	BEGIN
+		WITH source: Model DO
+			m.view := Stores.CopyOf(source.view)(Views.View);
+			m.l := source.l; m.t := source.t; m.r := source.r; m.b := source.b;
+			NEW(c); c.model := m; m.view.InitContext(c)
+		END
+	END InitFrom;
+
+	PROCEDURE (m: Model) GetEmbeddingLimits* (OUT minW, maxW, minH, maxH: INTEGER);
+	BEGIN
+		minW := 5 * mm; minH := 5 * mm;
+		maxW := MAX(INTEGER) DIV 2; maxH := MAX(INTEGER) DIV 2
+	END GetEmbeddingLimits;
+
+	PROCEDURE (m: Model) ReplaceView* (old, new: Views.View);
+		VAR con: Models.Context; op: ReplaceViewOp;
+	BEGIN
+		ASSERT(old # NIL, 20); con := old.context;
+		ASSERT(con # NIL, 21); ASSERT(con.ThisModel() = m, 22);
+		ASSERT(new # NIL, 23);
+		ASSERT((new.context = NIL) OR (new.context = con), 24);
+		IF new # old THEN
+			IF new.context = NIL THEN new.InitContext(con) END;
+			Stores.Join(m, new);
+			NEW(op); op.model := m; op.new := new;
+			Models.Do(m, "#System:ReplaceView", op)
+		END
+	END ReplaceView;
+
+	PROCEDURE (c: StdContext) ThisModel (): Model; 
+	BEGIN RETURN c.model
+	END ThisModel;
+	
+	PROCEDURE (c: StdContext) ThisDoc (): Document; 
+	BEGIN RETURN c.model.doc 
+	END ThisDoc;
+	
+	(* StdModel *)
+	
+	(* shouldn't First and .Next be replaced with Containers.Controller.GetFirst, .GetNext? *)
+	PROCEDURE (m: StdModel) First (): StdContext; 
+		VAR res: StdContext;
+	BEGIN 
+		res := m.aux; 
+		IF res = NIL THEN res := m.doc.ThisController()(Controller).overlaid END;
+		RETURN res
+	END First;
+	
+	PROCEDURE (m: StdModel) Next (c: Context): StdContext;
+		VAR ctx, overlaid, res: StdContext; ctrl: Containers.Controller;
+	BEGIN
+		ctrl := m.doc.ThisController(); 
+		WITH ctrl: Controller DO 
+			overlaid := ctrl.overlaid; 
+			ctx := m.aux; WHILE (ctx # NIL) & (ctx # overlaid) DO ctx := ctx.next END;
+			IF ctx = overlaid THEN overlaid := NIL END
+			(* Post: overlaid ? m.aux *)
+		ELSE HALT(21) 
+		END;
+		IF (c = overlaid) & (overlaid # NIL) THEN (* nothing *)
+		ELSE
+			WITH c: StdContext DO res := c.next; IF res = NIL THEN res := overlaid END
+			ELSE HALT(20)
+			END
+		END;
+		RETURN res
+	END Next;
+	
+	PROCEDURE SBLeft (wid, hei, thickness: UCs; validV, validH: BOOLEAN; clipper: Context; v, h: StdContext);
+		VAR a: UCs; 							(** scrollbar on the left *)
+	BEGIN
+		v.l := 0; v.t := 0; clipper.t := 0; h.l := 0;
+		IF validV THEN a := MIN(wid, thickness) ELSE a := 0 END; v.w := a; 
+		clipper.w := wid - a; clipper.l := a;
+		IF validH THEN a := MIN(hei, thickness) ELSE a := 0 END; h.h := a; 
+		h.t := hei - a; clipper.h := hei - a; 
+		v.h := hei - a;
+		h.w := wid;
+	END SBLeft;
+	
+	PROCEDURE SBRight (wid, hei, thickness: UCs; validV, validH: BOOLEAN; clipper: Context; v, h: StdContext);
+		VAR a: UCs; 							(** scrollbar on the right *)
+	BEGIN 
+		clipper.l := 0; clipper.t := 0; v.t := 0; h.l := 0;
+		IF validV THEN a := MIN(wid, thickness) ELSE a := 0 END; v.w := a; 
+		v.l := wid - a; clipper.w := wid - a; 
+		IF validH THEN a := MIN(hei, thickness) ELSE a := 0 END; h.h := a; 
+		h.t := hei - a; clipper.h := hei - a; 
+		v.h := hei;
+		h.w := wid - v.w;
+	END SBRight;
+	
+	PROCEDURE PreferredSize (v: Views.View; m: StdModel; OUT w, h: INTEGER);
+		VAR bounds: Properties.BoundsPref; wl, wh, hl, hh: INTEGER;
+	BEGIN
+		bounds.w := Views.undefined; bounds.h := Views.undefined;
+		Views.HandlePropMsg(v, bounds);
+		IF (bounds.w > Views.undefined) & (bounds.h > Views.undefined) THEN
+			w := bounds.w; h := bounds.h
+		ELSE
+			m.GetEmbeddingLimits(wl, wh, hl, hh); 
+			w := Views.undefined; h := Views.undefined;
+			Properties.PreferredSize(v, wl, wh, hl, hh, 50 * Ports.mm, 50 * Ports.mm, w, h)
+		END
+	END PreferredSize;
+	
+	PROCEDURE (m: StdModel) Recalc (clipper: Context);
+		VAR _w, thickness, aw, ah, l, t, r, b: UCs; c: StdContext; 
+	BEGIN 
+		IF m.doc.context = NIL THEN 		(* window initialization branch *)
+			m.doc.PollRect(l, t, r, b); clipper.l := 0; clipper.t := 0; clipper.w := r; clipper.h := b
+		ELSE m.doc.context.GetSize(aw, ah);
+			IF m.unit = 0 THEN
+				thickness := 0 
+			ELSE
+				thickness := m.param.sbThickness
+			END;
+			IF (aw = 0) OR (ah = 0) THEN
+			ELSIF m.param.sbSide = left THEN
+				SBLeft(aw, ah, thickness, m.showV, m.showH, clipper, m.sbV, m.sbH)
+			ELSE
+				SBRight(aw, ah, thickness, m.showV, m.showH, clipper, m.sbV, m.sbH)
+			END
+		END;
+		(* At this point, the scrollbars and clipper have been set *)
+		c := m.aux;
+		WHILE c # NIL DO
+			IF (c.align = top) OR (c.align = bottom) THEN 
+				PreferredSize(c.view, m, _w, c.h);
+				c.l := clipper.l; c.w := clipper.w; 
+				IF c.align = top THEN c.t := clipper.t; INC(clipper.t, c.h); DEC(clipper.h, c.h)
+				ELSE DEC(clipper.h, c.h); c.t := clipper.t + clipper.h
+				END
+			END;
+			c := c.next
+		END;
+		(* At this point, all aligned auxiliary views have been set *)
+		(* The .overlaid view is set when handling OverlayProposal -> DoInsertOverlaid *)
+	END Recalc;
+
+	PROCEDURE GetSection (f: Views.Frame; focus, vertical: BOOLEAN; VAR size, sect, pos: INTEGER; VAR valid: BOOLEAN);
+		VAR msg: Controllers.PollSectionMsg;
+	BEGIN	(* portable *)
+		msg.focus := focus; msg.vertical := vertical;
+		msg.wholeSize := 1;
+		msg.partSize := 0; msg.partPos := 0;
+		msg.valid := FALSE; msg.done := FALSE;
+		Views.ForwardCtrlMsg(f, msg);
+		IF msg.done THEN
+			size := msg.wholeSize; sect := msg.partSize; pos := msg.partPos;
+			IF size < 0 THEN size := 0 END;
+			IF sect < 0 THEN sect := 0 ELSIF sect > size THEN sect := size END;
+			IF pos > size - sect THEN pos := size - sect END;
+			IF pos < 0 THEN pos := 0 END
+		ELSE size := 1; sect := 0; pos := 0
+		END;
+		valid := msg.valid
+	END GetSection;
+	
+	PROCEDURE UpdateScrollbar (f: Views.Frame; m: StdModel; vertical, focus: BOOLEAN; OUT show, upd: BOOLEAN);
+		VAR size, sect, pos: INTEGER; sb: StdScrollbars.Scrollbar;
+	BEGIN
+		IF vertical THEN sb := m.sbVv ELSE sb := m.sbHv END;
+		GetSection(f, focus, vertical, size, sect, pos, show);
+		IF show THEN (* ? *) IF size = 0 THEN size := 1 END
+		ELSIF ~focus THEN GetSection(f, FALSE, vertical, size, sect, pos, show)
+		END;
+		
+		upd := FALSE;
+		
+		IF show THEN
+			IF sb.wholeSize # size THEN sb.wholeSize := size; upd := TRUE END;
+			IF sb.partSize # sect THEN sb.partSize := sect; upd := TRUE END;
+			IF sb.partPos # pos THEN sb.partPos := pos; upd := TRUE END
+		END
+		
+	END UpdateScrollbar;
+	
+	PROCEDURE ^ Recalc* (d: Document; unit: INTEGER);
+	
+	PROCEDURE (m: Model) UpdateScrollbars- (f: Views.Frame; opts: SET), NEW, EMPTY;
+	
+	PROCEDURE (m: StdModel) UpdateScrollbars (f: Views.Frame; opts: SET);
+		VAR recalc, updV, updH, showV, showH: BOOLEAN; flags: SET;
+	BEGIN
+		WITH f: Views.RootFrame DO flags := f.flags ELSE flags := {} END;
+		showV := ~(Windows.noVScroll IN flags); showH := ~(Windows.noHScroll IN flags);
+		IF showV THEN
+			UpdateScrollbar(f, m, StdScrollbars.vertical, FALSE, showV, updV)
+		END;
+		IF showH THEN
+			UpdateScrollbar(f, m, ~StdScrollbars.vertical, FALSE, showH, updH)
+		END;
+		recalc := (m.showV # showV) OR (m.showH # showH);
+		m.showV := showV; m.showH := showH;
+		
+		IF m.showH THEN
+			m.sbVv.bottomMargin := m.param.sbThickness
+		ELSE
+			m.sbVv.bottomMargin := 0
+		END;
+		IF recalc THEN
+			Recalc(m.doc, f.unit)
+		ELSE
+			IF updV THEN Views.Update(m.sbVv, Views.keepFrames) END;
+			IF updH THEN Views.Update(m.sbHv, Views.keepFrames) END
+		END
+	END UpdateScrollbars;
+	
+	PROCEDURE UpdateScrollbars* (f: Views.Frame); 
+		VAR recalc, updV, updH, showV, showH: BOOLEAN; opts: SET; d: Views.View; m: Model;
+	BEGIN ASSERT(f # NIL, 20);
+		(* if Controllers.modify IN opts THEN scrollbars should show doc's proper scroll state rather than it'f focus view's scroll state *)
+		IF f.view # NIL THEN
+			d := f.view;
+			WITH d: Document DO
+				d.model.UpdateScrollbars(f, d.ThisController().opts)
+			ELSE
+				HALT(21)
+			END
+		END
+	END UpdateScrollbars;
+	
+	
+	(* operations *)
+
+	PROCEDURE (op: SetRectOp) Do;
+		VAR m: Model; w, h: INTEGER; upd: UpdateMsg; 
+	BEGIN
+		m := op.model;
+		w := m.r - m.l; h := m.b - m.t;
+		m.r := m.l + op.w; m.b := m.t + op.h;
+		op.w := w; op.h := h;
+		IF m.doc.context # NIL THEN
+			upd.doc := m.doc;
+			Views.Domaincast(m.doc.Domain(), upd)
+		END
+	END Do;
+
+	PROCEDURE (op: SetPageOp) Do;
+		VAR d: Document; pw, ph, pl, pt, pr, pb: INTEGER; decorate: BOOLEAN; upd: UpdateMsg;
+	BEGIN
+		d := op.d;
+		pw := d.pw; ph := d.ph; pl := d.pl; pt := d.pt; pr := d.pr; pb := d.pb;
+		decorate := d.decorate;
+		d.pw := op.pw; d.ph := op.ph; d.pl := op.pl; d.pt := op.pt; d.pr := op.pr; d.pb := op.pb;
+		d.decorate := op.decorate;
+		op.pw := pw; op.ph := ph; op.pl := pl; op.pt := pt; op.pr := pr; op.pb := pb;
+		op.decorate := decorate;
+		IF d.context # NIL THEN
+			upd.doc := d;
+			Views.Domaincast(d.Domain(), upd)
+		END
+	END Do;
+
+	PROCEDURE (op: ReplaceViewOp) Do;
+		VAR new: Views.View; upd: UpdateMsg;
+	BEGIN
+		new := op.new; op.new := op.model.view; op.model.view := new;
+		upd.doc := op.model.doc;
+		IF upd.doc.context # NIL THEN
+			Views.Domaincast(upd.doc.Domain(), upd)
+		END
+	END Do;
+	
+	
+	(* support for Document paging *)
+
+	PROCEDURE HasFocus (v: Views.View; f: Views.Frame): BOOLEAN;
+		VAR focus: Views.View; dummy: Controllers.PollFocusMsg;
+	BEGIN
+		focus := NIL; dummy.focus := NIL;
+		v.HandleCtrlMsg(f, dummy, focus);
+		RETURN focus # NIL
+	END HasFocus;
+	
+	PROCEDURE ScrollDoc (v: Document; x, y: INTEGER);
+	VAR xShift, yShift: INTEGER;
+	BEGIN
+		IF (x # v.x) OR (y # v.y) THEN
+			xShift := x - v.x; yShift := y - v.y;
+			v.x := x; v.y := y;
+			Views.Scroll(v, xShift, yShift)
+		END
+	END ScrollDoc;
+
+	PROCEDURE GetOtherSBSize (v: Document; vert: BOOLEAN): UCs;
+	VAR
+		res, w, h: UCs;
+		m: StdModel;
+	BEGIN ASSERT(v # NIL, 20);
+		res := 0;
+		IF v.model IS StdModel THEN
+			m := v.model(StdModel);
+			IF vert & m.showH THEN ASSERT(m.sbHv # NIL, 100);
+				m.sbHv.context.GetSize(w, h);
+				res := MAX(0, h)
+			ELSIF ~vert & m.showV THEN ASSERT(m.sbVv # NIL, 101);
+				m.sbVv.context.GetSize(w, h);
+				res := MAX(0, w)
+			END
+		END;
+		RETURN res
+	END GetOtherSBSize;
+
+	PROCEDURE CalcScrollParams (d: Document; unit: UCs; vert: BOOLEAN; OUT p, ps, vs, sz: INTEGER);
+	VAR w, h, l, t, r, b, sbsize: UCs;
+	BEGIN ASSERT(d # NIL, 20);
+		d.PollRect(l, t, r, b);
+		d.context.GetSize(w, h);
+		IF vert THEN
+			p := -d.y;
+			ps := h;
+			vs := b + t;
+			sz := b - t
+		ELSE
+			p := -d.x;
+			ps := w;
+			vs := r + l;
+			sz := r - l
+		END;
+		sbsize := GetOtherSBSize(d, vert);
+		INC(vs, sbsize);
+		INC(sz, sbsize)
+	END CalcScrollParams;
+
+	PROCEDURE PollSection (v: Document; f: Views.Frame; VAR msg: Controllers.PollSectionMsg);
+		VAR mv: Views.View; g: Views.Frame;
+			p, vs, ps, ws, sz: INTEGER;
+			c: Containers.Controller;
+	BEGIN
+		IF Windows.isTool IN f(Views.RootFrame).flags THEN
+			(* novelty: docs open in tool windows show scrollers in case doc's proper view won't fit in the size allowed for it, and DO NOT show scrollers for embedded views *)
+		ELSE
+			mv := v.model.view;
+			g := Views.ThisFrame(f, mv);
+			c := v.ThisController();
+			IF c.Singleton() # NIL THEN g := NIL END;
+			IF g # NIL THEN Views.ForwardCtrlMsg(g, msg) END;
+			IF (g = NIL) OR ~msg.done & (~msg.focus OR ~HasFocus(mv, g)) THEN
+				CalcScrollParams(v, f.unit, msg.vertical, p, ps, vs, sz);
+				IF ps > vs THEN ps := vs END;
+				ws := vs - ps; (* normalized scroll state *)
+				IF p > ws THEN
+					(* Scroll position normalization: PollSection is called by scrollbar update mechanism; if the document discovers itself in a new size (after window resize), it tries to 'normalize' it's scroll position, as much as possible - i.e. return itself to 0,0 if it had beed scrolled off 0,0 before *)
+					p := ws;
+					IF msg.vertical THEN
+						ScrollDoc(v, v.x, -p)
+					ELSE
+						ScrollDoc(v, -p, v.y)
+					END
+				END;
+				msg.wholeSize := vs;
+				msg.partSize := ps;
+				msg.partPos := p;
+				msg.valid := ws > Ports.point
+			END;
+		END;
+		msg.done := TRUE
+	END PollSection;
+
+	PROCEDURE Scroll (v: Document; f: Views.Frame; VAR msg: Controllers.ScrollMsg);
+		VAR mv: Views.View; g: Views.Frame; vs, ps, ws, p, sz: INTEGER;
+			c: Containers.Controller; was: BOOLEAN;
+	BEGIN
+		mv := v.model.view;
+		g := Views.ThisFrame(f, mv);
+		c := v.ThisController();
+		IF c.Singleton() # NIL THEN g := NIL END;
+		IF g # NIL THEN
+			was := msg.focus;
+			IF Windows.isTool IN f(Views.RootFrame).flags THEN msg.focus := TRUE END;
+			Views.ForwardCtrlMsg(g, msg);
+			msg.focus := was
+		END;
+		IF (g = NIL) OR ~msg.done OR ~msg.focus OR ~HasFocus(mv, g) THEN
+			CalcScrollParams(v, f.unit, msg.vertical, p, ps, vs, sz);
+			IF sz - ps > f.dot * 2 THEN
+				(* adimetrius: follwing are weird calculations that i don't understand... *)
+				ws := vs - ps;
+				CASE msg.op OF
+				  Controllers.decLine: p := MAX(0, p - scrollUnit)
+				| Controllers.incLine: p := MIN(ws, p + scrollUnit)
+				| Controllers.decPage: p := MAX(0, p - ps + scrollUnit)
+				| Controllers.incPage: p := MIN(ws, p + ps - scrollUnit)
+				| Controllers.gotoPos: p := MAX(0, MIN(ws, msg.pos))
+				ELSE
+				END;
+				IF msg.vertical THEN ScrollDoc(v, v.x, -p)
+				ELSE ScrollDoc(v, -p, v.y)
+				END
+			END;
+			msg.done := TRUE
+		END;
+		(* msg.done := TRUE *)
+	END Scroll;
+	
+	PROCEDURE Page (d: Document; f: Views.Frame;
+								VAR msg: Controllers.PageMsg);
+		VAR g: Views.Frame;
+	BEGIN
+		g := Views.ThisFrame(f, d.model.view);
+		IF g # NIL THEN Views.ForwardCtrlMsg(g, msg) END
+	END Page;
+	
+
+
+	(* Document *)
+
+	PROCEDURE (d: Document) Internalize2- (VAR rd: Stores.Reader);
+		VAR thisVersion: INTEGER; c: Containers.Controller; opts: SET;
+	BEGIN
+		d.Internalize2^(rd);
+		IF rd.cancelled THEN RETURN END;
+		rd.ReadVersion(minVersion, maxDocVersion, thisVersion);
+		IF rd.cancelled THEN RETURN END;
+		rd.ReadInt(d.pw); rd.ReadInt(d.ph);
+		rd.ReadInt(d.pl); rd.ReadInt(d.pt); rd.ReadInt(d.pr); rd.ReadInt(d.pb);
+		rd.ReadBool(d.decorate);
+		NEW(d.clipper);
+		(* change infinite height to "fit to window" *)
+		c := d.ThisController(); 
+		IF (c # NIL) & (d.model.b >= 29000 * mm) & (c.opts * {winHeight, pageHeight} = {}) THEN
+			opts := { winHeight }
+		ELSE opts := {}
+		END;
+		c.SetOpts(c.opts + opts - {Containers.noSelection});
+		d.x := 0; d.y := 0;
+		Stores.InitDomain(d);
+		Recalc(d, 0)
+	END Internalize2;
+
+	PROCEDURE (d: Document) Externalize2- (VAR wr: Stores.Writer);
+	BEGIN
+		ASSERT(d.original = NIL, 100);
+		d.Externalize2^(wr);
+		wr.WriteVersion(maxDocVersion);
+		wr.WriteInt(d.pw); wr.WriteInt(d.ph);
+		wr.WriteInt(d.pl); wr.WriteInt(d.pt); wr.WriteInt(d.pr); wr.WriteInt(d.pb);
+		wr.WriteBool(d.decorate)
+	END Externalize2;
+
+	PROCEDURE (d: Document) CopyFromModelView2- (source: Views.View; model: Models.Model);
+	BEGIN
+		WITH source: Document DO
+			d.pw := source.pw; d.ph := source.ph;
+			d.pl := source.pl; d.pt := source.pt; d.pr := source.pr; d.pb := source.pb;
+			d.decorate := source.decorate;
+			NEW(d.clipper)
+		END
+	END CopyFromModelView2;
+	
+	PROCEDURE (d: Document) AcceptableModel- (m: Containers.Model): BOOLEAN;
+	BEGIN
+		RETURN m IS Model
+	END AcceptableModel;
+	
+	PROCEDURE (d: Document) InitModel2- (m: Containers.Model);
+	BEGIN
+		ASSERT((d.model = NIL) OR (d.model = m), 20);
+		ASSERT(m IS Model, 23);
+		WITH m: Model DO d.model := m; m.doc := d END
+	END InitModel2;
+	
+	PROCEDURE DoRecalc (d: Document; unit: INTEGER; force: BOOLEAN);
+	(** Check if recalc is necessary and, if so, perform it *)
+		VAR w_, h_, ww, wh, pw, ph, l, t, r, b, w, h: INTEGER; opts: SET; org: Documents.Document; 
+			c: Containers.Controller; m: Model; decorate_: BOOLEAN;
+			curCL, curCT, curCW, curCH: INTEGER;
+			uu: INTEGER;
+	BEGIN
+		org := d.original; IF org = NIL THEN org := d END;
+		IF org.context # NIL THEN org.context.GetSize(w, h) ELSE w := 0; h := 0 END;
+		c := org.ThisController();
+		IF c = NIL THEN opts := {}
+		ELSE opts := c.opts * { pageWidth, pageHeight, winWidth, winHeight }
+		END;
+		m := d.model;
+		IF force OR (m.ocw # w) OR (m.och # h) OR (opts # m.opts) OR (unit # 0) & (unit # m.unit) THEN
+			IF unit # 0 THEN m.unit := unit END; m.ocw := w; m.och := h; m.opts := opts;
+			m.Recalc(d.clipper); 
+			curCL := d.clipper.l; curCT := d.clipper.t;
+			curCW := d.clipper.w; curCH := d.clipper.h;
+			(* adapted from PollRect *)
+			WITH org: Document DO pw := org.pr - org.pl; ph := org.pb - org.pt;
+				w := org.model.r - org.model.l; h := org.model.b - org.model.t
+			ELSE org.PollPage(w_, h_, l, t, r, b, decorate_); pw := r - l; ph := b - t;
+				org.PollRect(l, t, r, b); w := r - l; h := b - t
+			END;
+			l := d.model.l; t := d.model.t;
+			IF d.context = NIL THEN ww := 0; wh := 0
+			ELSIF d.context IS Documents.PrinterContext THEN ww := pw; wh := ph
+			ELSE 
+				INC(l, curCL); INC(t, curCT);
+				ww := curCW - 2 * d.model.l; wh := curCH - 2 * d.model.t	(* doc border *)
+			END;
+			IF pageWidth IN m.opts THEN r := l + pw
+			ELSIF winWidth IN m.opts THEN
+				IF ww > 0 THEN r := l + ww ELSE r := d.model.r END
+			ELSE r := l + w
+			END;
+			IF pageHeight IN m.opts THEN b := t + ph
+			ELSIF winHeight IN m.opts THEN 
+				IF wh > 0 THEN b := t + wh ELSE b := d.model.b END
+			ELSE b := t + h
+			END;
+			IF r <= l THEN r := l + 1 END;
+			IF b <= t THEN b := t + 1 END;
+			
+			m.l := l - curCL; m.t := t - curCT; m.r := r - curCL; m.b := b - curCT;
+			
+			Views.Update(d, Views.keepFrames);
+		END
+	END DoRecalc;
+	
+	PROCEDURE Recalc* (d: Document; unit: INTEGER); 
+	BEGIN DoRecalc(d, unit, forceRecalc) 
+	END Recalc;
+	
+	PROCEDURE (d: Document) PollRect* (OUT l, t, r, b: INTEGER); 
+	BEGIN
+		DoRecalc(d, 0, ~forceRecalc); 
+		l := (* d.clipper.l + *) d.model.l; t := (* d.clipper.t + *) d.model.t;
+		r := (* d.clipper.l + *) d.model.r; b := (* d.clipper.t + *) d.model.b
+	END PollRect;
+
+	PROCEDURE (d: Document) PollPage* (OUT w, h, l, t, r, b: INTEGER; OUT decorate: BOOLEAN);
+		VAR doc: Document;
+	BEGIN
+		IF d.original = NIL THEN doc := d ELSE doc := d.original END;
+		w := doc.pw; h := doc.ph;
+		l := doc.pl; t := doc.pt; r := doc.pr; b := doc.pb;
+		decorate := doc.decorate
+	END PollPage;
+
+	PROCEDURE (d: Document) DocCopyOf* (v: Views.View): Documents.Document;
+		VAR c0, c1: Containers.Controller; u: Views.View;
+			new: Documents.Document; w, h: INTEGER;
+	BEGIN
+		ASSERT(v # NIL, 20);
+		ASSERT(~(v IS Document), 21);
+		ASSERT(d.Domain() = v.Domain(), 22);
+		ASSERT(d.Domain() # NIL, 23);
+		Views.BeginModification(3, v);  
+		u := Views.CopyOf(v, Views.shallow);
+		v.context.GetSize(w, h);
+		new := dir.New(u, w, h);
+		WITH new: Document DO
+			IF d.original # NIL THEN
+				new.original := d.original
+			ELSE
+				new.original := d
+			END
+		END;
+		c0 := d.ThisController();
+		c1 := new.ThisController();
+		c1.SetOpts(c0.opts);
+		Views.EndModification(3, v);
+		RETURN new
+	END DocCopyOf;
+
+	PROCEDURE (d: Document) Restore* (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR
+			c: Containers.Controller; m: Model; con: Models.Context; s: Views.View; ctx: Context;
+			dw, dh: INTEGER;
+	BEGIN
+		
+		m := d.model; con := d.context;
+		
+		(* k8: we need to recalc if document size was changed. fixes bug with scrollbars in subwindows. *)
+		d.context.GetSize(dw, dh);
+		IF (m.unit = 0) OR (d.prevW # dw) OR (d.prevH # dh) THEN
+			DoRecalc(d, f.unit, forceRecalc)
+		END;
+		d.prevW := dw; d.prevH := dh;
+		
+		WITH con: Documents.PrinterContext DO
+			IF con.param.page.alternate & ~ODD(con.param.page.first + Printing.Current()) THEN
+				Views.InstallFrame(f, m.view, con.pw - con.r, con.t, 0, FALSE)
+			ELSE
+				Views.InstallFrame(f, m.view, con.l, con.t, 0, FALSE)
+			END
+		ELSE
+			c := d.ThisController(); s := c.Singleton();
+			
+			IF param.debug THEN
+				f.DrawRect(d.clipper.l, d.clipper.t, d.clipper.l + d.clipper.w, d.clipper.t + d.clipper.h, 0, Ports.red);
+			END;
+			
+			d.GetRect(f, m.view, l, t, r, b);
+			
+			Views.InstallFrame(f, m.view, l, t, 0, s = NIL);
+			
+			ctx := d.model.First();
+			WHILE ctx # NIL DO
+				Views.InstallFrame(f, ctx.view, ctx.l, ctx.t, 0, FALSE);
+				ctx := m.Next(ctx)
+			END;
+			
+			f.DrawRect(d.clipper.l + d.clipper.w, d.clipper.t + d.clipper.h, dw, dh, Ports.fill, Ports.red);
+			
+		END
+	END Restore;
+	
+	PROCEDURE (d: Document) GetRect* (f_: Views.Frame; view: Views.View; OUT l, t, r, b: INTEGER);
+		VAR c: Models.Context;
+	BEGIN
+		ASSERT(view # NIL, 20); c := view.context; ASSERT(c # NIL, 21); 
+		IF view = d.model.view THEN
+			d.PollRect(l, t, r, b);
+			INC(l, d.clipper.l); INC(t, d.clipper.t);
+			INC(r, d.clipper.l); INC(b, d.clipper.t);
+			INC(l, d.x); INC(t, d.y); INC(r, d.x); INC(b, d.y)
+		ELSE HALT(126)
+		END
+	END GetRect;
+
+	PROCEDURE (d: Document) SetView* (view: Views.View; w, h: INTEGER);
+		CONST
+			wA4 = 210 * mm; hA4 = 296 * mm;	(* A4 default paper size *)
+			lm = 20 * mm; tm = 20 * mm; rm = 20 * mm; bm = 20 * mm;
+		VAR m: Model; c: RootContext; prt: Printers.Printer;
+			ctrl: Containers.Controller; opts: SET; rp: Properties.ResizePref;
+			u, minW, maxW, minH, maxH,  defW, defH,  dw, dh,  pw, ph,
+			pageW, pageH,  paperW, paperH,  leftM, topM, rightM, botM: INTEGER;
+			l, t, r, b: INTEGER; port: Ports.Port;
+	BEGIN
+		ASSERT(view # NIL, 20); ASSERT(~(view IS Document), 21);
+		ASSERT(d.original = NIL, 100);
+		m := d.model;
+		NEW(c); c.model := m; view.InitContext(c); 
+		ASSERT(view.context = c, 60 (* make sure view accepted c *) );
+		IF d.context # NIL THEN Stores.Join(d, view) END;
+		IF Printers.dir # NIL THEN prt := Printers.dir.Current() ELSE prt := NIL END;
+		IF prt # NIL THEN
+			prt.SetOrientation(FALSE);
+			port := prt.ThisPort(); prt.GetRect(l, t, r, b);
+			port.GetSize(pw, ph); u := port.unit;
+			paperW := r - l; paperH := b - t;
+			pageW := paperW - lm - rm; pageH := paperH - tm - bm;
+			leftM := lm; topM := tm; rightM := rm; botM := bm;
+			IF pageW > pw * u THEN pageW := pw * u END;
+			IF pageH > ph * u THEN pageH := ph * u END;
+			IF leftM + l < 0 THEN dw := -(leftM + l)
+			ELSIF paperW - rightM + l > pw * u THEN dw := pw * u - (paperW - rightM + l)
+			ELSE dw := 0
+			END;
+			IF topM + t < 0 THEN dh := -(topM + t)
+			ELSIF paperH - botM + t > ph * u THEN dh := ph * u - (paperH - botM + t)
+			ELSE dh := 0
+			END;
+			INC(leftM, dw); INC(topM, dh); INC(rightM, dw); INC(botM, dh)
+		ELSE
+			paperW := wA4; paperH := hA4;
+			pageW := paperW - lm - rm; pageH := paperH - tm - bm;
+			leftM := lm; topM := tm; rightM := rm; botM := bm
+		END;
+		m.GetEmbeddingLimits(minW, maxW, minH, maxH);
+		defW := MAX(minW, pageW - m.l - defB);
+		defH := MAX(minH, pageH - m.t - defB);
+		Properties.PreferredSize(view, minW, maxW, minH, maxH, defW, defH, w, h);
+		opts := {}; rp.fixed := FALSE;
+		rp.horFitToPage := FALSE;
+		rp.verFitToPage := FALSE;
+		rp.horFitToWin := FALSE;
+		rp.verFitToWin := FALSE;
+		Views.HandlePropMsg(view, rp);
+		IF rp.horFitToPage THEN INCL(opts, pageWidth)
+		ELSIF rp.horFitToWin THEN INCL(opts, winWidth)
+		END;
+		IF rp.verFitToPage THEN INCL(opts, pageHeight)
+		ELSIF rp.verFitToWin THEN INCL(opts, winHeight)
+		END;
+		Views.BeginModification(Views.notUndoable, d);
+		m.view := view; d.x := 0; d.y := 0;
+		ctrl := d.ThisController();
+		ctrl.SetOpts(ctrl.opts - {pageWidth..winHeight});
+		d.SetPage(paperW, paperH, leftM, topM, paperW - rightM, paperH - botM, Documents.plain);
+		ASSERT(w > 0, 100); ASSERT(h > 0, 101);
+		d.SetRect(m.l, m.t, m.l + w, m.t + h);
+		ctrl.SetOpts(ctrl.opts + opts);
+		Views.EndModification(Views.notUndoable, d);
+		Stores.Join(d, view);
+		Views.Update(d, Views.rebuildFrames)	(* Recalc? *)
+	END SetView;
+
+	PROCEDURE (d: Document) ThisView* (): Views.View;
+	BEGIN
+		RETURN d.model.view
+	END ThisView;
+	
+	PROCEDURE (d: Document) OriginalView* (): Views.View;
+	BEGIN
+		IF d.original = NIL THEN RETURN d.model.view
+		ELSE RETURN d.original.model.view
+		END
+	END OriginalView;
+
+	PROCEDURE (d: Document) SetRect* (l, t, r, b: INTEGER);
+		VAR m: Model; op: SetRectOp; c: Containers.Controller; w, h: INTEGER;
+	BEGIN
+		ASSERT(l < r, 22); ASSERT(t < b, 25);
+		m := d.model;
+		IF (m.l # l) OR (m.t # t) THEN
+			m.r := l + m.r - m.l; m.l := l;
+			m.b := t + m.b - m.t; m.t := t
+		END;
+		IF d.original # NIL THEN m := d.original.model END;
+		c := d.ThisController(); w := r - l; h := b - t;
+		IF (pageWidth IN c.opts) OR (winWidth IN c.opts) THEN w := m.r - m.l END;
+		IF (pageHeight IN c.opts) OR (winHeight IN c.opts) THEN h := m.b - m.t END;
+		IF (w # m.r - m.l) OR (h # m.b - m.t) THEN
+			NEW(op); op.model := m; op.w:= w; op.h := h;
+			Views.Do(d, resizingKey, op)
+		END
+	END SetRect;
+
+	PROCEDURE (d: Document) SetPage* (pw, ph, pl, pt, pr, pb: INTEGER; decorate: BOOLEAN);
+		VAR op: SetPageOp; doc: Document;
+	BEGIN
+		IF d.original = NIL THEN doc := d ELSE doc := d.original END;
+		IF (doc.pw # pw) OR (doc.ph # ph) OR (doc.decorate # decorate)
+		OR (doc.pl # pl) OR (doc.pt # pt) OR (doc.pr # pr) OR (doc.pb # pb) THEN
+			ASSERT(0 <= pw, 20);
+			ASSERT(0 <= ph, 22);
+			ASSERT(0 <= pl, 24); ASSERT(pl < pr, 25); ASSERT(pr <= pw, 26);
+			ASSERT(0 <= pt, 27); ASSERT(pt < pb, 28); ASSERT(pb <= ph, 29);
+			NEW(op);
+			op.d := doc;
+			op.pw := pw; op.ph := ph; op.pl := pl; op.pt := pt; op.pr := pr; op.pb := pb;
+			op.decorate := decorate;
+			Views.Do(doc, pageSetupKey, op)
+		END
+	END SetPage;
+
+	PROCEDURE (d: Document) HandleViewMsg2- (f: Views.Frame; VAR msg: Views.Message);
+	BEGIN
+		WITH msg: UpdateMsg DO
+			IF (msg.doc = d) OR (msg.doc = d.original) THEN
+				DoRecalc(d, 0, ~forceRecalc)
+			END
+		| msg: PollOptsMsg DO
+			WITH f: Views.RootFrame DO
+				msg.opts := f.flags
+			ELSE END
+		ELSE
+		END
+	END HandleViewMsg2;
+
+	PROCEDURE (d: Document) HandleCtrlMsg2- (f: Views.Frame; VAR msg: Controllers.Message; VAR focus: Views.View);
+	VAR
+		smsg: Controllers.ScrollMsg;
+		g: Views.Frame;
+		m: StdModel;
+		dw, dh, w, h: UCs;
+		sendScroll: BOOLEAN;
+	BEGIN
+		WITH f: Views.RootFrame DO
+			WITH msg: Controllers.PollSectionMsg DO
+				PollSection(d, f, msg); focus := NIL
+			| msg: Controllers.ScrollMsg DO
+				Scroll(d, f, msg); focus := NIL
+			| msg: Controllers.PageMsg DO
+				Page(d, f, msg); focus := NIL
+			| msg: Controllers.WheelMsg DO
+				d.context.GetSize(dw, dh);
+				IF d.model IS StdModel THEN
+					m := d.model(StdModel);
+					smsg.focus := FALSE; smsg.op := msg.op;
+					smsg.pos := 0; smsg.done := FALSE; sendScroll := FALSE;
+					IF m.showV & (m.sbVv # NIL) & (msg.y >= 0) & (msg.y < dh) THEN
+						m.sbVv.context.GetSize(w, h);
+						IF (m.param.sbSide = left) & (msg.x >= 0) & (msg.x < w) OR
+							(m.param.sbSide = ~left) & (msg.x >= dw - w) & (msg.x < dw)
+						THEN
+							smsg.vertical := TRUE;
+							sendScroll := TRUE
+						END
+					END;
+					IF ~sendScroll & m.showH & (m.sbHv # NIL) THEN
+						m.sbHv.context.GetSize(w, h);
+						IF (msg.x >= 0) & (msg.x < dw) & (msg.y >= dh - h) & (msg.y < dh) THEN
+							smsg.vertical := FALSE;
+							sendScroll := TRUE
+						END
+					END;
+					IF sendScroll THEN
+						g := Views.ThisFrame(f, d.model.view);
+						IF g # NIL THEN Views.ForwardCtrlMsg(g, smsg) END;
+						msg.done := TRUE; focus := NIL;
+						IF ~smsg.done THEN Scroll(d, f, smsg) END
+					END
+				END
+			ELSE END
+		END
+	END HandleCtrlMsg2;
+	
+	
+	(* RootContext *)
+
+	PROCEDURE ^ ConsiderOverlayProposal (c: Context; model: StdModel; VAR p: OverlayProposal);
+	PROCEDURE (c: RootContext) Consider (VAR p: Models.Proposal);
+		VAR m: Model;
+	BEGIN
+		WITH p: OverlayProposal DO 
+			m := c.model; 
+			WITH m: StdModel DO ConsiderOverlayProposal(c, m, p) ELSE END
+		ELSE
+		END
+	END Consider;
+	
+	PROCEDURE (c: RootContext) ThisModel (): Models.Model;
+	BEGIN
+		RETURN c.model
+	END ThisModel;
+
+	PROCEDURE (c: RootContext) GetSize (OUT w, h: INTEGER);
+		VAR m: Model; dc: Models.Context; l, t, r, b: INTEGER;
+	BEGIN
+		m := c.model;
+		m.doc.PollRect(l, t, r, b); w := r - l; h := b - t;
+		dc := m.doc.context;
+		IF dc # NIL THEN
+			WITH dc: Documents.PrinterContext DO
+				w := MIN(w, dc.r - dc.l); h := MIN(h, dc.b - dc.t)
+			ELSE
+			END
+		END;
+		ASSERT(w > 0, 60); ASSERT(h > 0, 61)
+	END GetSize;
+
+	PROCEDURE (c: RootContext) SetSize (w, h: INTEGER);
+		VAR m: Model; d: Document; minW, maxW, minH, maxH,  defW, defH: INTEGER;
+	BEGIN
+		m := c.model; d := m.doc; ASSERT(d # NIL, 20);
+		m.GetEmbeddingLimits(minW, maxW, minH, maxH);
+		defW := m.r - m.l; defH := m.b - m.t;
+		Properties.PreferredSize(m.view, minW, maxW, minH, maxH, defW, defH, w, h);
+		d.SetRect(m.l, m.t, m.l + w, m.t + h)
+	END SetSize;
+
+	PROCEDURE (c: RootContext) ThisDoc* (): Document;
+	BEGIN
+		RETURN c.model.doc
+	END ThisDoc;
+
+	PROCEDURE (c: RootContext) MakeVisible (l, t, r, b: INTEGER);
+		VAR x, y, w, h, dw, dh, ml, mt, mr, mb: INTEGER; d: Document;
+	BEGIN
+		d := c.model.doc(Document);
+		WITH d: Document DO
+			d.context.GetSize(w, h);
+			x := -d.x; y := -d.y;
+			d.PollRect(ml, mt, mr, mb);
+			dw := mr + ml - w; dh := mb + mt - h;
+			IF dw > 0 THEN
+				IF r > x + w - 2 * ml THEN x := r - w + 2 * ml END;
+				IF l < x THEN x := l END;
+				IF x < 0 THEN x := 0 ELSIF x > dw THEN x := dw END
+			END;
+			IF dh > 0 THEN
+				IF b > y + h - 2 * mt THEN y := b - h + 2 * mt END;
+				IF t < y THEN y := t END;
+				IF y < 0 THEN y := 0 ELSIF y > dh THEN y := dh END
+			END;
+			ScrollDoc(d, -x, -y)
+		END
+	END MakeVisible;
+
+
+	(* Controller *)
+
+	PROCEDURE (ctrl: Controller) RestoreMarks2 (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR d: Documents.Document;
+	BEGIN
+		IF param.debug THEN	
+			d := ctrl.doc;
+			d.PollRect(l, t, r, b); f.DrawRect(l, t, r, b, 0, Ports.green);
+			d.GetRect(f, d.ThisView(), l, t, r, b); f.DrawRect(l, t, r, b, 0, Ports.blue);
+		END;
+	END RestoreMarks2;
+	
+	PROCEDURE (c: Controller) HandleViewMsg (f: Views.Frame; VAR msg: Views.Message);
+		VAR g: Views.Frame;
+	BEGIN
+		WITH msg: RemoveOverlayMsg DO
+			(* ASSERT(c.overlaid # NIL, 20);  removed in producion version *)
+			IF c.overlaid # NIL THEN
+				g := Views.ThisFrame(f, c.overlaid.view);
+				IF g # NIL THEN Views.RemoveFrame(f, g) END
+			END;
+		ELSE
+			c.HandleViewMsg^(f, msg)
+		END
+	END HandleViewMsg;
+
+	PROCEDURE (c: Controller) Internalize2 (VAR rd: Stores.Reader);
+		VAR v: INTEGER;
+	BEGIN
+		rd.ReadVersion(minVersion, maxCtrlVersion, v)
+	END Internalize2;
+
+	PROCEDURE (c: Controller) Externalize2 (VAR wr: Stores.Writer);
+	BEGIN
+		wr.WriteVersion(maxCtrlVersion)
+	END Externalize2;
+
+	PROCEDURE (c: Controller) InitView2 (v: Views.View);
+		VAR m: Models.Model;
+	BEGIN
+		IF v # NIL THEN 
+			WITH v: Document DO c.doc := v; m := c.doc.ThisModel(); 
+				ASSERT(m # NIL, 21); 
+				WITH m: StdModel DO c.model := m ELSE HALT(22) END
+			ELSE HALT(20)
+			END
+		ELSE c.doc := NIL; c.model := NIL
+		END
+	END InitView2;
+
+	PROCEDURE (c: Controller) GetContextType (OUT type: Stores.TypeName);
+	END GetContextType;
+
+	PROCEDURE (c: Controller) GetValidOps (OUT valid: SET);
+	BEGIN
+		IF c.Singleton() # NIL THEN
+			valid := {Controllers.copy}
+		END
+	END GetValidOps;
+
+	PROCEDURE (c: Controller) NativeModel (m: Models.Model): BOOLEAN;
+	BEGIN
+		RETURN m IS StdModel
+	END NativeModel;
+
+	PROCEDURE (c: Controller) NativeView (v: Views.View): BOOLEAN;
+	BEGIN
+		RETURN v IS Document
+	END NativeView;
+
+	PROCEDURE (c: Controller) NativeCursorAt (f: Views.Frame; x, y: INTEGER): INTEGER;
+	BEGIN
+		RETURN Ports.arrowCursor
+	END NativeCursorAt;
+
+	PROCEDURE (c: Controller) PollNativeProp (selection: BOOLEAN; VAR p: Properties.Property; VAR truncated: BOOLEAN);
+	END PollNativeProp;
+
+	PROCEDURE (c: Controller) SetNativeProp (selection: BOOLEAN; p, old: Properties.Property);
+	END SetNativeProp;
+
+	PROCEDURE (c: Controller) GetFirstView (selection: BOOLEAN; OUT v: Views.View);
+	BEGIN
+		IF selection THEN v := c.Singleton() ELSE v := c.doc.ThisView() END
+	END GetFirstView;
+
+	PROCEDURE (c: Controller) GetNextView (selection: BOOLEAN; VAR v: Views.View);
+	(** Skip 'modal' views that are out of focus *)
+		VAR next: StdContext; ctx: Models.Context;
+	BEGIN
+		v := NIL
+		(*
+		IF selection THEN
+			v := NIL
+		ELSIF v = c.doc.ThisView() (* clipper *) THEN
+			next := c.model.aux
+		ELSE
+			ctx := v.context; ASSERT(ctx # NIL, 20); 
+			WITH ctx: StdContext DO
+				ASSERT(ctx.ThisDoc() = c.doc, 21); next := ctx.next
+			ELSE HALT(22) END
+		END;
+		IF next # NIL THEN 
+			v := next.view;
+			IF next.modal & (c.ThisFocus() # v) THEN c.GetNextView(selection, v) END
+		ELSE v := NIL 
+		END
+		*)
+	END GetNextView;
+		
+	PROCEDURE (c: Controller) GetPrevView (selection: BOOLEAN; VAR v: Views.View);
+		VAR this: Models.Context; aux: StdContext;
+	BEGIN
+		v := NIL
+		(*
+		ASSERT(v # NIL, 20);
+		aux := c.model.aux; 
+		IF selection THEN v := NIL
+		ELSIF v = c.doc.ThisView() (* clipper*)  THEN v := NIL
+		ELSIF aux = NIL THEN HALT(21 (* v ? ctrl.doc *))
+		ELSIF v = aux.view THEN v := c.doc.ThisView() (* clipper *)
+		ELSE
+			this := v.context; ASSERT(this # NIL, 22);
+			WITH this: StdContext DO ASSERT(this.model = c.model, 23);
+				WHILE (aux # NIL) & (this # aux.next) DO aux := aux.next END;
+				ASSERT(aux # NIL(*=>this = aux.next*), 24 (* v ? ctrl.doc *));
+				v := aux.view
+			ELSE HALT(25)
+			END
+		END
+		*)
+	END GetPrevView;
+
+	PROCEDURE (c: Controller) TrackMarks (f: Views.Frame; x, y: INTEGER; units, extend, add: BOOLEAN);
+	BEGIN
+		c.Neutralize
+	END TrackMarks;
+	
+	PROCEDURE (c: Controller) Resize (view: Views.View; l, t, r, b: INTEGER);
+		VAR d: Document; l0, t0, r0_, b0_: INTEGER;
+	BEGIN
+		d := c.doc;
+		ASSERT(view = d.ThisView(), 20);
+		d.PollRect(l0, t0, r0_, b0_);
+		d.SetRect(l0, t0, l0 + r - l, t0 + b - t)
+	END Resize;
+	
+	PROCEDURE (c: Controller) DeleteSelection;
+	END DeleteSelection;
+
+	PROCEDURE (c: Controller) MoveLocalSelection (f, dest: Views.Frame; x, y: INTEGER; dx, dy: INTEGER);
+		VAR l, t, r, b: INTEGER; view: Views.View;
+	BEGIN
+		IF f = dest THEN
+			view := c.doc.ThisView(); c.doc.PollRect(l, t, r, b);
+			DEC(dx, x); DEC(dy, y);
+			INC(l, dx); INC(t, dy); INC(r, dx); INC(b, dy);
+			c.Resize(view, l, t, r, b);
+			IF c.Singleton() = NIL THEN c.SetSingleton(view) END
+		END
+	END MoveLocalSelection;
+
+	PROCEDURE (c: Controller) SelectionCopy (): StdModel;
+	BEGIN
+		RETURN NIL
+	END SelectionCopy;
+
+	PROCEDURE (c: Controller) NativePaste (m: Models.Model; f: Views.Frame);
+		VAR l, t, r, b: INTEGER;
+	BEGIN
+		WITH m: StdModel DO
+			c.model.ReplaceView(c.doc.ThisView(), m.doc.ThisView());
+			m.doc.PollRect(l, t, r, b);
+			c.doc.SetRect(l, t, r, b)
+		END
+	END NativePaste;
+
+	PROCEDURE (c: Controller) PasteView (f: Views.Frame; v: Views.View; w, h: INTEGER);
+		VAR m: StdModel; l, t, r, b, minW, maxW, minH, maxH, defW, defH: INTEGER;
+	BEGIN
+		m := c.model;
+		m.GetEmbeddingLimits(minW, maxW, minH, maxH);
+		c.doc.PollRect(l, t, r, b);
+		defW := r - l; defH := b - t;
+		Properties.PreferredSize(v, minW, maxW, minH, maxH, defW, defH, w, h);
+		m.ReplaceView(c.doc.ThisView(), v);
+		c.doc.SetRect(l, t, l + w, t + h)
+	END PasteView;
+
+	PROCEDURE (c: Controller) Drop (src, dst: Views.Frame; sx, sy, x, y, w, h, rx, ry: INTEGER; v: Views.View; isSingle: BOOLEAN);
+		VAR m: StdModel; l, t, r, b, minW, maxW, minH, maxH, defW, defH: INTEGER;
+	BEGIN
+		m := c.model;
+		m.GetEmbeddingLimits(minW, maxW, minH, maxH);
+		c.doc.PollRect(l, t, r, b);
+		defW := r - l; defH := b - t;
+		Properties.PreferredSize(v, minW, maxW, minH, maxH, defW, defH, w, h);
+		m.ReplaceView(c.doc.ThisView(), v);
+		c.doc.SetRect(l, t, l + w, t + h)
+	END Drop;
+
+	(* selection *)
+
+	PROCEDURE (c: Controller) Selectable (): BOOLEAN;
+	BEGIN
+		RETURN TRUE
+	END Selectable;
+
+	PROCEDURE (c: Controller) SelectAll (select: BOOLEAN);
+	BEGIN
+		IF ~select & (c.Singleton() # NIL) THEN
+			c.SetSingleton(NIL)
+		ELSIF select & (c.Singleton() = NIL) THEN
+			c.SetSingleton(c.doc.ThisView())
+		END
+	END SelectAll;
+
+	PROCEDURE (c: Controller) InSelection (f: Views.Frame; x, y: INTEGER): BOOLEAN;
+	BEGIN
+		RETURN c.Singleton() # NIL
+	END InSelection;
+
+	(* caret *)
+
+	PROCEDURE (c: Controller) HasCaret (): BOOLEAN;
+	BEGIN
+		RETURN FALSE
+	END HasCaret;
+
+	PROCEDURE (c: Controller) MarkCaret (f: Views.Frame; show: BOOLEAN);
+	END MarkCaret;
+
+	PROCEDURE (c: Controller) CanDrop (f: Views.Frame; x, y: INTEGER): BOOLEAN;
+	BEGIN
+		RETURN FALSE
+	END CanDrop;
+
+	(* handlers *)
+
+	PROCEDURE GetFocusPrefAt (v: Views.View; host, frame: Views.Frame; x, y: INTEGER; OUT hot, set: BOOLEAN);
+		VAR p: Properties.FocusPref;
+	BEGIN
+		p.atLocation := TRUE; p.x := x + host.gx - frame.gx; p.y := y + host.gy - frame.gy;
+		p.hotFocus := FALSE; p.setFocus := FALSE;
+		Views.HandlePropMsg(v, p);
+		ASSERT(~(p.setFocus & p.hotFocus), 20);
+		hot := p.hotFocus; set := ~hot & p.setFocus
+	END GetFocusPrefAt;
+	
+	PROCEDURE IsMasked (v: Views.View): BOOLEAN;
+	(** Returns TRUE if v is a container view in mask mode, FALSE otherwise *)
+		VAR res: BOOLEAN; c: Containers.Controller;
+	BEGIN
+		WITH v: Containers.View DO c := v.ThisController(); 
+			IF c # NIL THEN res := Containers.mask * c.opts = Containers.mask END
+		ELSE
+		END;
+		RETURN res
+	END IsMasked;
+	
+	PROCEDURE RemoveOverlaid (c: Controller);
+		VAR msg: RemoveOverlayMsg;
+	BEGIN
+		IF (c.overlaid # NIL) & (c.overlaid.owner # NIL) THEN
+			Views.Broadcast(c.overlaid.owner, msg)
+		END;
+		Views.Broadcast(c.doc, msg); (* Received by each frame of c.doc so that overlaid frame can be removed - this is done to avoid rebuilding the whole frame tree *)
+		c.overlaid := NIL
+	END RemoveOverlaid;
+	
+	PROCEDURE LeafAt (f: Views.Frame; x, y: INTEGER): Views.View;
+		VAR g: Views.Frame; 
+	BEGIN
+		REPEAT 
+			g := f; f := Views.FrameAt(f, x, y); 
+			IF f # NIL THEN DEC(x, f.gx - g.gx); DEC(y, f.gy - g.gy) END 
+		UNTIL f = NIL;
+		RETURN g.view
+	END LeafAt;
+	
+	PROCEDURE IsAux (ctrl: Controller; ctx: StdContext): BOOLEAN;
+		VAR c: StdContext;
+	BEGIN
+		ASSERT(ctx # NIL, 20);
+		c := ctrl.model.aux;
+		WHILE (c # NIL) & (c # ctx) DO c := c.next END;
+		RETURN c = ctx
+	END IsAux;
+	
+	PROCEDURE (c: Controller) HandleCtrlMsg (f: Views.Frame; VAR msg: Controllers.Message; VAR focus: Views.View);
+		CONST ESC = 1BX;
+		VAR l, t, r, b: INTEGER; g: Views.Frame; dont, aux, hot, _: BOOLEAN; ctx: Models.Context; 
+			br, new: StdContext; top: Views.View; ct: Containers.Controller;
+	BEGIN
+		aux := FALSE;
+		WITH msg: Controllers.CursorMessage DO
+			IF c.Singleton() = NIL THEN
+			
+				(* move the copypasted black text somewhere in this branch? *)
+				g := Views.FrameAt(f, msg.x, msg.y); 
+				IF g # NIL THEN 
+					WITH msg: Controllers.TrackMsg DO
+						ctx := g.view.context;
+						WITH ctx: StdContext DO 
+							aux := TRUE; 
+							IF ctx.overlaid THEN new := ctx; focus := g.view 
+							ELSIF (c.overlaid # NIL) & (c.overlaid.owner # NIL) & (LeafAt(f, msg.x, msg.y) = c.overlaid.owner) THEN
+								new := c.overlaid
+							END 
+						ELSE 
+							IF (c.overlaid # NIL) & (c.overlaid.owner # NIL) THEN
+								IF (LeafAt(f, msg.x, msg.y) = c.overlaid.owner) THEN new := c.overlaid END;
+							END
+						END;
+						IF new # c.overlaid THEN (* Mark-Unmark*) 
+							IF c.overlaid # NIL THEN RemoveOverlaid(c) END;
+							c.overlaid := new; Recalc(c.doc, 0);
+						END;
+						IF focus = NIL THEN
+							GetFocusPrefAt(g.view, f, g, msg.x, msg.y, hot, _); 
+							IF hot OR IsMasked(g.view) THEN focus := g.view END
+						END;
+						IF focus # NIL THEN
+							ctx := focus.context;
+							WITH ctx: StdContext DO br := ctx ELSE END
+						END
+					ELSE IF g.view.context IS StdContext THEN focus := g.view END
+					END
+				END
+			END;
+		| msg: Controllers.EditMsg DO
+			IF (msg.op = Controllers.pasteChar) & (msg.char = ESC) & (c.overlaid # NIL) THEN
+				RemoveOverlaid(c);
+				Recalc(c.doc, 0)
+			ELSIF c.overlaid # NIL THEN focus := c.overlaid.view; br := focus.context(StdContext)
+			END
+		(* | msg: PollOutermostMsg DO msg.model := c.model; aux := TRUE *)
+		ELSE
+		END;
+		
+		IF br # NIL THEN 
+			ASSERT(bar = NIL, 100); (* should never be nested *)
+			bar := br; par := bar.par;
+			Services.DoLater(resetBar, Services.immediately)
+		ELSIF ~aux & (focus = NIL) THEN
+			dont := FALSE;
+			IF ~(Containers.noFocus IN c.opts) THEN
+				WITH msg: Controllers.TickMsg DO
+					g := Views.UltimateRootOf(f); top := g.view;
+					WITH top: Document DO
+						ct := top.ThisController();
+						WITH ct: Controller DO dont := (ct.overlaid # NIL) & ~IsAux(ct, ct.overlaid);
+							IF dont THEN g := Views.ThisFrame(g, ct.overlaid.view);
+								(* let overlaid rcv the tick *)
+								IF g # NIL THEN Views.ForwardCtrlMsg(g, msg) END
+								(* maybe also send a MarkMsg to front window with focus = FALSE, on = FALSE to let texts display proper caret? that's more appropriate when the overlaid is inserted, though *)
+							END
+						ELSE 
+						END
+					ELSE
+					END;
+					IF ~dont & (c.Singleton() = NIL) THEN c.SetFocus(c.doc.ThisView()) 
+					END
+				| msg: Controllers.CursorMessage DO
+					IF c.Singleton() = NIL THEN	(* delegate to focus, even if not directly hit *)
+						focus := c.ThisFocus();
+						c.doc.GetRect(f, focus, l, t, r, b);	(* except for resize in lower right corner *)
+						IF <odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAALAEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACmAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAABLAAAA@yhjLm9wdHMgKiB7cGFnZVdpZHRoLi53aW5IZWlnaHR9ICMge30pDQkJCQkJCQlPUiAobXNnLnggPCByKSBPUiAobXNnLnkgPCBiKQ=="/>(l <= msg.x) & (msg.x < r) & (t <= msg.y) & (msg.y < b)<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/> THEN
+							 RETURN 
+						END
+					END
+				ELSE
+				END
+			END;
+			IF ~dont THEN c.HandleCtrlMsg^(f, msg, focus) END
+		END
+	END HandleCtrlMsg;
+	
+	PROCEDURE (ctrl: Controller) HandlePropMsg (VAR msg: Properties.Message);
+		VAR c: StdContext;
+	BEGIN
+		ctrl.HandlePropMsg^(msg);
+		WITH msg: PanWindowPref DO
+			IF msg.atLocation THEN
+				c := ctrl.model.First();
+				WHILE (c # NIL) & ~((c.l <= msg.x)
+					& (msg.x - c.l < c.w) & (c.t <= msg.y) & (msg.y - c.t < c.h)) DO
+					c := ctrl.model.Next(c)
+				END;
+				IF c # NIL THEN 
+					DEC(msg.x, c.l); DEC(msg.y, c.t);
+					Views.HandlePropMsg(c.view, msg)
+				END
+			END
+		ELSE
+		END
+	END HandlePropMsg;
+	
+	PROCEDURE (c: Controller) ThisFocus (): Views.View;
+	BEGIN
+		IF c.Singleton() = NIL THEN c.SetFocus(c.doc.ThisView()) END;
+		RETURN c.ThisFocus^()
+	END ThisFocus;
+	
+	PROCEDURE (c: Controller) PasteChar (ch: CHAR);
+	END PasteChar;
+	
+	PROCEDURE (c: Controller) ControlChar (f: Views.Frame; ch: CHAR);
+	END ControlChar;
+	
+	PROCEDURE (c: Controller) ArrowChar (f: Views.Frame; ch: CHAR; units, select: BOOLEAN);
+	END ArrowChar;
+	
+	PROCEDURE (c: Controller) CopyLocalSelection (src, dst: Views.Frame; sx, sy, dx, dy: INTEGER);
+	END CopyLocalSelection;
+
+
+	(* Directory *)
+	
+	PROCEDURE (d: Directory) NewModel* (): Model, NEW, ABSTRACT;
+	
+	PROCEDURE (d: Directory) NewController* (): Containers.Controller, NEW, ABSTRACT;
+	
+	PROCEDURE (d: Directory) New* (view: Views.View; w, h: INTEGER): Document;
+		VAR doc: Document; m: Model; c: Containers.Controller;
+	BEGIN
+		ASSERT(view # NIL, 20); ASSERT(~(view IS Document), 21);
+		m := dir.NewModel();
+		NEW(doc); doc.InitModel(m);
+		c := dir.NewController();
+		doc.SetController(c);
+		NEW(doc.clipper);
+		doc.SetRect(defB, defB, defB + 1, defB + 1);	(* set top-left point *)
+		doc.SetView(view, w, h);	(* joins store graphs of doc and view *)
+		Stores.InitDomain(doc);	(* domains of new documents are bound *)
+		RETURN doc
+	END New;
+
+	(* StdDirectory *)
+
+	PROCEDURE NewScrollbar (isVertical: BOOLEAN; m: StdModel; OUT sb: StdScrollbars.Scrollbar; OUT ctx: StdContext);
+		VAR c: SBContext;
+	BEGIN 
+		sb := StdScrollbars.sbDir.New();
+		sb.isVertical := isVertical;
+		sb.wholeSize := 0;
+		NEW(c); ctx := c; c.view := sb; c.model := m; sb.InitContext(c); Stores.Join(sb, m)
+	END NewScrollbar;
+
+	PROCEDURE InitModel (m: StdModel);
+	BEGIN
+		m.showV := FALSE; m.showH := FALSE; m.param := param;
+		NewScrollbar(StdScrollbars.vertical, m, m.sbVv, m.sbV);
+		NewScrollbar(~StdScrollbars.vertical, m, m.sbHv, m.sbH); 
+		m.aux := m.sbV;
+		m.sbV.next := m.sbH;
+	END InitModel;
+	
+	PROCEDURE (d: StdDirectory) NewModel (): StdModel;
+		VAR m: StdModel; 
+	BEGIN
+		NEW(m); InitModel(m); RETURN m
+	END NewModel;
+	
+	PROCEDURE (d: StdDirectory) NewController (): Controller;
+		VAR res: Controller;
+	BEGIN NEW(res); RETURN res
+	END NewController;
+	
+	PROCEDURE (m: StdModel) Internalize2 (VAR rd: Stores.Reader);
+		VAR ver: INTEGER; v: Views.View; new, last: StdContext;
+	BEGIN 
+		rd.ReadVersion(modelVersion, modelVersion, ver);
+		IF ~rd.cancelled THEN 
+			InitModel(m);
+			REPEAT Views.ReadView(rd, v);
+				IF v # NIL THEN
+					NEW(new);
+					IF last # NIL THEN last.next := new ELSE m.aux := new END; last := new;
+					new.view := v; rd.ReadInt(new.align); rd.ReadBool(new.overlaid);
+					new.model := m;
+					v.InitContext(new)
+				END
+			UNTIL v = NIL
+		END
+	END Internalize2;
+
+	PROCEDURE (m: StdModel) Externalize2 (VAR wr: Stores.Writer);
+		VAR c: StdContext; 
+	BEGIN
+		wr.WriteVersion(modelVersion);
+		c := m.aux; WHILE c # NIL DO 
+			IF (c # m.sbV) & (c # m.sbH) THEN
+				Views.WriteView(wr, c.view); wr.WriteInt(c.align); wr.WriteBool(c.overlaid)
+			END;
+			c := c.next 
+		END;
+		wr.WriteStore(NIL)
+	END Externalize2;
+
+	PROCEDURE (m: StdModel) CopyFrom2 (source: Stores.Store);
+  BEGIN
+    InitModel(m)
+  END CopyFrom2;
+
+	(* Bars *)
+	
+	PROCEDURE Next (c: StdContext; align: INTEGER): StdContext;
+	BEGIN ASSERT(c # NIL, 20); 
+		REPEAT c := c.next UNTIL (c = NIL) OR (c.align = align); RETURN c
+	END Next;
+	
+	PROCEDURE InsertBar* (d: Document; align: INTEGER; view, above: Views.View; overlaid: BOOLEAN; par: ANYPTR);
+	(** Insert view as a bar at the top (align = top) or bottom (align = bottom) of d just above above., including it in the overlaid focus path if overlaid is set. par is an arbitrary parameter that will be assigned to global variable par before view's HandleCtrlMsg is called. 
+	ATTN! view will only receive Controller.TrackMsg if it is 'hot focus' (cf. Properties.FocusPref) or if it is a Containers.View with controller in mask mode.
+	For example, a regular t: TextViews.View may be inserted as a bar; a link may be in the text calling some command C; when C is activated, it may check TylerLayouts.par for the par that was passed to InsertBar.
+	Pre: 
+		d # NIL	20
+		view # NIL	21
+		view.context = NIL	22
+		d.ThisModel() IS StdModel	23
+		above # NIL
+			above ? m	24 25 26 27
+		(align = top) OR (align = bottom) OR (align = noalign)	28
+		(view.Domain() = NIL) OR (d.Domain() = view.Domain())	29
+		*)
+		
+		VAR next, c, new: StdContext; mm: Containers.Model; m: StdModel; ac: Models.Context;
+	BEGIN
+		ASSERT(d # NIL, 20); ASSERT(view # NIL, 21); ASSERT(view.context = NIL, 22);
+		ASSERT((align = top) OR (align = bottom) OR (align = noalign), 28);
+		mm := d.ThisModel(); WITH mm: StdModel DO m := mm ELSE HALT(23) END;
+		IF above # NIL THEN ac := above.context; ASSERT(ac # NIL, 24); 
+			WITH ac: StdContext DO ASSERT(ac.model = m, 25) ELSE HALT(26) END
+		END;
+		ASSERT((view.Domain() = NIL) OR (d.Domain() = view.Domain()), 29);
+		NEW(new); new.view := view; new.align := align; new.model := m; new.overlaid := overlaid; 
+		new.par := par;
+		view.InitContext(new); Stores.Join(d, view);
+		next := m.aux; 
+		REPEAT c := next; next := Next(c, align)
+		UNTIL (c = NIL) OR (next = NIL) OR (next.view = above);
+		IF c # NIL THEN ASSERT((next # NIL) OR (above = NIL), 27 (* above ? m *)); 
+			new.next := c.next; c.next := new 
+		ELSE m.aux := new 
+		END;
+		Recalc(d, 0)
+	END InsertBar;
+
+	PROCEDURE DoInsertOverlaid (m: StdModel; v, owner: Views.View; l, t, w, h: INTEGER; par: ANYPTR);
+		VAR c: Models.Context; ctrl: Controller; ctx: StdContext;
+	BEGIN
+		ctrl := m.doc.ThisController()(Controller); 
+		<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA0AEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABKAQAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAADvAAAA@0lGIGN0cmwub3ZlcmxhaWQgIyBOSUwgVEhFTiAJKCogcmVtb3ZlIGEgdGVtcG9yYWwgb3ZlcmxhaWQgLSB0aGUgb25lIG5vdCBhbW9uZyBhdXggdmlld3MgKikNCQkJY3R4IDo9IGN0cmwubW9kZWwuYXV4Ow0JCQlXSElMRSAoY3R4ICMgTklMKSAmIChjdHggIyBjdHJsLm92ZXJsYWlkKSBETyBjdHggOj0gY3R4Lm5leHQgRU5EOw0JCQlJRiBjdHggPSBOSUwgVEhFTiBSZW1vdmVPdmVybGFpZChjdHJsKSBFTkQNCQlFTkQ7"/>IF (ctrl.overlaid # NIL) & ~IsAux(ctrl, ctrl.overlaid) THEN
+		 	(* remove a temporal overlaid - the one not among aux views *)
+			RemoveOverlaid(ctrl) 
+		END;<odc-view type="StdFolds.Fold" w="198882" h="175260" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
+		c := v.context;
+		IF c = NIL THEN 
+			NEW(ctx); ctx.view := v; ctx.model := m; ctx.l := 0; ctx.t := 0; ctx.owner := owner;
+			Stores.Join(v, m); v.InitContext(ctx);
+			ctrl.overlaid := ctx
+		ELSE 
+			WITH c: StdContext DO
+				ASSERT(c.model = m, 21);
+				ctrl.overlaid := c; ctx := c
+			ELSE HALT(22) 
+			END
+		END;
+		IF (w = Views.undefined) OR (h = Views.undefined) THEN
+			PreferredSize(v, m, ctx.w, ctx.h) 
+		ELSE
+			ctx.w := w; ctx.h := h
+		END;
+		IF (l = center) OR (t = center) THEN
+			m.doc.context.GetSize(w, h); 
+			IF l = center THEN l := (w - ctrl.overlaid.w) DIV 2 END;
+			IF t = center THEN t := (h - ctrl.overlaid.h) DIV 2 END
+		END;
+		ctrl.overlaid.l := l;
+		ctrl.overlaid.t := t;
+		ctrl.overlaid.overlaid := TRUE;
+		ctrl.overlaid.par := par
+	END DoInsertOverlaid;
+	
+	PROCEDURE InsertOverlaid* (v, owner: Views.View; d: Document; l, t, w, h: INTEGER; par: ANYPTR);
+	BEGIN DoInsertOverlaid(d.ThisModel()(StdModel), v, owner, l, t, w, h, par); Recalc(d, 0)
+	END InsertOverlaid;
+
+
+	(* Contexts *)
+
+	PROCEDURE ConsiderOverlayProposal (c: Context; model: StdModel; VAR p: OverlayProposal);
+		VAR upd: BOOLEAN; ctrl: Controller; f: Views.Frame;
+	BEGIN
+		upd := FALSE; ctrl := model.doc.ThisController()(Controller);
+		IF p.op = show THEN 
+			upd := TRUE; ASSERT(p.view # NIL, 20); 
+			DoInsertOverlaid(model, p.view, p.owner, p.x + c.l, p.y + c.t, Views.undefined, Views.undefined, NIL)
+		ELSIF p.op = hide THEN upd := TRUE; RemoveOverlaid(ctrl)
+		ELSIF p.op = poll THEN
+			IF ctrl.overlaid = NIL THEN p.view := NIL ELSE p.view := ctrl.overlaid.view END
+		ELSIF p.op = pollFrame THEN ASSERT(p.frame # NIL, 21);
+			ASSERT(ctrl.overlaid # NIL, 22); ASSERT(ctrl.overlaid.owner # NIL, 23); 
+			ASSERT(p.frame.view = ctrl.overlaid.owner, 24);
+			f := p.frame; REPEAT f := Views.HostOf(f) UNTIL (f = NIL) OR (f.view = model.doc);
+			IF f # NIL THEN p.frame := Views.ThisFrame(f, ctrl.overlaid.view) 
+			ELSE p.frame := NIL
+			END
+		ELSE HALT(26)
+		END;
+		IF upd THEN Recalc(model.doc, 0) END
+	END ConsiderOverlayProposal;
+
+	PROCEDURE (c: StdContext) Consider (VAR p: Models.Proposal), EXTENSIBLE;
+	BEGIN
+		WITH p: OverlayProposal DO ConsiderOverlayProposal(c, c.model, p)
+		ELSE
+		END
+	END Consider;
+
+	PROCEDURE (c: SBContext) Consider (VAR p: Models.Proposal);
+		VAR msg: Controllers.ScrollMsg; host: Views.Frame;
+	BEGIN
+		WITH p: StdScrollbars.Proposal DO
+			IF (p.sb = c.view) & (p.frame # NIL) & (p.frame.view = p.sb) THEN
+				host := Views.HostOf(p.frame);
+				ASSERT((host # NIL) & (host.view = c.ThisDoc()));
+				msg.pos := p.sb.partPos;
+				msg.focus := FALSE;
+				msg.vertical := p.sb.isVertical;
+				msg.op := p.op; 
+				msg.done := FALSE;
+				Views.ForwardCtrlMsg(host, msg)
+			END
+		ELSE
+		END
+	END Consider;
+
+	(* Backdrop *)
+
+	PROCEDURE (v: Backdrop) Restore (f: Views.Frame; l, t, w, h: INTEGER);
+	BEGIN 
+		v.context.GetSize(w, h);
+		f.DrawRect(0, 0, w, h, 0, 128);
+		Views.InstallFrame(f, v.view, 2 * Ports.mm, 2 * Ports.mm, 0, TRUE)
+	END Restore;
+
+	PROCEDURE (v: Backdrop) GetBackground (VAR col: Ports.Color);
+		VAR c: Models.Context;
+	BEGIN 
+		v.view.GetBackground(col); 
+		IF col = Views.transparent THEN 
+			c := v.context;
+			WITH c: StdContext DO c.model.doc.GetBackground(col) ELSE END;
+			IF col = Views.transparent THEN col := Ports.background END
+		END
+	END GetBackground;
+
+	PROCEDURE AddBackground* (v: Views.View): Views.View;
+		VAR bk: Backdrop; c: BackdropContext;
+	BEGIN
+		NEW(bk); bk.view := v; NEW(c);
+		c.backdrop := bk; v.InitContext(c); Stores.Join(v, bk); 
+		RETURN bk
+	END AddBackground;
+
+	PROCEDURE (v: Backdrop) HandleCtrlMsg (f: Views.Frame; VAR msg: Controllers.Message; VAR focus: Views.View);
+	BEGIN focus := v.view
+	END HandleCtrlMsg;
+
+	PROCEDURE (v: Backdrop) HandlePropMsg (VAR msg: Properties.Message);
+	BEGIN
+		Views.HandlePropMsg(v.view, msg);
+		WITH msg: Properties.BoundsPref DO
+			INC(msg.w, 4 * Ports.mm); INC(msg.h, 4 * Ports.mm)
+		| msg: Properties.SizePref DO
+			INC(msg.w, 4 * Ports.mm); INC(msg.h, 4 * Ports.mm)
+		ELSE
+		END
+	END HandlePropMsg;
+
+	PROCEDURE (c: BackdropContext) GetSize (OUT w, h: INTEGER);
+	BEGIN
+		ASSERT(c.backdrop # NIL, 20);
+		c.backdrop.context.GetSize(w, h);
+		DEC(w, 4 * Ports.mm); DEC(h, 4 * Ports.mm)
+	END GetSize;
+
+	PROCEDURE (c: BackdropContext) Normalize (): BOOLEAN; BEGIN RETURN TRUE END Normalize;
+	PROCEDURE (c: BackdropContext) ThisModel (): Models.Model; BEGIN RETURN NIL END ThisModel;
+
+	(* Commands *)
+
+	PROCEDURE CloseThisBar (bar: StdContext);
+		VAR m: StdModel; c: StdContext; ctrl: Controller;
+	BEGIN
+		ASSERT(bar # NIL, 20);
+		ASSERT(bar.view # NIL, 21);
+		ASSERT(bar.view.context = bar, 22);
+		m := bar.model;
+		ctrl := m.doc.ThisController()(Controller);
+		IF bar = ctrl.overlaid THEN ctrl.overlaid := NIL
+		ELSIF m.aux = bar THEN m.aux := bar.next
+		ELSE c := m.aux;
+			WHILE (c # NIL) & (c.next # bar) DO c := c.next END; ASSERT(c # NIL, 23);
+			c.next := bar.next; bar.next := NIL
+		END;
+		Recalc(m.doc, 0);
+		IF bar.view = ctrl.ThisFocus() THEN ctrl.SetFocus(m.doc.ThisView()) END		
+	END CloseThisBar;
+
+	PROCEDURE CloseBar*;
+	(** Close the currently activated bar, if any *)
+	BEGIN IF bar # NIL THEN CloseThisBar(bar) END
+	END CloseBar;
+
+	PROCEDURE RemoveFrontBar* (d: Document);
+	(** Remove the front bar from d, if any*)
+		VAR f: Views.View;
+	BEGIN
+		ASSERT(d # NIL, 20); f := d.ThisController().ThisFocus();
+		IF (f # NIL) & (f.context IS StdContext) THEN CloseThisBar(f.context(StdContext)) END
+	END RemoveFrontBar;
+
+	(* Conversion between Documents.Document and StdDocuments.Document *)
+
+	PROCEDURE ImportDocument* (f: Files.File; OUT s: Stores.Store);
+		VAR rd: Stores.Reader; tag, version: INTEGER; res: Views.View;
+			l, t, r, b: INTEGER;
+	BEGIN
+		ASSERT(f # NIL, 20);
+		rd.ConnectTo(f);
+		rd.ReadInt(tag);
+		IF tag = docTag THEN
+			rd.ReadInt(version);
+			ASSERT(version = docVersion, 100);
+			rd.ReadStore(s);
+			(* k8: if we want to open loaded document later, it must be StdDocument.Document.
+				otherwise StdWindows will make the copy of the document view, violating the
+				(unwritten) rule that OldView result should be the same view that the window
+				will show.  not all loaded documents will be opened, but let's trade
+				some resources for keeping the contract unchanged. *)
+			WITH s: Document DO
+				res := s.ThisView();
+				s.PollRect(l, t, r, b);
+			| s: Documents.Document DO
+				res := Documents.DuplicateAs(s, dir).ThisView();
+			ELSE
+			END;
+			s := res
+		END
+	END ImportDocument;
+
+	PROCEDURE ExportDocument* (s: Stores.Store; f: Files.File);
+		VAR
+			w: Stores.Writer; v: Views.View; name: ARRAY 64 OF CHAR;
+			std, d: Documents.Document;
+	BEGIN
+		ASSERT(s # NIL, 20);
+		ASSERT(s IS Views.View, 21);
+		ASSERT(f # NIL, 22);
+		v := s(Views.View);
+		IF (v.context # NIL) & (v.context IS Documents.Context) THEN
+			d := v.context(Context).ThisDoc()
+		END;
+		IF d # NIL THEN 
+			Services.GetTypeName(d, name);
+			IF name = "Documents.StdDocument" THEN std := d 
+			ELSE std := Documents.DuplicateAs(d, Documents.stdDir)
+			END
+		ELSE
+			IF v.context # NIL THEN v := Views.CopyOf(v, Views.shallow) END;
+			std := Documents.stdDir.New(v, Views.undefined, Views.undefined)
+		END;
+		w.ConnectTo(f);
+		w.WriteInt(docTag); w.WriteInt(docVersion);
+		w.WriteStore(std)
+	END ExportDocument;
+
+	PROCEDURE SetDir* (d: Directory);
+	BEGIN
+		ASSERT(d # NIL, 20);
+		dir := d;
+		IF stdDir = NIL THEN stdDir := d END;
+		Documents.SetDir(d)	(* relay *)
+	END SetDir;
+
+	(* Actions *)
+
+	PROCEDURE (a: ResetBarAction) Do; BEGIN bar := NIL; par := NIL END Do;
+
+	PROCEDURE InitParam (p: ANYPTR);
+	BEGIN
+		WITH p: Param DO
+			
+		END
+	END InitParam;
+
+	PROCEDURE InitDefaults (p: ANYPTR);
+	BEGIN
+		WITH p: Param DO
+			p.debug := FALSE;
+			p.sbSide := right;
+			p.sbThickness := 12 * Ports.point;
+			p.InitDefaults := InitDefaults;
+			p.Init := InitParam;
+		END
+	END InitDefaults;
+
+	PROCEDURE Install*;
+		VAR d: StdDirectory;
+	BEGIN
+		NEW(d); SetDir(d);
+		NEW(param);
+		InitDefaults(param);
+		NEW(resetBar)
+	END Install;
+
+	PROCEDURE Uninstall*;
+		VAR d: StdDirectory;
+	BEGIN
+		Documents.SetDir(Documents.stdDir)
+	END Uninstall;
+
+END StdDocuments.
+
+
+
+
+Modal focus
+A view may be inserted in a document model as a modal focus view. Such views are only displayed when they are in focus; as soon as they become out of focus, they are undisplayed (but not removed from the model)
+	doc.ThisController().ThisFocus() = v <=> v is visible in doc
+
+A view is inserted as a modal focus view by InsertModal. To put such a view v into focus (and therefore make it visible):
+	doc.ThisController().SetFocus(v)
+
+Implementation:
+A context has .modal flag.
+Controller.GetNextView() skips modal focus views that are out of focus. This means that such views do not participate in doc's behavior.
+doc.Restore() uses Controller.GetNextView() to iterate thru a doc's auxiliary views, including modal focus views, therefore allowing Controller to filter out modal focus views that are out of focus.
+
+Whenever an interaction results in doc's focus view changing, Controller.SetFocus is called. This procedure is terminal in Containers; I found no way of how the extender would be informed of a focus change. Such informing is necessary, because when a modal focus view is moved out of focus, it's frame needs to be removed (on all doc's frames for that matter). Therefore, I had to export FocusMsg from Containers, and respond to it in doc.HandleViewMsg2.
+
+Another opportunity would be to go over all modal focus views in doc.Restore, and remove all their frames, if any. The drawback of this would be that the Document view has to be made aware of modal focus flags; whereas now it isn't - it relies completely on the Controller filtering those views out. But on the positive side, you won't have to export Containers.FocusMsg.

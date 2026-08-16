@@ -458,10 +458,10 @@ MODULE StdDebug;
 			out.WriteTab; out.WriteString("NIL VARPAR")
 		ELSIF f = 11X THEN
 			Kernel.GetTypeName(desc, name);
-			IF (c = 3X) & (name[0] # "!") THEN ta := ad + 4; SYSTEM.GET(ta, desc) END;	(* dynamic type; 64-бит: temp *)
+			IF (c = 3X) & (name[0] # "!") THEN ta := ad + 8; SYSTEM.GET(ta, desc) END;	(* dynamic type; 64-бит: слот 8 байт *)
 			ShowRecord(a, ind + 1, desc, back, tsel)
 		ELSIF (c = 3X) & (f = 0BX) THEN	(* VAR anyrecord *)
-			ta := ad + 4; SYSTEM.GET(ta, desc);
+			ta := ad + 8; SYSTEM.GET(ta, desc);	(* 64-бит: слот 8 байт *)
 			ShowRecord(a, ind + 1, desc, back, tsel)
 		ELSIF f = 12X THEN
 			IF (desc.size = 0) & (ptr = NIL) THEN SYSTEM.GET(ad, a) END;	(* dyn array val par *)
@@ -547,7 +547,7 @@ MODULE StdDebug;
 				out.WriteLn
 			END;
 			IF (b >= Kernel.fp) & (b < Kernel.stack) THEN
-				ta := b + 4; SYSTEM.GET(ta, a);	(* stacked pc; 64-бит: temp *)
+				ta := b + 8; SYSTEM.GET(ta, a);	(* stacked pc; 64-бит: retaddr по fp+8 *)
 				SYSTEM.GET(b, b);	(* dynamic link *)
 				DEC(a); DEC(c)
 			ELSE c := 0

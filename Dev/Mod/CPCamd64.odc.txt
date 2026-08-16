@@ -506,7 +506,7 @@ MODULE DevCPCamd64;
 		rl.reg := y.index; DevCPLamd64.GenMove(rl, r);	(* mov r32, hi (zero-extend) *)
 		DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E0H + r.reg); DevCPE.GenByte(32);	(* shl r, 32 *)
 		rl.reg := y.reg;
-		DevCPE.GenByte(0BH); DevCPE.GenByte(0C0H + r.reg * 8 + rl.reg);	(* or r32, lo32 (старшие биты r сохраняются) *)
+		DevCPE.GenByte(48H); DevCPE.GenByte(09H); DevCPE.GenByte(0C0H + rl.reg * 8 + r.reg);	(* or r64, rl64 (REX.W! иначе 32-битный or обнуляет старшие биты) *)
 		FreeReg(y.index, Int32); FreeReg(y.reg, Int32);
 		y.form := Pointer; y.reg := r.reg; y.index := 0
 	END LongToPtr;
@@ -735,7 +735,7 @@ MODULE DevCPCamd64;
 		x.mode := Ind; x.tmode := Ind; x.scale := 0;
 		btyp := x.typ.BaseTyp;
 		IF btyp.untagged OR (btyp.sysflag = stackArray) THEN x.offset := 0
-		ELSIF btyp.comp = DynArr THEN x.offset := ArrDOffs + btyp.size + 8	(* +8: actual+first в 4-полевом Block *)
+		ELSIF btyp.comp = DynArr THEN x.offset := (btyp.n + 1) * 4 + 24	(* данные за 24-байтным хедером (last/actual/first) + таблицей длин (n+1)*4 *)
 		ELSIF btyp.comp = Array THEN x.offset := ArrDOffs + 16 	(* данные за 24-байтным хедером *)
 		ELSE x.offset := 0
 		END
@@ -1886,9 +1886,11 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		ELSIF ap.mode = Con THEN
 			IF ap.form IN {Real32, Real64} THEN	(* ??? push const *)
 				DevCPLamd64.GenFLoad(ap); DecStack(par.typ.form); DevCPLamd64.GenFStore(par, TRUE)
+			ELSIF par.form = Int64 THEN	(* 64-бит: Int64-константа = ОДИН qword-слот; два 8-байтных push (hi,lo) сдвигали все пар-ры *)
+				GenB(48H); GenB(0B8H); GenD(ap.offset); GenD(ap.scale);	(* mov rax, imm64 *)
+				GenB(50H)	(* push rax *)
 			ELSE
 				ap.form := Int32;
-				IF par.form = Int64 THEN DevCPLamd64.MakeConst(c, ap.scale, Int32); DevCPLamd64.GenPush(c) END;
 				DevCPLamd64.GenPush(ap)
 			END
 		ELSIF ap.typ.form = Pointer THEN

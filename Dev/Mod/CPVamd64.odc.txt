@@ -1017,8 +1017,10 @@ MODULE DevCPVamd64;
 			niltest := FALSE;
 			IF fp.mode = VarPar THEN
 				IF (n.class = Ndop) & ((n.subcl = thisarrfn) OR (n.subcl = thisrecfn)) THEN
-					expr(n.right, ap, {}, {}); DevCPCamd64.Push(ap);	(* push type/length *)
-					expr(n.left, ap, {}, {}); DevCPCamd64.Push(ap);	(* push adr *)
+					expr(n.right, ap, {}, {});
+					IF ap.mode # Stk THEN DevCPCamd64.Push(ap) END;	(* push type/length; 64-бит: expr могла уже положить значение на машстек (Stk) — повторный Push дублирует слот и сдвигает рамку *)
+					expr(n.left, ap, {}, {});
+					IF ap.mode # Stk THEN DevCPCamd64.Push(ap) END;	(* push adr *)
 					RETURN
 				ELSIF (fp.vis = outPar) & DevCPCamd64.ContainsIPtrs(fp.typ) & (ap.typ # DevCPT.niltyp) THEN
 					IPFree(n, ap)
@@ -1084,6 +1086,8 @@ MODULE DevCPVamd64;
 		ELSE
 			expr(n, x, hint, stop + {mem}); offset := 0
 		END;
+		IF (x.form = Int64) & (x.mode # Con) THEN DevCPCamd64.LongToPtr(x, hint, stop) END;
+			(* 64-бит: адрес в SYSTEM.GET/PUT/BIT может быть LONGINT (пара lo/hi) — собрать в один регистр *)
 		DevCPCamd64.Mem(x, offset, typ)
 	END Mem;
 	

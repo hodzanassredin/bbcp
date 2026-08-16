@@ -816,3 +816,59 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      ручной xwd→png на python (convert отсутствует). Модули: ocf.py
      refs = КОНЦЫ процедур; entry = конец предыдущей (в refs-листе
      легко ошибиться на один proc — проверять байты пролога!).
+
+108. **Int64-КОНСТАНТА как value-параметр пушилась ДВУМЯ qword (hi, lo)
+     вместо одного** — корневой баг сессии 2026-08-16. Наследие i386
+     (там push = 4 байта, Int64 = пара регистров). Каждый вызов с
+     LONGINT-константой сдвигал ВСЕ последующие параметры на 8 байт.
+     Жертва: Services.DoLater(resetBar, immediately=-1) — resetBar не
+     выполнялся → ASSERT(bar = NIL, 100) в StdDocuments.HandleCtrlMsg
+     при Help→Contents. Фикс: CPCamd64.Param, ветка ap.mode = Con +
+     par.form = Int64: mov rax, imm64; push rax (ОДИН слот). Ветка
+     curCCall паттерн уже имела. Верификация: ObxProbe21/22
+     (LONGINT+BOOLEAN параметры, SYSTEM.ADR раскладка) — до фикса
+     BOOLEAN попадал в байты чужих слотов, после — всё сошлось.
+     ТЕХНИКА: дизасм показал, что callee (Echo) всегда был прав
+     (time@rbp+16, nb@+24, ret 0x20) — ломался caller с константами.
+     Урок: сравнивать caller и callee дизасм РАНО, не крутить рантайм.
+     ПОСЛЕ ТАКОГО ФИКСА КОДГЕНА — полная пересборка мира (баг зашит
+     во все .ocf): test64.sh System Lin Std Text Form Cons Obx.
+     NB: go32.sh DevCPCamd64 ОБЯЗАТЕЛЬНА после правок CPC*/CPV*/CPL*,
+     иначе dev0 компилирует мир старым багом.
+
+109. **THISARRAY/THISRECORD как actual для open-array/record параметра:
+     лишний push (rsp)** — второй корневой баг сессии. Цепочка: вокруг
+     adr-аргумента THISARRAY фронтенд ставит conv-узел с typ=intrealtyp
+     (form=Real64; создатель НЕ найден — CPB.Convert инструментирован и
+     НЕ создаёт его; узел появляется между CPB.StPar1 и кодогеном —
+     открытый вопрос). expr(conv) в CPVamd64: conv-ветка →
+     CPCamd64.Convert(x, Real64, -1) → ConvMove "int -> float" при
+     m=Undef: `IF y.mode = Reg THEN Push(y) END` — значение пушится,
+     ap.mode становится Stk. Затем CPVamd64.ActualPar thisarrfn-ветка
+     звала DevCPCamd64.Push(ap) безусловно → GenPush(Stk) =
+     `push [rsp]` — ДУБЛИКАТ вершины стека. Итог: 6 слотов вместо 5,
+     out-параметр (b.ptr) получал значение len (3) → Utf8ToString писал
+     movw по адресу 3 → SEGV. Проявление: Help→About (About.odc
+     содержит PNG-логотип → LinRastersPng.ThisDpi →
+     Utf.Utf8ToString(THISARRAY(ADR(a[0]), len), b, res)).
+     Фикс: CPVamd64.ActualPar — `IF ap.mode # Stk THEN Push(ap) END`
+     для обоих push (тот же страж уже стоит в CPCamd64.Param для
+     Pointer-ветки, см. п.~97 intrealtyp). Верификация: ObxProbe23
+     (Plain vs ThisArr: дизасм 5 push vs 6; после фикса оба по 5),
+     About открывается с логотипом. Пересобраны: Meta, Services,
+     LinFiles, LinRastersPng (все с THISARRAY/THISRECORD в мире).
+     ТЕХНИКА: трассировка компилятора принтами ap.mode/ap.form прямо в
+     ActualPar/expr (go32.sh DevCPVamd64 → go64.sh пробника) локализует
+     за 1 итерацию то, что дизасм-археология искала час.
+     NB: Console в 64-бит мире НЕ имеет WriteInt — только
+     WriteStr/WriteChar/WriteLn; DbgSz-рекурсия для чисел.
+
+110. **Инфраструктура.** (а) bbcp64use не имел Docu — Help→Contents
+     падал "file Docu/Help not found": добавлены симлинки Docu (корневой
+     + per-subsystem) из bbcp. (б) bbrun64 в Dev/Rsrc был STRIPPED —
+     gdb-хелперы (findmod/stackscan из tools64/gdb) слепли без символа
+     modlist; пересборка `gcc -m64 -std=c99 -Wall -g -D_GNU_SOURCE -o
+     bbrun64 bbrun64.c -ldl` (команда из tools64/cycle64.sh:18).
+     (в) About-диалог показывает литералы appVersion/buildNum/buildDate
+     — подстановка полей версии не работает (мелочь, отдельная задача).
+     (г) При закрытии GUI: free(): invalid pointer (libc) — открыто.

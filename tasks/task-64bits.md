@@ -449,3 +449,30 @@ in-BB компиляция (п.82, ConsCompiler64 → "0ErrorsDetected" но б�
 .ocf — CommandError CodeFileNotFound при запуске свежих модулей),
 ObxCompileLog (err 249), ObxTaAdr (err 220 GET LONGINT),
 GdkEvent-офсеты сверить с KB/GdkEvent-offsets.txt, REAL-аргументы ccall.
+
+== 2026-08-16/17: Help→Contents и Help→About РАБОТАЮТ ===
+10. КОРЕНЬ трапа ASSERT(bar=NIL) при Help→Contents: CPCamd64.Param
+    пушил Int64-КОНСТАНТУ value-параметра двумя qword (наследие i386)
+    → сдвиг всех последующих параметров; Services.DoLater(resetBar,-1)
+    получал мусор. Фикс: mov rax,imm64; push rax (KB п.108).
+    Probe21/22 подтвердили, мир пересобран (224 модуля, failed=0;
+    известные err 249 ObxCompileLog / err 220 ObxTaAdr остаются).
+11. КОРЕНЬ SEGV при Help→About: THISARRAY как value-параметр open
+    array — conv-узел (intrealtyp) вокруг adr оставлял значение на
+    машстеке (Stk), ActualPar делал второй Push → 6 слотов вместо 5 →
+    out.ptr = len → Utf8ToString писал по адресу 3. Фикс: страж
+    `ap.mode # Stk` в CPVamd64.ActualPar thisarrfn-ветке (KB п.109).
+    Probe23 (Plain vs ThisArr) зелёный; About открывается с PNG-лого.
+    Пересобраны Meta/Services/LinFiles/LinRastersPng.
+12. Инфра: Docu-симлинки в bbcp64use (Help не находил Docu/Help.odc);
+    bbrun64 пересобран unstripped (gdb-хелперы требуют modlist);
+    отладка [DL]/[IT]/[IMM]/[BAR] вычищена из Services/StdDocuments;
+    отладка [TA]/[ADR]/[EX]/[CV]/[ST1] вычищена из CPVamd64/CPB.
+13. Методология: KB/Verification64.md п.6 — инвариант соглашения о
+    вызове (caller pushes == callee ret N), probe-регрессия,
+    ASSERT(ap.mode # Stk) как постусловие Push, план упрощения Int64
+    (один 64-бит регистр вместо пары lo/hi), вывод i386-ветви.
+ОТКРЫТО: создатель conv-узла вокруг THISARRAY-adr не найден (KB 6.6);
+free(): invalid pointer при выходе; StdDebug падает при печати трапа;
+About не подставляет Version/Build; in-BB компиляция не пишет .ocf
+(п.82); ObxCompileLog err 249; ObxTaAdr err 220; smoke console.

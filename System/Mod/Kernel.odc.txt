@@ -607,7 +607,7 @@ MODULE Kernel;
 		IF blog.buf = NIL THEN max := 0 ELSE max := LEN(blog.buf) END;
 		IF max <= blog.pos + by THEN
 			(* allocate copy *)
-			len := (blog.pos + by) + (logInc - 1) DIV logInc * logInc;
+			len := (blog.pos + by + (logInc - 1)) DIV logInc * logInc;	(* 64-бит: скобки — иначе (logInc-1) DIV logInc = 0 и буфер растёт впритык на каждый BAppend *)
 			a := NewArr(9 (* CHAR *), len, 1); hb := S.VAL(Block, a); hb.first := len; S.PUT(S.ADR(copy), a);
 			(* copy := blog.buf$ *)
 			IF blog.buf # NIL THEN S.MOVE(S.ADR(blog.buf[0]), S.ADR(copy[0]), 2 * max) END;
@@ -2325,12 +2325,15 @@ MODULE Kernel;
 	END ShowOffendingCodes;
 	
 	PROCEDURE LogThisStack (pc, fp: ADDRESS);
-		VAR frame: FrameDesc; u: INTEGER;
+		VAR frame: FrameDesc; u, guard: INTEGER;
 	BEGIN 
 		(*INCL(dirty, defLogger);*)
 		u := unit; unit := defLogger;
 		GetThisRefFrame(frame, pc, fp);
-		WHILE ~frame.eos DO
+		guard := 0;
+		(* 64-бит: локальный cycle-guard; frame.depth не подходит — при sentry=NIL
+		   GetRefFrame ре-инитит depth в -1 и walker крутился бесконечно (437k фреймов) *)
+		WHILE ~frame.eos & (guard < 256) DO
 			BInt(frame.depth); BString(': ');
 			IF frame.m = '' THEN BString('<caller outside BB>') 
 			ELSE BString(frame.m); BString('.'); BString(frame.p)
@@ -2343,8 +2346,9 @@ MODULE Kernel;
 				ShowOffendingCodes(frame.pc + 1);
 			*)
 			BLn;
-			GetRefFrame(frame)
+			GetRefFrame(frame); INC(guard)
 		END;
+		IF ~frame.eos THEN BString("... stack walk truncated (cycle guard)"); BLn END;
 		unit := u
 		(*EXCL(dirty, defLogger)*)
 	END LogThisStack;

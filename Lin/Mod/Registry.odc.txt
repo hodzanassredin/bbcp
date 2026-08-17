@@ -207,14 +207,11 @@ MODULE LinRegistry;
 		VAR m: Kernel.Module; module, variable: Meta.Item; ok: BOOLEAN;
 			var: RECORD (Meta.Value) cmd: Kernel.Name END;
 	BEGIN
-		RETURN FALSE;	(* TODO64: Meta-обход modList виснет на первом же Meta.Lookup — разобраться *)
 		m := Kernel.modList;
 		ok := FALSE;
 		WHILE (m # NIL) & ~ ok DO
 			IF ~ (m.refcnt < 0) THEN
-				Console.WriteStr("[SV] " + m.name$); Console.WriteLn;
 				Meta.Lookup(m.name$, module);
-				Console.WriteStr("[SV] lookup done"); Console.WriteLn;
 				IF module.obj = Meta.modObj THEN
 					module.Lookup(name, variable);
 					IF variable.obj = Meta.varObj THEN
@@ -234,15 +231,11 @@ MODULE LinRegistry;
 		VAR res: INTEGER; startupCmd: Kernel.Name;
 	BEGIN
 		localeId := 1024;	(* user default *)
-		Console.WriteStr("[LR] before SearchVar"); Console.WriteLn;
 		IF ~ SearchVar("appStartupProcedure", startupCmd) THEN
 			startupCmd := "Startup.Setup"
 		END;
-		Console.WriteStr("[LR] startupCmd=" + startupCmd); Console.WriteLn;
 		Dialog.Call(startupCmd, "", res);
-		Console.WriteStr("[LR] after Dialog.Call"); Console.WriteLn;
 		ReadMeasure;
-		Console.WriteStr("[LR] after ReadMeasure"); Console.WriteLn;
 		NEW(hook); 
 		StdRegistry.SetHook(hook);
 	END Init;

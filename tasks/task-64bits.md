@@ -596,3 +596,20 @@ DIV прецеденс — len без округления вверх).
 (minor); Registry:210 Meta.Lookup; ObxCompileLog FP249; INTO->JO
 (ovflchk); CPCamd64:2586 TLS; cycle-guard трап-репортёра;
 GrowBuf округление (Kernel:610).
+
+== 2026-08-17 (8): мелкие TODO64/баги ===
+32. ЗАКРЫТО Registry:210 — Meta.Lookup больше не виснет (Probe33:
+    Meta.Lookup("Kernel") мгновенно; вис был тем же GC-штормом).
+    Стуб RETURN FALSE снят, отладочные [SV]/[LR] принты убраны.
+33. ЗАКРЫТО GrowBuf (Kernel:610): `(pos+by) + (logInc-1) DIV logInc
+    * logInc` — DIV биндил не то, буфер рос впритык на каждый
+    BAppend. Скобки расставлены.
+34. ЗАКРЫТО зацикливание трап-репортёра: LogThisStack walker при
+    sentry=NIL ре-инитил depth=-1 каждый шаг (все фреймы "0:") и
+    крутился вечно. Локальный guard<256 + сообщение о truncation.
+35. ЗАКРЫТО ObxCompileLog FP249: не смешение osf, а ПОРЯДОК сборки —
+    CompileSubs строил его со стабом/старыми DevCP* sym. Теперь
+    компилируется в build-dev64.sh после свежего Dev-пайплайна
+    ("== ObxCompileLog ok"). Примечание: CompileSubs в test64.sh
+    по-прежнему печатает failed=1 (косметика), финальный ocf верный.
+Проверки: probes.sh 20/20 PASS после каждого шага.

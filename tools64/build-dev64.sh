@@ -50,5 +50,6 @@ DevSelectors
 DevCommanders
 DevCompiler64
 ConsCompiler64
+ObxCompileLog
 LIST
 echo 'DevOnce.Go64' | "$HOME/sources/bbcp/run-dev0"

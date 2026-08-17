@@ -933,3 +933,18 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      ШТАТНО. Для in-BB компиляции (bbrun64 без fallback) .osf должны
      лежать в bbcp64use — решается tools64/link-sym.sh (вызывается из
      test64.sh после wipe).
+
+117. **LinBackends.KeyPressHandler.Do: g_free(SYSTEM.VAL(INTEGER, unused))**
+     — unused это указатель от gdk_keymap_get_entries_for_keycode
+     (g_malloc, выше 4ГБ); VAL(INTEGER,...) усекал до 32 бит →
+     "free(): invalid pointer". Фикс: VAL(GLib.gpointer,...).
+     ВАЖНО: остальные VAL(INTEGER, ptr) в LinBackends (строки ~470,
+     ~629, ~653) трогают BB-arena объекты (<4ГБ) — безвредны, пока
+     BB_ARENA_BASE=0x40000000; при переносе арены выше 4ГБ — чистить.
+     Реестр класса "VAL(INTEGER, указатель)" см. Verification64 п.3-F.
+
+118. **tools64/probes.sh — регрессия Obx-пробников** (17/17 PASS на
+     2026-08-17). Probe7.P (S.GET по адресу 0) и Probe25.Go (NIL deref)
+     — ловушки по дизайну, в список не включены. NB: вызов несуществу-
+     ющей экспортированной команды в консольном REPL подвисает
+     (CommandError-диалог ждёт?) — runner ловит это timeout'ом.

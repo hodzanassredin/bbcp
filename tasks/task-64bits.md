@@ -27,8 +27,11 @@
 - Round-trip проверен (Meta): diff только в косметических w/h view-тегов.
 
 ### Дальше
-- TODO64-маркеры: инвентаризация и разбор (Kernel:776,828 diag-логи;
-  Compiler64:663; StdRasters Q-процедуры — проверить что закрыто).
+- TODO64-маркеры РАЗОБРАНЫ (2026-08-18, коммит 350892c3): все 5 были сделанной
+  работой с ярлыком; Kernel.AllocateCluster chain-guard оставлен как инвариант.
+  Дополнительно StdDebug.ShowPointer: проба IsReadable от -8 (коммит d504e444).
+- Открытые known-issues из секции 2026-08-17: INTO→JO (ovflchk, allchecks);
+  CPCamd64:2586 TLS redesign; g_object_unref на выходе GUI; ld.so _dl_fini.
 - Аудит расширений (Aos, Crypto, _Http, Comm, Json, Mcp...) — отдельный этап
   после финиша ядра. Hr — только сверка, не чинить.
 

@@ -98,6 +98,7 @@ MODULE DevCPLamd64;
 		(* system trap numbers *)
 		withTrap = -1; caseTrap = -2; funcTrap = -3; typTrap = -4;
 		recTrap = -5; ranTrap = -6; inxTrap = -7; copyTrap = -8;
+		ovflTrap = 138;	(* integer overflow — как SIGFPE/FPE_INTOVF в LinKernel.SigToErr *)
 		
 
 	VAR
@@ -571,6 +572,8 @@ MODULE DevCPLamd64;
 		END
 	END GenDirOp;
 
+	PROCEDURE^ GenAssert* (cc, no: INTEGER);
+
 	PROCEDURE GenAdd* (VAR src, dst: Item; ovflchk: BOOLEAN);
 		VAR w: INTEGER;
 	BEGIN
@@ -603,7 +606,7 @@ MODULE DevCPLamd64;
 		ELSE
 			GenDirOp(0, src, dst)
 		END;
-		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF ovflchk THEN GenAssert(ccNO, ovflTrap) END;	(* INTO (0CEH) невалиден в 64 битах: JNO через trap-байты *)
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenAdd;
 	
@@ -619,7 +622,7 @@ MODULE DevCPLamd64;
 		IF src.mode = Con THEN GenConOp(op, src, dst)
 		ELSE GenDirOp(op, src, dst)
 		END;
-		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF ovflchk THEN GenAssert(ccNO, ovflTrap) END;	(* INTO (0CEH) невалиден в 64 битах: JNO через trap-байты *)
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenAddC;
 	
@@ -655,7 +658,7 @@ MODULE DevCPLamd64;
 		ELSE
 			GenDirOp(28H, src, dst)
 		END;
-		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF ovflchk THEN GenAssert(ccNO, ovflTrap) END;	(* INTO (0CEH) невалиден в 64 битах: JNO через trap-байты *)
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenSub;
 
@@ -671,7 +674,7 @@ MODULE DevCPLamd64;
 		IF src.mode = Con THEN GenConOp(op, src, dst)
 		ELSE GenDirOp(op, src, dst)
 		END;
-		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF ovflchk THEN GenAssert(ccNO, ovflTrap) END;	(* INTO (0CEH) невалиден в 64 битах: JNO через trap-байты *)
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenSubC;
 
@@ -749,7 +752,7 @@ MODULE DevCPLamd64;
 		CheckSize(dst.form, w);
 		IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
 		DevCPE.GenByte(0F6H + w); GenCExt(18H, dst);
-		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF ovflchk THEN GenAssert(ccNO, ovflTrap) END;	(* INTO (0CEH) невалиден в 64 битах: JNO через trap-байты *)
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenNeg;
 	
@@ -817,7 +820,7 @@ MODULE DevCPLamd64;
 			IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 			DevCPE.GenByte(0FH); DevCPE.GenByte(0AFH); GenDExt(dst, src)
 		END;
-		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
+		IF ovflchk THEN GenAssert(ccNO, ovflTrap) END;	(* INTO (0CEH) невалиден в 64 битах: JNO через trap-байты *)
 		IF dst.reg = AX THEN a1.mode := 0; a2.mode := 0 END
 	END GenMul;
 	

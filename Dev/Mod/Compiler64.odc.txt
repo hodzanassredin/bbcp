@@ -190,8 +190,8 @@ MODULE DevCompiler64;
 		Close
 	END Compile;
 
-	PROCEDURE CompileOpt* (opt: ARRAY OF CHAR);
-		VAR t: TextModels.Model; error: BOOLEAN; i: INTEGER; opts: SET;
+	PROCEDURE ParseOpt (IN opt: ARRAY OF CHAR): SET;
+		VAR i: INTEGER; opts: SET;
 	BEGIN
 		i := 0; opts := defopt;
 		WHILE opt[i] # 0X DO
@@ -212,6 +212,13 @@ MODULE DevCompiler64;
 			END;
 			INC(i)
 		END;
+		RETURN opts
+	END ParseOpt;
+
+	PROCEDURE CompileOpt* (opt: ARRAY OF CHAR);
+		VAR t: TextModels.Model; error: BOOLEAN; opts: SET;
+	BEGIN
+		opts := ParseOpt(opt);
 		Open;
 		t := TextViews.FocusText();
 		IF t # NIL THEN
@@ -221,6 +228,15 @@ MODULE DevCompiler64;
 		END;
 		Close
 	END CompileOpt;
+
+	PROCEDURE CompileTextOpt* (text: TextModels.Model; beg: INTEGER; IN opt: ARRAY OF CHAR; OUT error: BOOLEAN);
+	BEGIN
+		ASSERT(text # NIL, 20); ASSERT((beg >= 0) & (beg <= text.Length()), 21);
+		Open;
+		Do(text, StdLog.text, beg, ParseOpt(opt), error);
+		IF error THEN DevMarkers.ShowFirstError(text, TextViews.any) END;
+		Close
+	END CompileTextOpt;
 
 	PROCEDURE CompileText* (text: TextModels.Model; beg: INTEGER; OUT error: BOOLEAN);
 	BEGIN

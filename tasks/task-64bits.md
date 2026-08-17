@@ -673,3 +673,16 @@ GrowBuf округление (Kernel:610).
 ОТКРЫТО: GUI-проверка About/Help→Contents/Tut-2 после фикса;
 коммит+пуш; INTO->JO (ovflchk); CPCamd64:2586 TLS;
 g_object_unref (minor).
+
+== 2026-08-17 (10): INTO→JNO (ovflchk) ===
+38. ЗАКРЫТО: INTO (0CEH) невалиден в amd64. CPLamd64: 6 мест
+    GenByte(0CEH) → GenAssert(ccNO, ovflTrap=138) — JNO +3; 8D F0 8A
+    → SIGILL → SigToErr даёт err=138 (как FPE_INTOVF в 32 бит).
+    Пересобраны: dev0-генератор DevCPLamd64 (go32) и мир (build-dev64).
+39. Инфра: DevCompiler64.CompileTextOpt (парсинг опций в ParseOpt),
+    ConsCompiler64.CompileOpt(path,name,opt) — компиляция с allchecks
+    in-world. Пробник ObxProbe30 (ожидаемый трап) + probes-trap.sh.
+    Проверки: Probe30.ocf содержит 71 03 8D F0 8A, 0xCE нет;
+    probes.sh 20/20, probes-trap.sh 1/1.
+ОТКРЫТО: CPCamd64:2586 TLS; g_object_unref (minor); TODO64 в
+Std/Debug (ref-курсоры LONGINT, SHORT-куча) и Dev/CPM:475.

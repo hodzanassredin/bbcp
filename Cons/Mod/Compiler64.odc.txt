@@ -58,7 +58,7 @@ MODULE ConsCompiler64;
 	RETURN m
 	END Load0;
 
-	PROCEDURE Do (IN path, name: ARRAY OF CHAR);
+	PROCEDURE Do (IN path, name, opt: ARRAY OF CHAR);
 		VAR loc: Files.Locator;
 			f: Files.File;
 			v: Views.View;
@@ -67,7 +67,9 @@ MODULE ConsCompiler64;
 		PROCEDURE Do1 (src: TextModels.Model);
 			VAR error: BOOLEAN;
 		BEGIN
-			DevCompiler64.CompileText(src, 0, error);
+			IF opt = "" THEN DevCompiler64.CompileText(src, 0, error)
+			ELSE DevCompiler64.CompileTextOpt(src, 0, opt, error)
+			END;
 			IF error THEN
 				LogMarks(src.NewReader(NIL))
 			END
@@ -105,7 +107,14 @@ MODULE ConsCompiler64;
 	PROCEDURE Compile* (IN path, name: ARRAY OF CHAR);
 	BEGIN
 		LogStr("compiling "); LogStr(path); LogStr(" "); LogStr(name); LogLn;
-		Do(path, name)
+		Do(path, name, "")
 	END Compile;
+
+	PROCEDURE CompileOpt* (IN path, name, opt: ARRAY OF CHAR);
+	BEGIN
+		LogStr("compiling "); LogStr(path); LogStr(" "); LogStr(name);
+		LogStr(" opt="); LogStr(opt); LogLn;
+		Do(path, name, opt)
+	END CompileOpt;
 
 END ConsCompiler64.

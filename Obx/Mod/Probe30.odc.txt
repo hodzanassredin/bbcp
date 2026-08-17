@@ -1,0 +1,19 @@
+MODULE ObxProbe30;
+(** Проверка ovflchk (allchecks): INTO заменён на JNO + trap-байты.
+	Скомпилировать с "+": "ObxProbe30+" в /tmp/compile1.txt (DevOnce).
+	Ожидание: Go ловит TRAP 138 (integer overflow), а НЕ SIGILL 202.
+	В probes.sh НЕ включать — трап здесь ожидаемый (см. probes-trap.sh). *)
+
+	IMPORT Console;
+
+	PROCEDURE Go*;
+		VAR x: INTEGER; y: LONGINT;
+	BEGIN
+		Console.WriteStr("Probe30: before overflow"); Console.WriteLn;
+		x := MAX(INTEGER);
+		INC(x);	(* ovflchk: TRAP 138 *)
+		y := x;	(* unreachable *)
+		Console.WriteStr("BAD: no trap"); Console.WriteLn
+	END Go;
+
+END ObxProbe30.

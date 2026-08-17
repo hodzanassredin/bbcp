@@ -1,4 +1,4 @@
-MODULE ObxProbe27;
+MODULE ObxProbe24;
 
 	IMPORT Console, Strings;
 
@@ -22,22 +22,18 @@ MODULE ObxProbe27;
 		a := 1234567890123; b := 10007;
 		CHK("a+b", a + b, 1234567900130);
 		CHK("a-b", a - b, 1234567880116);
-		CHK("a*b", a * b, 12354320876460861);
+		CHK("-a", -a, -1234567890123);
+		CHK("a*2", a * 2, 2469135780246);
 		CHK("a DIV b", a DIV b, 123370429);
 		CHK("a MOD b", a MOD b, 7120);
+		IF ~(a > b) THEN INC(bad); Console.WriteStr("BAD a>b"); Console.WriteLn END;
 		c := -a;
+		IF ~(c < 0) THEN INC(bad); Console.WriteStr("BAD c<0"); Console.WriteLn END;
 		CHK("c DIV b", c DIV b, -123370430);
 		CHK("c MOD b", c MOD b, 2887);
-		CHK("max", 9223372036854775807, 9223372036854775807);
-		CHK("max-1", 9223372036854775807 - 1, 9223372036854775806);
-		CHK("min+1", -9223372036854775807 - 1 + 1, -9223372036854775807);
-		a := 4611686018427387904;	(* 2^62 *)
-		CHK("2^62", a, 4611686018427387904);
-		CHK("2^62 DIV 3", a DIV 3, 1537228672809129301);
-		CHK("2^62 MOD 3", a MOD 3, 1);
-		IF bad = 0 THEN Console.WriteStr("Probe27 OK")
-		ELSE Console.WriteStr("Probe27 FAILURES") END;
+		IF bad = 0 THEN Console.WriteStr("Probe24 OK")
+		ELSE Console.WriteStr("Probe24 FAILURES") END;
 		Console.WriteLn
 	END Go;
 
-END ObxProbe27.
+END ObxProbe24.

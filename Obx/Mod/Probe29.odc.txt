@@ -1,0 +1,46 @@
+MODULE ObxProbe29;
+
+	IMPORT Console, Strings, SYSTEM;
+
+	VAR bad: INTEGER;
+
+	PROCEDURE CHK (IN s: ARRAY OF CHAR; got, exp: LONGINT);
+		VAR t: ARRAY 40 OF CHAR;
+	BEGIN
+		IF got # exp THEN
+			INC(bad); Console.WriteStr("BAD "); Console.WriteStr(s);
+			Strings.IntToString(got, t); Console.WriteStr(" got="); Console.WriteStr(t);
+			Strings.IntToString(exp, t); Console.WriteStr(" exp="); Console.WriteStr(t);
+			Console.WriteLn
+		END
+	END CHK;
+
+	PROCEDURE Twice (x: LONGINT): LONGINT;
+	BEGIN
+		RETURN x * 2
+	END Twice;
+
+	PROCEDURE Go*;
+		VAR a: LONGINT; i: INTEGER;
+	BEGIN
+		bad := 0;
+		a := 1234567890123;
+		CHK("LSH64(a,3)", SYSTEM.LSH(a, 3), 9876543120984);
+		CHK("LSH64(a,-4)", SYSTEM.LSH(a, -4), 77160493132);
+		CHK("ROT64(a,4)", SYSTEM.ROT(a, 4), 19753086241968);
+		a := 4611686018427387904;	(* 2^62 *)
+		CHK("wrap 2^62*2", a * 2, -9223372036854775807 - 1);	(* MIN(LONGINT), wrap *)
+		CHK("Twice(2^62)", Twice(a), -9223372036854775807 - 1);	(* LONGINT-результат функции *)
+		CHK("Twice(21)", Twice(21), 42);
+		a := 1234567890123;
+		i := SHORT(a);	(* LONGINT -> INTEGER: младшие 32 бита *)
+		CHK("SHORT(a)", i, 1911301323);
+		i := -5;
+		CHK("int->long", i, -5);	(* INTEGER -> LONGINT: знаковое расширение *)
+		CHK("ASH(1,62)", ASH(1, 62), 4611686018427387904);
+		IF bad = 0 THEN Console.WriteStr("Probe29 OK")
+		ELSE Console.WriteStr("Probe29 FAILURES") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe29.

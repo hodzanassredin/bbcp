@@ -16,8 +16,8 @@ pass=0; fail=0
 for p in $ALL; do
 	out=$(echo "Obx$p" | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" timeout 30 "$BB/Dev/Rsrc/bbrun64" --console 2>&1)
 	rc=$?
-	if echo "$out" | grep -qE '~TRAP|SIGILL|SIGSEGV|CommandError|Assertion'; then
-		echo "FAIL Obx$p (trap/error):"; echo "$out" | grep -E '~TRAP|SIGILL|CommandError|Assertion' | head -2
+	if echo "$out" | grep -qE '~TRAP|SIGILL|SIGSEGV|CommandError|Assertion|BAD '; then
+		echo "FAIL Obx$p (trap/error):"; echo "$out" | grep -E '~TRAP|SIGILL|CommandError|Assertion|BAD ' | head -3
 		fail=$((fail+1))
 	elif [ $rc -eq 124 ]; then
 		echo "FAIL Obx$p (timeout)"; fail=$((fail+1))

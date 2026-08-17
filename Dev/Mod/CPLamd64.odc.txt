@@ -258,7 +258,7 @@ MODULE DevCPLamd64;
 		ELSIF x.form <= Int8 THEN DevCPE.GenByte(x.offset)
 		ELSIF short & (x.offset >= -128) & (x.offset < 128) THEN DevCPE.GenByte(x.offset)
 		ELSIF x.form IN {Int16, Char16} THEN GenWord(x.offset)
-		ELSIF x.form IN {Int64, Pointer, ProcTyp} THEN GenDbl(x.offset); GenDbl(ASH(x.offset, -31))
+		ELSIF x.form IN {Int64, Pointer, ProcTyp} THEN GenDbl(x.offset); GenDbl(x.scale)	(* imm64: lo=offset, hi=scale *)
 		ELSE GenDbl(x.offset)
 		END
 	END GenConst;
@@ -658,7 +658,9 @@ MODULE DevCPLamd64;
 	BEGIN
 		IF src.mode = Con THEN
 			IF (src.offset = 0) & (src.obj = NIL) & (dst.mode = Reg) THEN 
-				CheckSize(dst.form, w); DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * dst.reg) (* or r,r *)
+				CheckSize(dst.form, w);
+				IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;	(* or r64,r64: SF из бита 63 *)
+				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * dst.reg) (* or r,r *)
 			ELSE GenConOp(38H, src, dst)
 			END
 		ELSE
@@ -722,7 +724,9 @@ MODULE DevCPLamd64;
 	PROCEDURE GenNeg* (VAR dst: Item; ovflchk: BOOLEAN);
 		VAR w: INTEGER;
 	BEGIN
-		CheckSize(dst.form, w); DevCPE.GenByte(0F6H + w); GenCExt(18H, dst);
+		CheckSize(dst.form, w);
+		IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
+		DevCPE.GenByte(0F6H + w); GenCExt(18H, dst);
 		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenNeg;
@@ -730,7 +734,9 @@ MODULE DevCPLamd64;
 	PROCEDURE GenNot* (VAR dst: Item);
 		VAR w: INTEGER;
 	BEGIN
-		CheckSize(dst.form, w); DevCPE.GenByte(0F6H + w); GenCExt(10H, dst);
+		CheckSize(dst.form, w);
+		IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
+		DevCPE.GenByte(0F6H + w); GenCExt(10H, dst);
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END
 	END GenNot;
 	
@@ -744,7 +750,7 @@ MODULE DevCPLamd64;
 			DevCPE.GenByte(0F6H); GenCExt(28H, src)
 		ELSIF src.mode = Con THEN
 			val := src.offset;
-			IF (src.obj = NIL) & (val # 0) & ~ovflchk THEN
+			IF (src.obj = NIL) & (val # 0) & ~ovflchk & (src.form # Int64) THEN
 				f2 := 0; f5 := 0; f9 := 0;
 				WHILE ~ODD(val) DO val := val DIV 2; INC(f2) END;
 				WHILE val MOD 9 = 0 DO val := val DIV 9; INC(f9) END;
@@ -774,9 +780,19 @@ MODULE DevCPLamd64;
 				END
 			END;
 			CheckSize(src.form, w); CheckConst(src, s);
-			DevCPE.GenByte(69H + s); GenDExt(dst, dst); GenConst32(src, TRUE)
+			IF (src.form = Int64) & (src.obj = NIL) &
+				~((src.scale = 0) & (src.offset >= 0) OR (src.scale = -1) & (src.offset < 0)) THEN
+				(* константа не влезает в imm32: mov r11, imm64; imul dst, r11 *)
+				DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(src, FALSE);
+				DevCPE.GenByte(49H); DevCPE.GenByte(0FH); DevCPE.GenByte(0AFH);
+				DevCPE.GenByte(0C0H + dst.reg * 8 + 3)
+			ELSE
+				IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
+				DevCPE.GenByte(69H + s); GenDExt(dst, dst); GenConst32(src, TRUE)
+			END
 		ELSE
 			CheckSize(src.form, w);
+			IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 			DevCPE.GenByte(0FH); DevCPE.GenByte(0AFH); GenDExt(dst, src)
 		END;
 		IF ovflchk THEN DevCPE.GenByte(0CEH) END;
@@ -784,54 +800,51 @@ MODULE DevCPLamd64;
 	END GenMul;
 	
 	PROCEDURE GenDiv* (VAR src: Item; mod, pos: BOOLEAN);
-		VAR w, rem: INTEGER;
+		VAR w, rem, px: INTEGER;
 	BEGIN
 		ASSERT(src.mode = Reg);
-		IF src.form >= Int32 THEN DevCPE.GenByte(99H) (* cdq *)
+		IF src.form = Int64 THEN DevCPE.GenByte(REXW); DevCPE.GenByte(99H) (* cqo *)
+		ELSIF src.form >= Int32 THEN DevCPE.GenByte(99H) (* cdq *)
 		ELSIF src.form = Int16 THEN DevCPE.GenByte(66H); DevCPE.GenByte(99H) (* cwd *)
 		ELSE DevCPE.GenByte(66H); DevCPE.GenByte(98H) (* cbw *)
 		END;
-		CheckSize(src.form, w); DevCPE.GenByte(0F6H + w); GenCExt(38H, src); (* idiv src *)
-		IF src.form > Int8 THEN rem := 2 (* edx *) ELSE rem := 4 (* ah *) END;
+		IF (src.form = Int16) OR (src.form = Int64) THEN px := 1 ELSE px := 0 END;
+		CheckSize(src.form, w);
+		IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
+		DevCPE.GenByte(0F6H + w); GenCExt(38H, src); (* idiv src *)
+		IF src.form > Int8 THEN rem := 2 (* edx/rdx *) ELSE rem := 4 (* ah *) END;
 		IF pos THEN (* src > 0 *)
-			CheckSize(src.form, w); DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
+			CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
+			DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
 			IF mod THEN
-				DevCPE.GenByte(79H); DevCPE.GenByte(2);	(* jns end *)
+				DevCPE.GenByte(79H); DevCPE.GenByte(2 + px);	(* jns end *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
 			ELSE
-				DevCPE.GenByte(79H);	(* jns end *)
-				IF src.form = Int16 THEN DevCPE.GenByte(3); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(2) END;
-				DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H)	(* dec ax/eax; 32-битный 48H в 64 битах = REX-префикс! TODO64: для Int64 нужен dec rax + cqo/REX.W idiv *)
+				DevCPE.GenByte(79H); DevCPE.GenByte(2 + px);	(* jns end *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
+				DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H)	(* dec ax/eax/rax *)
 			END
 		ELSE
-			CheckSize(src.form, w); DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
+			CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
+			DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
 			IF mod THEN
-				DevCPE.GenByte(79H);	(* jns end *)
-				IF src.form = Int16 THEN DevCPE.GenByte(9); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(8) END;
+				DevCPE.GenByte(79H); DevCPE.GenByte(8 + px * 3);	(* jns end: or(2+px) je(2) xor(2+px) add(2+px) *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
-				DevCPE.GenByte(74H); DevCPE.GenByte(4);	(* je end *)
+				DevCPE.GenByte(74H); DevCPE.GenByte(4 + px * 2);	(* je end: xor(2+px) add(2+px) *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(30H + w); GenCExt(8 * rem, src); (* xor src,rem *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
 			ELSE
-				DevCPE.GenByte(79H);	(* jns end: пропускает or(2) + je(2) + dec(3/2) *)
-				IF src.form = Int16 THEN DevCPE.GenByte(7); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(6) END;
+				DevCPE.GenByte(79H); DevCPE.GenByte(6 + px * 2);	(* jns end: or(2+px) je(2) dec(2+px) *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * rem); (* or rem,rem *)
-				DevCPE.GenByte(74H);	(* je end: пропускает dec(3/2) *)
-				IF src.form = Int16 THEN DevCPE.GenByte(3); DevCPE.GenByte(66H) ELSE DevCPE.GenByte(2) END;
-				DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H)	(* dec ax/eax; 32-битный 48H в 64 битах = REX-префикс! *)
+				DevCPE.GenByte(74H); DevCPE.GenByte(2 + px);	(* je end: dec(2+px) *)
+				CheckSize(src.form, w); IF src.form = Int64 THEN DevCPE.GenByte(REXW) END;
+				DevCPE.GenByte(0FFH); DevCPE.GenByte(0C8H)	(* dec ax/eax/rax *)
 			END
-(*
-			CheckSize(src.form, w); DevCPE.GenByte(3AH + w); GenCExt(8 * rem, src); (* cmp rem,src *)
-			IF mod THEN
-				DevCPE.GenByte(72H); DevCPE.GenByte(4);	(* jb end *)
-				DevCPE.GenByte(7FH); DevCPE.GenByte(2);	(* jg end *)
-				DevCPE.GenByte(2 + w); GenCExt(8 * rem, src); (* add rem,src *)
-			ELSE
-				DevCPE.GenByte(72H); DevCPE.GenByte(3);	(* jb end *)
-				DevCPE.GenByte(7FH); DevCPE.GenByte(1);	(* jg end *)
-				DevCPE.GenByte(48H);					(* dec eax *)
-			END
-*)
 		END;
 		a1.mode := 0; a2.mode := 0
 	END GenDiv;
@@ -844,17 +857,21 @@ MODULE DevCPLamd64;
 			ASSERT(cnt.offset >= 0); ASSERT(cnt.obj = NIL);
 			IF cnt.offset = 1 THEN
 				IF (op = 10H) & (dst.mode = Reg) THEN (* shl r *)
+					IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
 					DevCPE.GenByte(w); GenDExt(dst, dst) (* add r, r *)
 				ELSE
+					IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
 					DevCPE.GenByte(0D0H + w); GenCExt(op, dst)
 				END
 			ELSIF cnt.offset > 1 THEN
 				ripTrail := 1;
+				IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
 				DevCPE.GenByte(0C0H + w); GenCExt(op, dst); DevCPE.GenByte(cnt.offset);
 				ripTrail := 0
 			END
 		ELSE
 			ASSERT((cnt.mode = Reg) & (cnt.reg = CX));
+			IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;
 			DevCPE.GenByte(0D2H + w); GenCExt(op, dst)
 		END;
 		IF (dst.mode # Reg) OR (dst.reg = AX) THEN a1.mode := 0; a2.mode := 0 END

@@ -2,30 +2,40 @@ MODULE ObxProbe28;
 
 	IMPORT Console, Strings, SYSTEM;
 
-	PROCEDURE WL (IN s: ARRAY OF CHAR; x: LONGINT);
+	VAR bad: INTEGER;
+
+	PROCEDURE CHK (IN s: ARRAY OF CHAR; got, exp: LONGINT);
 		VAR t: ARRAY 40 OF CHAR;
 	BEGIN
-		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
-	END WL;
+		IF got # exp THEN
+			INC(bad); Console.WriteStr("BAD "); Console.WriteStr(s);
+			Strings.IntToString(got, t); Console.WriteStr(" got="); Console.WriteStr(t);
+			Strings.IntToString(exp, t); Console.WriteStr(" exp="); Console.WriteStr(t);
+			Console.WriteLn
+		END
+	END CHK;
 
 	PROCEDURE Go*;
 		VAR a, b: LONGINT; i, j: INTEGER;
 	BEGIN
+		bad := 0;
 		a := 1234567890123; b := 10007; i := 5;
-		WL("ASH(a,3)=", ASH(a, 3));	(* 9876543120984 *)
-		WL("ASH(a,-2)=", ASH(a, -2));	(* 308641972530 *)
-		WL("ASH(a,i)=", ASH(a, i));	(* переменный сдвиг: 39506172483936 *)
-		WL("ABS(-a)=", ABS(-a));
-		WL("MIN(a,b)=", MIN(a, b));
-		WL("MAX(a,b)=", MAX(a, b));
-		IF ODD(a) THEN Console.WriteStr("ODD(a)=TRUE") ELSE Console.WriteStr("ODD(a)=FALSE") END;
-		Console.WriteLn;
+		CHK("ASH(a,3)", ASH(a, 3), 9876543120984);
+		CHK("ASH(a,-2)", ASH(a, -2), 308641972530);
+		CHK("ASH(a,i)", ASH(a, i), 39506172483936);
+		CHK("ABS(-a)", ABS(-a), 1234567890123);
+		CHK("MIN(a,b)", MIN(a, b), 10007);
+		CHK("MAX(a,b)", MAX(a, b), 1234567890123);
+		IF ~ODD(a) THEN INC(bad); Console.WriteStr("BAD ODD(a)"); Console.WriteLn END;
 		a := -a;
-		WL("ASH(-a,2)=", ASH(a, 2));	(* -4938271560492 *)
+		CHK("ASH(-a,2)", ASH(a, 2), -4938271560492);
 		j := 123456789;
-		WL("i: LSH(j,3)=", SYSTEM.LSH(j, 3));	(* INTEGER: 987654312 *)
-		WL("i: LSH(j,-4)=", SYSTEM.LSH(j, -4));	(* 7716049 (логический!) *)
-		WL("i: ROT(j,4)=", SYSTEM.ROT(j, 4))	(* 1975308624 *)
+		CHK("LSH(j,3)", SYSTEM.LSH(j, 3), 987654312);
+		CHK("LSH(j,-4)", SYSTEM.LSH(j, -4), 7716049);
+		CHK("ROT(j,4)", SYSTEM.ROT(j, 4), 1975308624);
+		IF bad = 0 THEN Console.WriteStr("Probe28 OK")
+		ELSE Console.WriteStr("Probe28 FAILURES") END;
+		Console.WriteLn
 	END Go;
 
 END ObxProbe28.

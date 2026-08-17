@@ -785,3 +785,14 @@ untracked, без -f не попадут в коммит. Подтвержден
     Первый фейл — арифметика пробника: used округляется кластерами ~2x
     (64МБ+заголовок -> 128МБ), чек сравнивал с n*chunk. Чек переведён на
     измеренный uAlloc.
+58. GUI-регрессия после снятия MAP_32BIT: GTK user_data резался INTEGER'ом
+    (LinBackends: 7 ccall-обработчиков + ConnectSignals; Files64: THISARRAY
+    по VAL(INTEGER, canonicalize_file_name)). Фикс INTEGER->LONGINT.
+    Мир: build-dev64.sh заново (Dev был собран старым кодгеном).
+59. Kernel.Insert: снят ложный дебаг-ASSERT(size<64MB) — free[7] catch-all
+    легально держит гигантские свободные блоки. HALT 31 на File->Open.
+    probes.sh 22/22 после правки.
+60. Инфра-ловушки (KB/HeapAbove4GB.md): TaskStop не убивает bbrun64-ребёнка
+    (pkill -9 -f Rsrc/bbrun64, но НЕ из задачи, чей cmdline содержит паттерн
+    — pkill убьёт саму задачу); go64.sh оставляет мир без Dev если убит
+    (.dev-stash-go64); после правки кодгена обязателен build-dev64.sh заново.

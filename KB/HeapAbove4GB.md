@@ -116,3 +116,47 @@ AllocConst уже ставил `x.scale := 0` — поэтому баг куса
 сопровождаться аудитом ВСЕХ конструкторов Item (MakeConst/AllocConst/...).
 Проверка: `ocf.py bytes Kernel.ocf 0x4a86 10` -> `49 bb 00*8` (movabs $0);
 поиск байт c0 90 b3 f1 по ocf -> не найдено. Бут доходит до конца.
+
+### Баг №5 (прикладной, GTK-граница): user_data через INTEGER
+Симптом: GUI мгновенно в трап-шторме (motion-notify): LinBackends.
+MotionNotifySignal+0x4a, addr=0xA4C9D8B8 (обрезанный до 32 бит указатель).
+Корень: ConnectSignals делал `a := SYSTEM.VAL(INTEGER, wb)` и все 7 ccall-
+обработчиков принимали user_data как INTEGER. Пока куча была MAP_32BIT —
+работало; с кучей >4ГБ указатель Backend обрезался. C-сторона (gtk_signal_
+connect, gpointer) уже была 64-бит-чистой.
+Фикс: Lin/Mod/Backends.odc.txt — adr/a/d: INTEGER -> LONGINT во всех 7
+обработчиках + ConnectSignals (VAL(LONGINT, wb)). Плюс Lin/Mod/Files64.odc.txt:
+SYSTEM.THISARRAY(SYSTEM.VAL(INTEGER, target)...) -> VAL(LONGINT, ...) —
+target из Libc.canonicalize_file_name (malloc, высокий адрес).
+УРОК: паттерн аудита — `VAL(INTEGER, <указатель>)` и ccall-коллбэки с
+INTEGER-параметрами-адресами; ищется grep'ом, см. задачу аудита.
+
+### Инфра-ловушки (сессия 2026-08-17 вечер)
+- TaskStop убивает только bash-обёртку — bbrun64-ребёнок ВЫЖИВАЕТ и
+  продолжает срать TRAP в лог (лог становится "binary" от дыр после
+  truncate вторым запуском). Убивать: `pkill -9 -f Rsrc/bbrun64`.
+- go64.sh прячет $USE/Dev в .dev-stash-go64; если процесс убит по SIGKILL —
+  stash НЕ восстанавливается, мир остаётся без Dev (GUI: "code file for
+  DevCompiler not found"). Лечение: mv .dev-stash-go64 Dev. TODO: ловушка
+  должна восстанавливать и при kill (или stash в tmp).
+- После ЛЮБОЙ правки кодгена (DevCP*): go32.sh DevCPX + test64.sh ПОЛНАЯ +
+  build-dev64.sh ЗАНОВО — иначе Dev/*.ocf в мире собраны старым кодгеном.
+- Адреса модулей ДЕТЕРМИНИРОВАНЫ между запусками (фиксированный порядок
+  загрузки) — одинаковый pc в двух логах НЕ значит "тот же процесс".
+
+### Самонанесённое: ASSERT(size < 64MB) в Kernel.Insert
+Дебаг-страж от охоты за "size=адрес" оказался ложным: free[7] — catch-all
+список, Sweep/Insert легально кладут туда свободные прогоны любого размера
+(при кластерах по 128МБ — обычное дело). HALT 31 на File->Open после
+больших аллокаций. Страж снят (assert 30 и 32 остаются: size>0 и
+FinChainHit — реальные инварианты). УРОК Дейкстры на практике: инвариант
+должен быть ДОКАЗАН из дизайна, а не "выглядеть правдоподобно" —
+"подозрительно большое" != "невозможное".
+
+### CHAR = 16 бит: "5 ГБ" тест на самом деле 10 ГБ
+NEW(p, 64*1024*1024) для POINTER TO ARRAY OF CHAR выделяет 128 МБ
+(элемент 2 байта). Probe39 (delta-замер Used на 1/16/32/64/128 МБ):
+delta = 2*req + 72 ровно, afterFree = 0 — кластеры полностью munmap'ятся
+после Collect. RSS процесса после возврата из процедуры остаётся высоким,
+т.к. GC запускается лениво (по аллокации/явному Collect) — это норма.
+Probe39 = диагностика "куча течёт?" одной командой: ObxProbe39.Go.

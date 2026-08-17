@@ -1978,7 +1978,6 @@ MODULE Kernel;
 		VAR i: INTEGER;
 	BEGIN
 		ASSERT(size > 0, 30);
-		ASSERT(size < 64*1024*1024, 31);	(* гигантский size = коррупция free-list (поймано: size=адрес) *)
 		ASSERT(FinChainHit(S.VAL(LONGINT, blk), S.VAL(LONGINT, blk) + size) = NIL, 32);	(* free-блок накрыл живой FList-узел *)
 		blk.size := size - 8; blk.tag := S.VAL(Type, S.ADR(blk.size));	(* 64-бит: stored = total - 8 (было -4) *)
 		i := MIN(N - 1, (blk.size DIV 16));

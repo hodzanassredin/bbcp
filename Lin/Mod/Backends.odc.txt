@@ -134,7 +134,7 @@ MODULE LinBackends;
 		END
 	END Do;
 	
-	PROCEDURE [ccall] DeleteSignal (_: Gtk.GtkWidget; __: Gdk.GdkEvent; a: INTEGER): INTEGER;
+	PROCEDURE [ccall] DeleteSignal (_: Gtk.GtkWidget; __: Gdk.GdkEvent; a: LONGINT): INTEGER;
 		VAR h: DeleteHandler;										(* retrun 0 -> close ok. return 1 -> don't close *)
 	BEGIN h.wb := SYSTEM.VAL(Backend, a); RETURN TrySignalHandler(h)
 	END DeleteSignal;
@@ -170,7 +170,7 @@ MODULE LinBackends;
 		IF a.wb # NIL THEN h.wb := a.wb; _ := TrySignalHandler(h) END
 	END Do;
 
-	PROCEDURE [ccall] FocusInSignal (_: Gtk.GtkWindow; __: Gdk.GdkEventFocus; d: INTEGER): INTEGER;
+	PROCEDURE [ccall] FocusInSignal (_: Gtk.GtkWindow; __: Gdk.GdkEventFocus; d: LONGINT): INTEGER;
 	BEGIN <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAUAEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAADKAAAAAAAAAAAAhgAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAJwAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAgAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAABoAAAD@aC53YiA6PSBTWVNURU0uVkFMKEJhY2tlbmQsIGQpOyBSRVRVUk4gVHJ5U2lnbmFsSGFuZGxlcihoKQ=="/>
 		cancelRefocus.wb := SYSTEM.VAL(Backend, d); Services.DoLater(cancelRefocus, Services.Ticks() + 2);
 		RETURN 1 (* = continue processing *) <odc-view type="StdFolds.Fold" w="207168" h="183942" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
@@ -274,7 +274,7 @@ MODULE LinBackends;
 		END
 	END Do;
 
-	PROCEDURE [ccall] KeyPressSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventKey; a: INTEGER): INTEGER;
+	PROCEDURE [ccall] KeyPressSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventKey; a: LONGINT): INTEGER;
 		VAR h: KeyPressHandler;
 	BEGIN h.wb := SYSTEM.VAL(Backend, a); h.state := e.state; h.event := e;
 		RETURN TrySignalHandler(h)
@@ -343,7 +343,7 @@ MODULE LinBackends;
 		(* IF ~isDown THEN activated := FALSE END; this looks like part of implementing behaviour when a click over an inactive window would activate the window, but would not be forwarded into the window. This is how it is now in Win32. In effect, you click in an inactive text with selection, and the window is activated, but the selection is not unselected; I personally like it when the click does both: activates and then is forwarded into the window, which makes the selection disappear and caret be positioned at click: it makes for less clicking around :)  *)
 	END Do;
 	
-	PROCEDURE [ccall] ButtonPressSignal (wdg: Gtk.GtkWidget; e: Gdk.GdkEventButton; adr: INTEGER
+	PROCEDURE [ccall] ButtonPressSignal (wdg: Gtk.GtkWidget; e: Gdk.GdkEventButton; adr: LONGINT
 	): INTEGER;
 		VAR h: MouseHandler; res: INTEGER;
 	BEGIN
@@ -360,7 +360,7 @@ MODULE LinBackends;
 		RETURN res
 	END ButtonPressSignal;
 	
-	PROCEDURE [ccall] MotionNotifySignal (wdg: Gtk.GtkWidget; e: Gdk.GdkEventMotion; adr: INTEGER
+	PROCEDURE [ccall] MotionNotifySignal (wdg: Gtk.GtkWidget; e: Gdk.GdkEventMotion; adr: LONGINT
 	): INTEGER;
 		VAR ww, wh, res: INTEGER; h: MouseHandler;
 	BEGIN 
@@ -402,7 +402,7 @@ MODULE LinBackends;
 		h.res := 0	(* AD: THIS IS CRUCIAL! this lets GTK's handlers adjust widget sizes *)
 	END Do;
 	
-	PROCEDURE [ccall] ConfigureSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventConfigure; a: INTEGER): INTEGER;
+	PROCEDURE [ccall] ConfigureSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventConfigure; a: LONGINT): INTEGER;
 		VAR h: ConfigureHandler; peek, get: Gdk.GdkEvent; i: INTEGER;
 	BEGIN 
 		(* AD: unfortunately, all this optimization code does not work; peek is always NIL to the best of my experimental knowledge *)
@@ -431,7 +431,7 @@ MODULE LinBackends;
 		IF h.eventCount = 0 THEN StdWindows.Validate(h.wb.win) END
 	END Do;
 	
-	PROCEDURE [ccall] ExposeSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventExpose; a: INTEGER): INTEGER;
+	PROCEDURE [ccall] ExposeSignal (_: Gtk.GtkWidget; e: Gdk.GdkEventExpose; a: LONGINT): INTEGER;
 		VAR h: ExposeHandler;
 	BEGIN h.wb := SYSTEM.VAL(Backend, a);
 		h.l := e.area.x; h.t := e.area.y; h.r := h.l + e.area.width; h.b := h.t + e.area.height;
@@ -456,7 +456,7 @@ MODULE LinBackends;
 		StdWindows.Wheel(h.wb.win, op, h.x, h.y, mod)
 	END Do;
 
-	PROCEDURE [ccall] ScrollSignal (w: Gtk.GtkWidget; e: Gdk.GdkEventScroll; a: INTEGER): INTEGER;
+	PROCEDURE [ccall] ScrollSignal (w: Gtk.GtkWidget; e: Gdk.GdkEventScroll; a: LONGINT): INTEGER;
 		VAR h: ScrollHandler;
 	BEGIN h.wb := SYSTEM.VAL(Backend, a); 
 		ToPixels(w.window, e.x_root, e.y_root, h.x, h.y);
@@ -465,9 +465,9 @@ MODULE LinBackends;
 	END ScrollSignal;
 
 	PROCEDURE ConnectSignals (wb: Backend);
-		VAR _, a: INTEGER;
+		VAR _, a: LONGINT;
 	BEGIN
-		a := SYSTEM.VAL(INTEGER, wb);
+		a := SYSTEM.VAL(LONGINT, wb);
 		(* window signals *)
 		_ := GtkU.gtk_signal_connect(wb.wnd, "delete-event", SYSTEM.ADR(DeleteSignal), a);
 		_ := GtkU.gtk_signal_connect(wb.wnd, "focus-in-event", SYSTEM.ADR(FocusInSignal), a);

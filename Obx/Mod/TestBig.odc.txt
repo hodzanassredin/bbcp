@@ -1,0 +1,34 @@
+MODULE ObxTestBig;
+
+IMPORT SYSTEM, StdLog, Kernel;
+
+PROCEDURE Go*;
+    CONST n = 80; chunk = 64 * 1024 * 1024;
+    TYPE Arr = POINTER TO ARRAY OF CHAR;
+    VAR p: ARRAY n OF Arr; i: INTEGER; j, a, u: LONGINT;
+BEGIN
+    i := 0;
+    WHILE i < n DO
+        NEW(p[i], chunk);
+        IF p[i] = NIL THEN StdLog.String("alloc FAIL"); StdLog.Int(i); StdLog.Ln; RETURN END;
+        j := 0;
+        WHILE j < chunk DO p[i][j] := CHR(i + 1); INC(j, 4096) END;
+        INC(i)
+    END;
+    a := SYSTEM.VAL(LONGINT, p[n - 1]);
+    StdLog.String("allocated 80 x 64MB = 5GB, last ptr dec="); StdLog.Int(a); StdLog.Ln;
+    Kernel.Collect;
+    i := 0;
+    WHILE i < n DO
+        j := 0;
+        WHILE j < chunk DO
+            IF p[i][j] # CHR(i + 1) THEN StdLog.String("DATA BAD"); StdLog.Int(i); StdLog.Ln; RETURN END;
+            INC(j, 4096)
+        END;
+        INC(i)
+    END;
+    u := Kernel.Used();
+    StdLog.String("TestBig OK, Used="); StdLog.Int(u); StdLog.Ln
+END Go;
+
+END ObxTestBig.

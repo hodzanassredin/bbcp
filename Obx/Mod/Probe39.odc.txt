@@ -1,0 +1,29 @@
+MODULE ObxProbe39;
+
+IMPORT SYSTEM, Console, Strings, Kernel;
+
+PROCEDURE One (sz: INTEGER);
+    TYPE Arr = POINTER TO ARRAY OF CHAR;
+    VAR a: Arr; u0, u1, u2: LONGINT; s: ARRAY 64 OF CHAR;
+BEGIN
+    u0 := Kernel.Used();
+    NEW(a, sz);
+    u1 := Kernel.Used();
+    a := NIL; Kernel.Collect;
+    u2 := Kernel.Used();
+    Strings.IntToString(sz, s); Console.WriteStr("req="); Console.WriteStr(s);
+    Strings.IntToString(u1 - u0, s); Console.WriteStr(" delta="); Console.WriteStr(s);
+    Strings.IntToString(u2 - u0, s); Console.WriteStr(" afterFree="); Console.WriteStr(s);
+    Console.WriteLn
+END One;
+
+PROCEDURE Go*;
+BEGIN
+    One(1024 * 1024);
+    One(16 * 1024 * 1024);
+    One(32 * 1024 * 1024);
+    One(64 * 1024 * 1024);
+    One(128 * 1024 * 1024)
+END Go;
+
+END ObxProbe39.

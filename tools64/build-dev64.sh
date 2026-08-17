@@ -10,11 +10,17 @@ BB2="$HOME/sources/bbcb2-2.0~a1.build332"
 rm -rf "$USE/Dev"
 mkdir -p "$USE/Dev/Code" "$USE/Dev/Sym" "$USE/Dev/Mod"
 ln -sf "$BB/Dev/Mod/Commanders.odc" "$USE/Dev/Mod/Commanders.odc"
+# Rsrc (меню!) и Docu — симлинки, иначе в GUI нет меню Dev
+ln -sfn "$BB/Dev/Rsrc" "$USE/Dev/Rsrc"
+ln -sfn "$BB/Dev/Docu" "$USE/Dev/Docu"
 # copy .odc.txt files from bbcp to bbcp64use for imports (skip Commanders.odc which is already symlinked)
 for f in "$BB"/Dev/Mod/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.txt "$BB"/Text/Mod/*.odc.txt "$BB"/Form/Mod/*.odc.txt "$BB"/Cons/Mod/*.odc.txt "$BB"/Obx/Mod/*.odc.txt; do
   [ -e "$f" ] || continue
   relpath="${f#$BB/}"
   [ "$relpath" = "Dev/Mod/Commanders.odc.txt" ] && continue
+  # Dev/Mod/Compiler.odc.txt — 32-битный источник; в мире вместо него фасад
+  # DevCompiler -> DevCompiler64 (bbcp/Mod64/DevCompiler.odc.txt), см. ниже
+  [ "$relpath" = "Dev/Mod/Compiler.odc.txt" ] && continue
   dest="$USE/$relpath"
   [ "$f" -ef "$dest" ] && continue
   mkdir -p "$(dirname "$dest")"
@@ -49,7 +55,10 @@ DevCPVamd64
 DevSelectors
 DevCommanders
 DevCompiler64
+DevCompiler
 ConsCompiler64
 ObxCompileLog
 LIST
+# фасад DevCompiler: источник Mod64/DevCompiler.odc -> мир как Dev/Mod/Compiler.odc
+cp "$BB/Mod64/DevCompiler.odc" "$USE/Dev/Mod/Compiler.odc"
 echo 'DevOnce.Go64' | "$HOME/sources/bbcp/run-dev0"

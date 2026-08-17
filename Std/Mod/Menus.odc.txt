@@ -1,0 +1,1266 @@
+MODULE StdMenus;
+(**
+<odc-view type="StdHeaders.View" w="360000000" h="172797" data="gvFTdGRIZWFkZXJzLlZpZXdEZXNjAPFWaWV3cy5WaWV3RGVzYwDwU3RvcmVzLlN0b3JlRGVzYwAAAAAAAAAAAAAAAAA!AAAAAAACAAAmADsAJgBmAAAAiLYCAAAAJgBkACYAOwAmAHAAAACItgIAKgAAABjwAQAAAAAAkAEAAAAAAQAAAAA="/>	project	= "BlackBox 2.0"
+	organizations	= "<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly93d3cub2Jlcm9uLmNoJykA"/>Oberon microsystems<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAPQAAAAAAAAE1AAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9ibGFja2JveGZyYW1ld29yay5vcmcnKQA="/>BBWFC<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANQAAAAAAAAEtAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9vYmVyb25jb3JlLnJ1JykA"/>OberonCore<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, <odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANwAAAAAAAAEvAAAARGlhbG9nLk9wZW5FeHRlcm5hbCgnaHR0cHM6Ly9naXRodWIuY29tL2JiY2InKQA="/>BBCP Team<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	contributors	= "<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAAQQAAAAAAAAE5AAAAU3RkQ21kcy5PcGVuQnJvd3NlcignRG9jdS9Db250cmlidXRvcnMnLCAnQ29udHJpYnV0b3JzJykA"/>Contributors<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>, Anton Dmitriev, Ivan Denisov"
+	version	= "<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	copyright	= "<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAARgAAAAAAAAE!AAAAU3RkQ21kcy5PcGVuVG9vbERpYWxvZygnU3lzdGVtL1JzcmMvQWJvdXQnLCAnQWJvdXQgQmxhY2tCb3gnKQA="/>System/Rsrc/About<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	license	= "<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAANgAAAAAAAAEuAAAAU3RkQ21kcy5PcGVuQnJvd3NlcignTElDRU5TRS50eHQnLCAnTGljZW5zZScpAA=="/>The 2-Clause BSD License<odc-view type="StdLinks.Link" w="188400" h="164892" data="gvFTdGRMaW5rcy5MaW5rRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAA"/>"
+	changes	= "<odc-view type="StdFolds.Fold" w="179546" h="164892" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABhAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAGAAAA@w0JLSANCQ=="/><odc-view type="StdFolds.Fold" w="179546" h="164892" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+	issues	= "<odc-view type="StdFolds.Fold" w="179546" h="164892" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA5wAAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABhAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAAAGAAAA@w0JLSANCQ=="/><odc-view type="StdFolds.Fold" w="179546" h="164892" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>"
+
+**)
+
+	IMPORT 
+		Kernel, Views, Models, Ports, Controllers, Properties, Fonts, Dialog, Services,
+		Stores, Documents, Windows, Containers, Strings,  
+		StdCFrames, StdDialog, StdMenuTool, StdDocuments;
+	
+	CONST
+		version = 0;
+		hidden* = "-";	(* items with this label are not shown in the menu *)
+		mm = Ports.mm;
+		(* Safe actions *)
+		guardA = 1; executeA = 2;
+		
+		(* Item status *)
+		itTrappedDbg = 0; itFailedDbg = 1; itTrapped = 2; itFailed = 3;
+		itHidden = 4; itSeparator = 5; itRelabelled = 6; itDefault = 7; 
+
+		(* key codes *)
+		ENTER = 0DX; ESC = 1BX;
+		DL = 14X; DR = 15X; (* DU = 16X; DD = 17X; *)
+		AL = 1CX; AR = 1DX; AU = 1EX; AD = 1FX;
+		
+		(* MainMenuUpdateMsg.what *)
+		menuUpdate = 0; targetTypeNameChange = 1;
+				
+		cleanup = 100;	(** cf. VAR executions *)
+		
+		allocKey = "#Std:AllocatedMemory";
+		totalKey = "#Std:Total";
+		byteKey = "#Std:Bytes";
+		actionsKey = "#Std:ActionsInTheQueue";
+		useSeparators = TRUE;
+		
+	TYPE
+	
+		Item = POINTER TO RECORD (StdDialog.Item)
+			par: Dialog.Par;
+			failed, trapped: BOOLEAN;	(* Guard failed (# trapped) *)
+			code: INTEGER;	(* shortcut key code, may be host-specific *)
+			mod: SET;	(* shortcut modifiers *)
+		END;
+		
+		Model = POINTER TO RECORD 
+			first: Item;
+			label: Dialog.String;
+			typeName: Stores.TypeName;
+			link: Model;
+			era: INTEGER
+		END;
+		
+		View = POINTER TO RECORD (Views.View)
+			paramEra: INTEGER;	(* synch with Param *)
+			menu: Model;
+			main: LineView;
+			focus: Item;	(* focused item, may be NIL *)
+			era: INTEGER;	(* (.menu.era = .era) = view synchronized with .menu *)
+			link: View;
+			cache: RECORD wid, hei: INTEGER END;
+		END;
+		
+		LineView = POINTER TO RECORD (Views.View)
+			main: Model;
+			first, active, dropped: View;
+			removed: LONGINT;
+			focussed: BOOLEAN; (* because the main menu never lies on the front path, the frames it is displayed in never have .front sent. So, when the main menu becomes focussed/defocussed, it has to remember this fact. This is done with .focussed and in handling of Controllers.MarkMsg *)
+		END;
+		
+		SafeAction = RECORD (Services.SafeAction)
+			what: INTEGER;
+			item: Item
+		END;
+		
+		Param* = POINTER TO RECORD 
+			typeface*: Fonts.Typeface;
+			size*: INTEGER;
+			check*: ARRAY 2 OF CHAR;
+			font: Fonts.Font;
+			itemH, separH, checkW, asc, dsc,
+				margin, (* margin between label and menu item boundary *)
+				initX (* init horizontal position to start draw of line menu *)
+				: INTEGER;
+			color*, colorLine*, bgColor*, bgColorLine*,
+				disabledColor*, focusColorLine*, shortcutColor*, 
+				focusColor*, focusBg*, focusBgLine*,
+				statusBg*, statusColor*: Ports.Color;
+			debug*: BOOLEAN;
+			era: INTEGER;
+			Init-, InitDefaults-: PROCEDURE (p: ANYPTR)
+		END;
+		
+		Directory = POINTER TO RECORD (StdMenuTool.Directory)
+			main, this: Model;
+			last: Item;
+		END;
+		
+		ControlledTrackMsg = RECORD (Controllers.CursorMessage) END;
+		
+		MainMenuUpdateMsg = RECORD (Views.Message) 
+			what: INTEGER
+		END;
+		
+		DropMenuMsg = RECORD (Views.Message) END;
+		(** Asks LineView to drop menu for dropReq.menu *)
+		
+		Actor = POINTER TO RECORD (Services.Action) END;
+		
+		StatusBarUpdater = POINTER TO RECORD (Services.Action)
+			bar: StatusBar;
+		END;
+	
+		StatusBar = POINTER TO RECORD (Views.View)
+			updater: StatusBarUpdater;
+		END;
+
+	VAR
+		dir: Directory;
+		status-: ARRAY 256 OF CHAR;
+		param*: Param;
+		
+		updateStatusBar: BOOLEAN;
+		metrics: RECORD
+			alloc, used: LONGINT
+		END;
+		metricsStr, allocStr, totalStr, byteStr, actionsStr: ARRAY 128 OF CHAR;
+		trappedLbl, failedLbl: ARRAY 32 OF CHAR;
+		main: Model;
+		
+		targetTypeName: Stores.TypeName;
+		actor: Actor;
+		executions: INTEGER;	(** menu item execution counter to do Kernel.Cleanup every cleanup executions *)
+		dropReq: RECORD	(* for handling Alt+CHAR menu activation requests *)
+			item: Item;	(* 'orphaned' item used to drop a main menu when Alt+CHAR is pressed *)
+			menu: Model;	(* main menu that is to be dropped *)
+		END;
+		executeItem: Item;
+
+
+	PROCEDURE Hidden (m: Model): BOOLEAN;
+	BEGIN RETURN (m.label = '*') OR (m.typeName # '') & (m.typeName # targetTypeName)
+	END Hidden;
+
+	PROCEDURE NextShownModel (m: Model): Model;
+	BEGIN WHILE (m # NIL) & Hidden(m) DO m := m.link END; RETURN m
+	END NextShownModel;
+
+	PROCEDURE (h: Directory) FirstMatch* (VAR m: StdMenuTool.ShortcutMatcher): StdDialog.Item;
+		VAR n: Model; it: Item; i: INTEGER; ch: CHAR;
+	BEGIN
+		n := NextShownModel(main); it := n.first;
+		WHILE (it # NIL) & ~m.Match(it, it.code, it.mod) DO 
+			IF it.next # NIL THEN it := it.next(Item)
+			ELSIF n # NIL THEN 
+				n := NextShownModel(n.link); IF n # NIL THEN it := n.first ELSE it := NIL END 
+			ELSE it := NIL
+			END
+		END;
+		IF (it = NIL) THEN
+			n := NextShownModel(main);
+			REPEAT
+				i := -1; REPEAT INC(i); ch := n.label[i] UNTIL (ch = '&') OR (ch = 0X);
+				IF ch = '&' THEN ch := n.label[i + 1] END;
+				IF m.Match(NIL, ORD(ch), { Controllers.pick }) THEN
+					it := dropReq.item; dropReq.menu := n
+				END;
+				n := NextShownModel(n.link)
+			UNTIL (it # NIL) OR (n = NIL)
+		END;
+		RETURN it
+	END FirstMatch;
+
+	PROCEDURE (VAR a: SafeAction) Do;
+		VAR failed_, ok: BOOLEAN;
+	BEGIN
+		ASSERT(a.item # NIL, 20); 
+		IF a.what = guardA THEN
+			StdDialog.CheckFilter(a.item, failed_, ok, a.item.par);
+			a.item.failed := ~ok
+		ELSIF a.what = executeA THEN
+			StdDialog.HandleItem(a.item)
+		ELSE
+			HALT(21)
+		END
+	END Do;
+
+	PROCEDURE Prepare (v: View);
+		VAR it: Item; guard: SafeAction; m: Model;
+	BEGIN
+		m := v.menu; guard.what := guardA;
+		it := m.first; WHILE it # NIL DO
+			IF it.item^ # '' THEN
+				IF it.filter^ # "" THEN
+					guard.item := it; 
+					IF param.debug THEN
+						StdDialog.ClearGuards(it); Services.Try(guard); it.trapped := guard.trapped
+					ELSIF ~it.trapped & ~it.failed THEN
+						Services.Try(guard); it.trapped := guard.trapped
+					END;
+					IF ~it.trapped & ~it.failed & (it.par.label # "-") & (it.par.label # it.item^) THEN 
+						Dialog.MapString(it.par.label, it.par.label)
+					END
+				END
+			END;
+			IF it.next = NIL THEN it := NIL ELSE it := it.next(Item) END
+		END;
+		INC(m.era)
+	END Prepare;
+
+	(* View *)
+
+	PROCEDURE ItemStatus (it: Item): INTEGER;
+		VAR res: INTEGER;
+	BEGIN
+		IF param.debug & it.trapped THEN res := itTrappedDbg
+		ELSIF param.debug & it.failed THEN res := itFailedDbg
+		ELSIF it.trapped THEN res := itTrapped
+		ELSIF it.failed THEN res := itFailed
+		ELSIF it.par.label = hidden THEN res := itHidden
+		ELSIF it.item^ = '' THEN res := itSeparator
+		ELSIF it.par.label # '' THEN res := itRelabelled
+		ELSE res := itDefault
+		END;
+		RETURN res
+	END ItemStatus;
+
+	PROCEDURE LabelWidth (lbl: ARRAY OF CHAR; fnt: Fonts.Font): INTEGER;
+		VAR amp, i: INTEGER; under: ARRAY 2 OF CHAR; ch: CHAR; 
+	BEGIN
+		i := -1; REPEAT INC(i); ch := lbl[i] UNTIL (ch = '&') OR (ch = 0X);
+		IF ch = '&' THEN 
+			amp := i; REPEAT INC(i); ch := lbl[i]; lbl[i - 1] := ch UNTIL ch = 0X
+		ELSE amp := -1
+		END;
+		RETURN fnt.StringWidth(lbl)
+	END LabelWidth;
+
+	PROCEDURE PrepareLabelAnsShortcut (it: Item; OUT label, shortcut: ARRAY OF CHAR);
+	VAR str: ARRAY 64 OF CHAR; i, j, len: INTEGER;
+	BEGIN
+		str := it.shortcut$;
+		label := it.par.label$;
+		IF str[0] = 0X THEN
+			i:=0; len := LEN(label$);
+			WHILE (i < len) & (label[i] # 09X) DO
+				INC(i)
+			END;
+			IF label[i] = 09X THEN
+				j := 0;
+				label[i] := 0X;
+				INC(i);
+				WHILE i < len DO
+					shortcut[j] := label[i];
+					INC(i); INC(j)
+				END;
+				shortcut[j] := 0X;
+			ELSE
+				shortcut := ""
+			END
+		ELSIF (str[0] # "F") & (str[0] # "*") THEN
+			IF str$ = " " THEN str := "Space" END;
+			shortcut := "Ctrl+" + str$;
+		ELSIF str[0] = "*" THEN
+			shortcut := "Ctrl+Shift" + str$;
+			shortcut[10] := "+";
+		ELSE
+			shortcut := str$
+		END;
+	END PrepareLabelAnsShortcut;
+
+	PROCEDURE Bounds (v: View; OUT w, h: INTEGER);
+		VAR it: Item; m: Model;  label, shortcut: ARRAY 64 OF CHAR;
+			items, separators, lw, kw: INTEGER;	(* max label width and key width *)
+	BEGIN
+		m := v.menu;
+		IF (param.era # v.paramEra) OR (m.era # v.era) THEN 
+			v.era := m.era;
+			lw := 0; kw := 0; items := 0; separators := 0;
+			it := m.first;
+			WHILE it # NIL DO					(* optimize! *)
+				CASE ItemStatus(it) OF
+				| itTrappedDbg:
+					lw := MAX(lw, param.font.StringWidth(trappedLbl));
+					INC(items)
+				| itFailedDbg:
+					lw := MAX(lw, param.font.StringWidth(failedLbl));
+					INC(items)
+				| itHidden:
+				| itSeparator:
+					INC(separators)
+				| itRelabelled:
+					PrepareLabelAnsShortcut(it, label, shortcut);
+					INC(items);
+					lw := MAX(lw, LabelWidth(label, param.font));
+					kw := MAX(kw, LabelWidth(shortcut, param.font))
+				| itDefault, itTrapped, itFailed:
+					PrepareLabelAnsShortcut(it, label, shortcut);
+					INC(items);
+					lw := MAX(lw, LabelWidth(it.item^, param.font));
+					kw := MAX(kw, LabelWidth(shortcut, param.font))
+				END;
+				IF it.next = NIL THEN it := NIL ELSE it := it.next(Item) END
+			END;
+			w := 8 * Ports.mm + param.checkW + lw + kw;
+			h := items * param.itemH + separators * param.separH;
+			v.cache.wid := w; v.cache.hei := h
+		ELSE w := v.cache.wid; h := v.cache.hei
+		END
+	END Bounds;
+
+	PROCEDURE (m: View) GetBackground (VAR color: Ports.Color);
+	BEGIN color := param.bgColor
+	END GetBackground;
+
+	PROCEDURE ItemHeight (v: View; it: Item): INTEGER;
+		VAR res: INTEGER;
+	BEGIN		(* v is passed as a provision for if Views will have distinct Params *)
+		IF it.item^ = "" THEN res := param.separH
+		ELSIF it.par.label = hidden THEN res := 0
+		ELSE res := param.itemH
+		END;
+		RETURN res
+	END ItemHeight;
+
+	PROCEDURE DrawLabel (f: Views.Frame; x, y: INTEGER; col: Ports.Color; lbl: ARRAY OF CHAR; fnt: Fonts.Font);
+		VAR amp, i: INTEGER; under: ARRAY 2 OF CHAR; ch: CHAR; 
+	BEGIN
+		i := -1; REPEAT INC(i); ch := lbl[i] UNTIL (ch = '&') OR (ch = 0X);
+		IF ch = '&' THEN 
+			amp := i; REPEAT INC(i); ch := lbl[i]; lbl[i - 1] := ch UNTIL ch = 0X
+		ELSE amp := -1
+		END;
+		f.DrawString(x, y, col, lbl, fnt);
+		IF amp # -1 THEN 
+			under[0] := lbl[amp]; under[1] := 0X;
+			lbl[amp] := 0X;
+			INC(x, fnt.StringWidth(lbl));
+			f.DrawLine(x, y+f.dot, x + fnt.StringWidth(under), y+f.dot, f.dot, col)
+		END
+	END DrawLabel;
+
+	PROCEDURE (v: View) Restore (f: Views.Frame; l, t, r, b: INTEGER); (* vertical menu *)
+		VAR it: Item; status, col, wid, hei, x, y: INTEGER;
+			label, shortcut: ARRAY 64 OF CHAR;
+	BEGIN
+		IF v.era # v.menu.era THEN Bounds(v, x, y) END;
+		v.context.GetSize(wid, hei);
+		y := 0; x := 3 * mm + param.checkW;
+		it := v.menu.first; WHILE it # NIL DO
+			status := ItemStatus(it);
+			IF ~it.par.disabled & ~(status IN { itSeparator, itHidden, itTrappedDbg, itFailedDbg, itTrapped, itFailed }) & (it = v.focus) THEN 
+				f.DrawRect(l, y, r, y + ItemHeight(v, it), Ports.fill, param.focusBg) 
+			END;
+			INC(y, mm + param.asc);
+			IF (status IN { itTrappedDbg, itFailedDbg, itTrapped, itFailed }) OR it.par.disabled THEN
+				col := param.disabledColor
+			ELSIF it = v.focus THEN
+				col := param.focusColor
+			ELSE
+				col := param.color
+			END;
+			CASE status OF
+			| itTrappedDbg:
+				f.DrawString(x, y, param.disabledColor, trappedLbl, param.font); 
+			| itFailedDbg:
+				f.DrawString(x, y, param.disabledColor, failedLbl, param.font)
+			| itHidden:
+				DEC(y, mm + param.asc)
+			| itSeparator:
+				INC(y, - mm - param.asc + param.separH DIV 2);
+				f.DrawRect(0, y, wid, y + f.dot, Ports.fill, Ports.grey50);
+				INC(y, param.separH DIV 2)
+			| itTrapped, itFailed, itRelabelled, itDefault:
+				PrepareLabelAnsShortcut(it, label, shortcut);
+				IF it.par.checked THEN
+					f.DrawString(2 * mm, y, col, param.check, param.font)
+				END;
+				IF status = itRelabelled THEN
+					DrawLabel(f, x, y, col, label, param.font)
+				ELSE
+					DrawLabel(f, x, y, col, it.item, param.font)
+				END;
+				
+				f.DrawString(wid - 2 * mm - param.font.StringWidth(shortcut),
+					y, param.shortcutColor, shortcut, param.font);
+			ELSE HALT(20)
+			END;
+			IF status IN { itTrappedDbg, itFailedDbg, itTrapped, itFailed, itRelabelled, itDefault } THEN
+				INC(y, param.dsc + mm)
+			END;
+			IF it.next = NIL THEN it := NIL ELSE it := it.next(Item) END
+		END
+	END Restore;
+
+	PROCEDURE ThisDropPos (v: LineView; drop: View; OUT x, y: INTEGER);
+		VAR d: View;
+	BEGIN
+		x := param.initX;
+		d := v.first;
+		WHILE (d # NIL) & (d # drop) DO 
+			IF ~Hidden(d.menu) THEN
+				INC(x, param.margin * 2 + LabelWidth(d.menu.label, param.font))
+			END;
+			d := d.link
+		END;
+		y := param.asc + param.dsc + 2 * mm
+	END ThisDropPos;
+
+	PROCEDURE ShowDropIn (ctx: Models.Context; x, y: INTEGER; drop: View; owner, revalidate: Views.View);
+		VAR p: StdDocuments.OverlayProposal;
+	BEGIN
+		Controllers.SetCurrentPath(Controllers.frontPath);
+		Prepare(drop);
+		IF (revalidate # NIL) & Views.IsInvalid(revalidate) THEN
+			Views.RevalidateView(revalidate)
+		END;
+		p.x := x; p.y := y; p.op := StdDocuments.show; p.view := drop; p.owner := owner;
+		ctx.Consider(p);
+		Controllers.ResetCurrentPath
+	END ShowDropIn;
+
+	PROCEDURE ShowDrop (v: LineView; drop: View; revalidate: Views.View);
+		VAR x, y: INTEGER;
+	BEGIN
+		ThisDropPos(v, drop, x, y);
+		ShowDropIn(v.context, x, y, drop, v, revalidate);
+		v.dropped := drop
+	END ShowDrop;
+
+	PROCEDURE HideDrop (v: View);
+		VAR p: StdDocuments.OverlayProposal;
+	BEGIN
+		p.op := StdDocuments.hide;
+		v.context.Consider(p); 
+		IF v.main # NIL THEN v.main.dropped := NIL END
+	END HideDrop;
+
+	PROCEDURE DoExecute (it: Item; OUT trapped: BOOLEAN);
+		VAR execute: SafeAction;
+	BEGIN
+		Controllers.SetCurrentPath(Controllers.frontPath);
+		execute.what := executeA;
+		execute.item := it;
+		Services.Try(execute);
+		trapped := execute.trapped;
+		Controllers.ResetCurrentPath;
+		INC(executions);
+		IF executions > cleanup THEN
+			executions := 0;
+			Kernel.Cleanup
+		END
+	END DoExecute;
+
+	PROCEDURE (h: Directory) Execute* (it: StdDialog.Item);
+		VAR trapped_: BOOLEAN;
+	BEGIN WITH it: Item DO DoExecute(it, trapped_) ELSE HALT(20) END
+	END Execute;
+
+	PROCEDURE ExecActive (v: View);
+		CONST bad = { itTrapped, itTrappedDbg, itFailed, itFailedDbg, itSeparator, itHidden };
+		VAR p: StdDocuments.OverlayProposal; trapped: BOOLEAN;
+	BEGIN
+		IF (v.focus # NIL) & ~(ItemStatus(v.focus) IN bad) & ~v.focus.par.disabled THEN 
+			HideDrop(v);
+			executeItem := v.focus
+		END
+	END ExecActive;
+
+	PROCEDURE ItemAt (v: View; y: INTEGER): Item;
+		VAR it: Item;
+	BEGIN
+		it := v.menu.first;
+		REPEAT 
+			IF it # NIL THEN DEC(y, ItemHeight(v, it)); 
+				IF y > 0 THEN 
+					IF it.next = NIL THEN it := NIL ELSE it := it.next(Item) END
+				END
+			END 
+		UNTIL (it = NIL) OR (y <= 0);
+		RETURN it
+	END ItemAt;
+
+	PROCEDURE NextShown (v: View): View;
+	BEGIN WHILE (v # NIL) & Hidden(v.menu) DO v := v.link END; RETURN v
+	END NextShown;
+
+	PROCEDURE MainRight (v: LineView; dropped: BOOLEAN; revalidate: Views.View);
+		VAR next: View;
+	BEGIN
+		next := NextShown(v.active.link);
+		IF next # NIL THEN 
+			v.active := next; 
+			IF dropped THEN
+				ShowDrop(v, v.active, revalidate) 
+			ELSE
+				Views.Update(v, Views.keepFrames) 
+			END
+		END
+	END MainRight;
+
+	PROCEDURE MainLeft (v: LineView; dropped: BOOLEAN; revalidate: Views.View);
+		VAR next, drop: View;
+	BEGIN
+		ASSERT(v.active # NIL);
+		next := NextShown(v.first); ASSERT(next # NIL); (* because v.focus follows and is ~Hidden *)
+		WHILE next # v.active DO drop := next; next := NextShown(next.link) END;
+		IF drop # NIL THEN v.active := drop; 
+			IF dropped THEN
+				ShowDrop(v, drop, revalidate)
+			ELSE
+				Views.Update(v, Views.keepFrames)
+			END 
+		END
+	END MainLeft;
+
+	PROCEDURE Activatable (it: Item): BOOLEAN;
+		CONST bad = { itTrapped, itTrappedDbg, itFailed, itFailedDbg, itSeparator, itHidden };
+	BEGIN RETURN ~it.par.disabled & ~(ItemStatus(it) IN bad)
+	END Activatable;
+
+	PROCEDURE NextActivatable (it: StdDialog.Item): Item;
+		VAR res: Item; 
+	BEGIN
+		IF it # NIL THEN
+			WHILE (it # NIL) & ~Activatable(it(Item)) DO it := it.next END;
+			IF it = NIL THEN res := NIL ELSE res := it(Item) END
+		END;
+		RETURN res
+	END NextActivatable;
+
+	PROCEDURE IsShortcut (shcut, char: CHAR): BOOLEAN;
+	(** Placeholder for complex shortcut equivalence evaluation.
+		Returts TRUE if char is equivalent to shortcut shcut *)
+	BEGIN RETURN Strings.Upper(shcut) = Strings.Upper(char)
+	END IsShortcut;
+
+	PROCEDURE HandleLabelShortcut (v: View; char: CHAR);
+		VAR i: INTEGER; ch: CHAR; it: Item;
+	BEGIN
+		REPEAT
+			IF it = NIL THEN
+				it := NextActivatable(v.menu.first)
+			ELSE
+				it := NextActivatable(it.next)
+			END;
+			IF it # NIL THEN 
+				i := -1; REPEAT INC(i); ch := it.item[i] UNTIL (ch = '&') OR (ch = 0X);
+				IF ch = '&' THEN ch := it.item[i + 1] ELSE ch := 0X END
+			END
+		UNTIL (it = NIL) OR IsShortcut(ch, char);
+		IF it # NIL THEN v.focus := it; ExecActive(v) END
+	END HandleLabelShortcut;
+
+	PROCEDURE (v: View) HandleCtrlMsg (f: Views.Frame; VAR msg: Controllers.Message; VAR focus: Views.View);
+		VAR x, y: INTEGER; mod: SET; isDown: BOOLEAN; it: Item; refocus: StdDialog.Item; 
+	BEGIN
+		WITH 
+		| msg: Controllers.EditMsg DO
+			IF msg.op = Controllers.pasteChar THEN
+				refocus := v.focus;
+				IF msg.char = ESC THEN HideDrop(v)
+				ELSIF msg.char = ENTER THEN ExecActive(v)
+				ELSIF msg.char = AD THEN
+					IF v.focus = NIL THEN refocus := NextActivatable(v.menu.first)
+					ELSIF v.focus.next # NIL THEN refocus := NextActivatable(v.focus.next(Item))
+					END
+				ELSIF (msg.char = AU) & (v.menu.first # v.focus) THEN 
+					it := v.menu.first;
+					REPEAT
+						IF Activatable(it) THEN refocus := it END;
+						IF it.next = NIL THEN it := NIL ELSE it := it.next(Item) END
+					UNTIL it = v.focus
+				ELSIF (msg.char = DL) & (v.focus # v.menu.first) THEN refocus := v.menu.first
+				ELSIF (msg.char = DR) & (v.menu.first # NIL) THEN
+					refocus := v.menu.first; WHILE refocus.next # NIL DO refocus := refocus.next END
+				ELSIF (msg.char = AR) & (v.main # NIL) THEN MainRight(v.main, TRUE, v)
+				ELSIF (msg.char = AL) & (v.main # NIL) THEN MainLeft(v.main, TRUE, v)
+				ELSE
+					HandleLabelShortcut(v, msg.char)
+				END;
+				IF refocus # v.focus THEN 
+					IF refocus = NIL THEN v.focus := NIL ELSE v.focus := refocus(Item) END;
+					Views.Update(v, Views.keepFrames)
+				END
+			END
+		| msg: Controllers.TrackMsg DO
+			v.focus := ItemAt(v, msg.y);
+			REPEAT
+				f.Input(x, y, mod, isDown); 
+				it := ItemAt(v, y); 
+				IF it # v.focus THEN 
+					v.focus := it;
+					Views.Update(v, Views.keepFrames);
+					Views.ValidateRoot(Views.RootOf(f))
+				END
+			UNTIL ~isDown;
+			ExecActive(v)
+		| msg: ControlledTrackMsg DO
+			REPEAT f.Input(x, y, mod, isDown); 
+				it := ItemAt(v, y); 
+				IF it # v.focus THEN 
+					v.focus := it; Views.Update(v, Views.keepFrames);
+					Views.ValidateRoot(Views.RootOf(f))
+				END
+			UNTIL ~isDown OR ~((f.l <= x) & (x < f.r) & (f.t <= y) & (y < f.b));
+			IF ~isDown & ((f.l <= x) & (x < f.r) & (f.t <= y) & (y < f.b)) THEN ExecActive(v) END
+		| msg: Controllers.PollCursorMsg DO
+			IF (f.l <= msg.x) & (msg.x < f.r) THEN it := ItemAt(v, msg.y) ELSE it := NIL END;
+			IF it # v.focus THEN 
+				v.focus := it;
+				Views.Update(v, Views.keepFrames); 
+				Views.ValidateRoot(Views.RootOf(f)) 
+			END
+		ELSE
+		END
+	END HandleCtrlMsg;
+
+	PROCEDURE (m: View) HandlePropMsg (VAR msg: Properties.Message);
+	BEGIN
+		WITH msg: Properties.SizePref DO Bounds(m, msg.w, msg.h)
+		| msg: Properties.BoundsPref DO Bounds(m, msg.w, msg.h)
+		| msg: Properties.FocusPref DO msg.setFocus := TRUE
+		| msg: StdDocuments.PanWindowPref DO msg.panWindow := TRUE
+		ELSE
+		END
+	END HandlePropMsg;
+
+	PROCEDURE (v: View) CopyFromSimpleView (source: Views.View);
+	BEGIN
+		WITH source: View DO
+			v.paramEra := source.paramEra;
+			v.menu := source.menu;
+			v.era := source.era;
+			v.link := source.link
+		END
+	END CopyFromSimpleView;
+
+	(* LineView menu view *)
+
+	PROCEDURE NewView (menu: Model; line: LineView): View;
+		VAR v: View;
+	BEGIN
+		NEW(v);
+		v.main := line; v.menu := menu; v.era := menu.era; v.cache.wid := 0; v.cache.hei := 0;
+		RETURN v
+	END NewView;
+	
+	PROCEDURE LineViewBounds (v: LineView; OUT w, h: INTEGER);
+	VAR m: Model;
+	BEGIN
+		w := param.margin;
+		m := v.first.menu;
+		WHILE m # NIL DO 
+			IF ~Hidden(m) THEN
+				INC(w, LabelWidth(m.label, param.font));
+				IF m.link # NIL THEN INC(w, param.margin * 2) END
+			END;
+			m := m.link
+		END;
+		h := 2 * mm + param.asc + param.dsc;
+	END LineViewBounds;
+
+	PROCEDURE Rebuild (v: LineView);
+		VAR m: Model; last, drop: View; w, h: INTEGER;
+	BEGIN
+		v.first := NIL;
+		v.main := main;
+		m := main;
+		WHILE m # NIL DO
+			drop := NewView(m, v); 
+			IF v.first = NIL THEN v.first := drop ELSE last.link := drop END; last := drop;
+			m := m.link
+		END;
+		v.active := v.first;
+		IF (v # NIL) & (v.context # NIL) & (v.first # NIL) THEN
+			(* TODO  ????????, ????? ??????????? ????  ? ????? ???????? ???? *)
+			LineViewBounds(v, w, h);
+			v.context.SetSize(w, h);
+		END;
+	END Rebuild;
+
+	PROCEDURE IsAnyDropped (v: LineView): BOOLEAN;
+		VAR p: StdDocuments.OverlayProposal; d: View;
+	BEGIN
+		p.op := StdDocuments.poll; v.context.Consider(p); 
+		IF p.view # NIL THEN
+			d := v.first; WHILE (d # NIL) & (d # p.view) DO d := d.link END
+		END;
+		RETURN d # NIL
+	END IsAnyDropped;
+
+	PROCEDURE IsDroppedMenu (line: LineView; drop: View): BOOLEAN;
+	(** Returns TRUE if drop, a drop menu view in line, is dropped*)
+		VAR p: StdDocuments.OverlayProposal; res: BOOLEAN;
+	BEGIN
+		ASSERT(line # NIL, 20); ASSERT(drop # NIL, 21);
+		p.op := StdDocuments.poll; line.context.Consider(p); 
+		IF (p.view # NIL) & (p.view IS View) THEN
+			res := drop.menu = p.view(View).menu
+		ELSE
+			res := FALSE
+		END;
+		RETURN res
+	END IsDroppedMenu;
+
+	PROCEDURE (v: LineView) Restore (f: Views.Frame; l, t, r, b: INTEGER); (* horisontal *)
+		VAR m: Model; col, x, z, w: INTEGER; 
+	BEGIN
+		IF v.main # main THEN Rebuild(v) END;
+		x := param.initX;
+		m := v.first.menu;
+		WHILE (m # NIL) & (x < r) DO 
+			IF ~Hidden(m) THEN
+				w := LabelWidth(m.label, param.font);
+				z := x + w + 2 * param.margin;
+				IF (v.active # NIL) & (m = v.active.menu) THEN 
+					IF f.mark OR IsAnyDropped(v) THEN
+						col := param.focusColorLine;
+						f.DrawRect(x, t, z, b, Ports.fill, param.focusBgLine)
+					ELSE
+						col := param.colorLine
+					END
+				ELSE
+					col := param.colorLine
+				END;
+				IF (l <= x) & (x < r) OR (l <= z) & (z < r) THEN
+					DrawLabel(f, x + param.margin, 1 * mm + param.asc, col, m.label, param.font)
+				END;
+				x := z
+			END;
+			m := m.link
+		END
+	END Restore;
+
+	PROCEDURE (v: LineView) HandleViewMsg (f: Views.Frame; VAR msg: Views.Message);
+	VAR u: View; 
+	BEGIN
+		WITH msg: MainMenuUpdateMsg DO
+			IF msg.what = menuUpdate THEN Rebuild(v) END;
+			Views.Update(v, Views.keepFrames)
+		| msg: DropMenuMsg DO
+			IF dropReq.menu # NIL THEN 
+				u := v.first; WHILE (u # NIL) & (u.menu # dropReq.menu) DO u := u.link END;
+				IF u # NIL THEN v.active := u; ShowDrop(v, u, v) END
+			END
+		| msg: StdDocuments.RemoveOverlayMsg DO
+			v.removed := Services.Ticks()
+		ELSE 
+		END
+	END HandleViewMsg;
+
+
+	PROCEDURE (v: LineView) HandlePropMsg (VAR msg: Properties.Message);
+	BEGIN
+		WITH msg: Properties.SizePref DO
+			LineViewBounds(v, msg.w, msg.h)
+		| msg: StdDocuments.PanWindowPref DO msg.panWindow := TRUE
+		ELSE
+		END
+	END HandlePropMsg;
+
+	PROCEDURE ThisDrop (v: LineView; x, y: INTEGER): View;
+		VAR r: INTEGER; next, drop: View;
+	BEGIN
+		r := 0; next := v.first;
+		REPEAT
+			drop := next;
+			IF (drop # NIL) THEN
+				IF ~Hidden(drop.menu) THEN
+					INC(r, LabelWidth(drop.menu.label, param.font) + param.margin * 2)
+				END;
+				next := drop.link
+			END;
+		UNTIL (next = NIL) OR (r >= x);
+		IF r < x THEN drop := NIL END;
+		RETURN drop
+	END ThisDrop;
+
+	PROCEDURE (v: LineView) HandleCtrlMsg (f: Views.Frame; VAR msg: Controllers.Message; VAR focus: Views.View);
+		VAR drop: View; x, y: INTEGER; mod: SET; isDown: BOOLEAN;
+			close: View; ctm: ControlledTrackMsg; op: StdDocuments.OverlayProposal;
+	BEGIN
+		WITH
+		| msg: Controllers.PollCursorMsg DO
+			IF IsAnyDropped(v) THEN
+				drop := ThisDrop(v, msg.x, msg.y);
+				IF (drop # NIL) & (drop # v.active) THEN 
+					v.active := drop;
+					ShowDrop(v, drop, v);
+					Views.ValidateRoot(Views.RootOf(f))
+				END
+			END
+		| msg: Controllers.TrackMsg DO
+			x := msg.x; y := msg.y;
+			close := ThisDrop(v, x, y);
+			IF (Services.Ticks() - v.removed > Services.resolution DIV 10)
+				OR (v.dropped # close) THEN close := NIL END;
+			REPEAT
+				IF y < f.b THEN 
+					drop := ThisDrop(v, x, y);
+					IF drop # NIL THEN 
+						IF (drop # v.active) OR ~IsDroppedMenu(v, drop) THEN 
+							v.active := drop; ShowDrop(v, drop, v); Views.ValidateRoot(Views.RootOf(f))
+						END
+					ELSE
+						IF IsAnyDropped(v) THEN
+							HideDrop(v.dropped);
+							Views.ValidateRoot(Views.RootOf(f))
+						END;
+						v.active := NIL
+					END
+				ELSIF v.active # NIL THEN (* fwd to dropped menu *)
+					(*focus := v.active doesn't work and doesn't fit*)
+					op.op := StdDocuments.pollFrame; op.frame := f;
+					v.active.context.Consider(op);
+					IF op.frame # NIL THEN 
+						ctm.x := x - (op.frame.gx - f.gx); ctm.y := y - (op.frame.gy - f.gy); 
+						IF (op.frame.l <= ctm.x) & (ctm.x < op.frame.r)
+							& (op.frame.t <= ctm.y) & (ctm.y < op.frame.b) THEN
+							Views.ForwardCtrlMsg(op.frame, ctm)
+						END
+					END
+				END;
+				IF (f # NIL) & (f.rider # NIL) THEN f.Input(x, y, mod, isDown) ELSE isDown := FALSE END
+			UNTIL ~isDown;
+			IF (close # NIL) & (close = v.active) THEN HideDrop(close) END
+		| msg: Controllers.EditMsg DO
+			IF msg.op = Controllers.pasteChar THEN 
+				IF (msg.char = AR) & (v.active # NIL) & (v.active.link # NIL) THEN
+					MainRight(v, FALSE, v)
+				ELSIF (msg.char = AL) & (v.active # NIL) THEN <odc-view type="StdFolds.Fold" w="179546" h="164892" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAdQEAAAAAAAAAAAAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAADvAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAAAABAAAAACoAGPABAAAAAACQAQAAAACUAAAA@w0JCQkJCWRyb3AgOj0gdi5maXJzdDsgV0hJTEUgKGRyb3AgIyBOSUwpICYgKGRyb3AubGluayAjIHYuZm9jdXMpIERPIGRyb3AgOj0gZHJvcC5saW5rIEVORDsNCQkJCQlJRiBkcm9wICMgTklMIFRIRU4gdi5mb2N1cyA6PSBkcm9wOyB1cGQgOj0gVFJVRSBFTkQ="/>MainLeft(v, FALSE, v)<odc-view type="StdFolds.Fold" w="179546" h="164892" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAA"/>
+				ELSIF (msg.char = ENTER) OR (msg.char = AD) & (v.active # NIL) THEN
+					ThisDropPos(v, v.active, x, y);
+					ShowDrop(v, v.active, v)
+				END
+			END
+		| msg: Controllers.MarkMsg DO 
+			IF msg.focus THEN
+				IF v.focussed # msg.show THEN
+					Views.Update(v, Views.keepFrames)
+				END;
+				v.focussed := msg.show; IF ~v.focussed THEN v.active := NIL END
+			END
+		ELSE
+		END
+	END HandleCtrlMsg;
+
+	PROCEDURE (v: LineView) GetBackground (VAR col: Ports.Color); 
+	BEGIN col := param.bgColorLine
+	END GetBackground;
+
+	PROCEDURE (lv: LineView) CopyFromSimpleView (source: Views.View);
+		VAR u, last, v: View; 
+	BEGIN
+		WITH source: LineView DO
+			lv.main := source.main;
+			v := source.first;
+			WHILE v.link # NIL DO u := Views.CopyOf(v, Views.shallow)(View);
+				u.main := lv;
+				IF last = NIL THEN
+					lv.first := u
+				ELSE
+					last.link := u
+				END;
+				last := u;
+				v := v.link
+			END
+		ELSE
+		END
+	END CopyFromSimpleView;
+
+	PROCEDURE SetShortcut (it: Item);
+		VAR j, n: INTEGER; ch, nch: CHAR; str: ARRAY 8 OF CHAR;
+	BEGIN
+		it.code := 0; 
+		it.mod := {};
+		j := 0; 
+		ch := it.shortcut[0];
+		WHILE (ch # 0X) & (it.code = 0) DO 
+			INC(j); nch := it.shortcut[j];
+			IF (ch >= "a") & (ch <= "z") THEN ch := CAP(ch) END;
+			IF ch = "*" THEN INCL(it.mod, Controllers.extend)
+			ELSIF ch = "^" THEN INCL(it.mod, Controllers.modify)
+			ELSIF ch = "@" THEN INCL(it.mod, Controllers.pick)
+			ELSIF (ch >= "A") & (ch <= "Z") OR (ch >= "0") & (ch <= "9") OR (ch = " ") OR (ch = "-") THEN
+				IF (nch >= "a") & (nch <= "z") THEN nch := CAP(nch) END;
+				IF nch = 0X THEN it.code := ORD(ch); INCL(it.mod, Controllers.modify)
+				ELSIF StdMenuTool.encodeShortcut # NIL THEN 
+					(*str[0] := it.shortcut[j - 1]; ch := 0X;*) n := 0; DEC(j);
+					REPEAT ch := it.shortcut[j]; str[n] := ch; INC(j); INC(n) UNTIL ch = 0X;
+					(*WHILE nch # 0X DO str[n] := nch; INC(n); INC(j); nch := it.shortcut[j] END;*)
+					StdMenuTool.encodeShortcut(str, it.code)
+				END
+			END;
+			ch := nch
+		END;
+		IF it.code = -1 THEN Dialog.ShowMsg("Unrecognized shortcut: " + it.shortcut + str) END
+		(*ASSERT(it.code # -1, 60 (* Unrecognized shortcut *));	(* need better error reporting *)*)
+	END SetShortcut;
+
+	PROCEDURE (d: Directory) AddItem (IN item, cmd, shortcut, filter: Dialog.String);
+		VAR it: Item; n: StdDialog.Item; label: Dialog.String;
+	BEGIN
+		ASSERT(d.this # NIL, 20);
+		Dialog.MapString(item, label);
+		NEW(it);
+		StdDialog.AddItem(it, label, cmd, filter, shortcut);
+		SetShortcut(it);
+		n := d.this.first; 
+		IF n = NIL THEN
+			d.this.first := it
+		ELSE
+			WHILE n.next # NIL DO n := n.next END;
+			n.next := it
+		END;
+		d.last := it;
+	END AddItem;
+
+	PROCEDURE (d: Directory) AddSeparator;
+	BEGIN d.AddItem('', '', '', '')
+	END AddSeparator;
+
+	PROCEDURE (d: Directory) Open (IN menuLabel: Dialog.String; IN typeName: Stores.TypeName);
+		VAR m: Model;
+	BEGIN
+		NEW(m); m.era := 0; m.label := menuLabel; m.typeName := typeName;
+		Dialog.MapString(menuLabel, m.label);
+		IF d.main = NIL THEN d.main := m ELSE d.this.link := m END;
+		d.this := m
+	END Open;
+
+	PROCEDURE (d: Directory) Close, EMPTY;
+	PROCEDURE (d: Directory) DeleteAll, EMPTY;
+	PROCEDURE (d: Directory) InitMenus;
+		VAR upd: MainMenuUpdateMsg;
+	BEGIN
+		ASSERT(d.main # NIL, 20);
+		main := d.main; d.main := NIL; d.this := NIL; d.last := NIL; 
+		upd.what := menuUpdate; Views.Omnicast(upd)
+	END InitMenus;
+
+	PROCEDURE (d: Directory) PopupMenu; 
+		VAR menu: Model; found: BOOLEAN; f: Views.Frame; doc: Views.View; c: Models.Context;
+			x, y: INTEGER; isDown_: SET; modifiers_: BOOLEAN;
+	BEGIN
+		menu := main; 
+		REPEAT
+			found := (menu # NIL)
+				& (menu.label = "*") 
+				& ((menu.typeName = targetTypeName) & (targetTypeName # '') OR (menu.typeName = ''));
+			IF ~found THEN menu := menu.link END
+		UNTIL found OR (menu = NIL);
+		IF menu # NIL THEN
+			f := Controllers.FocusFrame();
+			IF f # NIL THEN f := Views.UltimateRootOf(f) END;
+			IF (f # NIL) & (f.view # NIL) THEN
+				doc := f.view;
+				WITH doc: StdDocuments.Document DO c := doc.ThisView().context ELSE END;
+				IF c # NIL THEN
+					f.Input(x, y, isDown_, modifiers_);
+					ShowDropIn(c, x, y, NewView(menu, NIL), NIL, NIL)
+				END
+			END
+		END
+	END PopupMenu;
+
+	PROCEDURE SetFocus;
+		VAR c: Containers.Controller; f: Views.Frame; v, s: Views.View;
+	BEGIN
+		f := Controllers.FocusFrame(); v := f.view;
+		WITH v: Containers.View DO
+			c := v.ThisController();
+			s := c.Singleton();
+			IF s # NIL THEN c.SetFocus(s) END
+		ELSE
+		END
+	END SetFocus;
+
+	PROCEDURE OpenAux*;
+    VAR ops: Controllers.PollOpsMsg; 
+  BEGIN
+    Controllers.PollOps(ops);
+    IF (ops.singleton # NIL) & (ops.singleton.ThisModel() # NIL) THEN
+      Views.OpenAux(Views.CopyOf(ops.singleton, Views.shallow), '')
+    END
+  END OpenAux;
+
+	PROCEDURE HandleVerb (n: INTEGER);
+		VAR v: Views.View; dvm: Properties.DoVerbMsg;
+	BEGIN
+		v := Containers.FocusSingleton();
+		IF v # NIL THEN
+			dvm.frame := Views.ThisFrame(Controllers.FocusFrame(), v);
+			dvm.verb := n;
+			Views.HandlePropMsg(v, dvm)
+		END
+	END HandleVerb;
+
+	PROCEDURE CheckVerb (v: Views.View; n: INTEGER; VAR pvm: Properties.PollVerbMsg);
+	BEGIN
+		pvm.verb := n;
+		pvm.label := "";
+		pvm.disabled := FALSE; pvm.checked := FALSE;
+		Views.HandlePropMsg(v, pvm)
+	END CheckVerb;
+
+	PROCEDURE (d: Directory) PrimaryVerb;
+		VAR v: Views.View; pvm: Properties.PollVerbMsg;
+	BEGIN
+		v := Containers.FocusSingleton();
+		IF v # NIL THEN
+			CheckVerb(v, 0, pvm);
+			IF pvm.label # "" THEN HandleVerb(0)
+			ELSE  SetFocus
+			END
+		END
+	END PrimaryVerb;
+
+	PROCEDURE (d: Directory) RevalidateGuards;	(* Based on DevCmds.FlushResources *)
+		VAR m: Model; i: StdDialog.Item;
+	BEGIN
+		m := main;
+		WHILE m # NIL DO
+			i := m.first; WHILE i # NIL DO StdDialog.ClearGuards(i); i := i.next END;
+			m := m.link
+		END
+	END RevalidateGuards;
+
+	PROCEDURE (a: Actor) Do;
+		VAR ops: Controllers.PollOpsMsg; upd: MainMenuUpdateMsg;
+			it: Item; _: BOOLEAN;
+	BEGIN
+		IF executeItem # NIL THEN it := executeItem; executeItem := NIL; DoExecute(it, _) END;
+		Controllers.SetCurrentPath(Controllers.targetPath);
+		Controllers.PollOps(ops);
+		IF (main # NIL) & (ops.type # targetTypeName) THEN
+			targetTypeName := ops.type$;
+			upd.what := targetTypeNameChange;
+			Views.Omnicast(upd)
+		END;
+		Controllers.ResetCurrentPath();
+		Services.DoLater(a, Services.now)
+	END Do;
+
+	PROCEDURE AppendInt (VAR s: ARRAY OF CHAR; n: LONGINT; useSeparators: BOOLEAN);
+		VAR len: INTEGER; i, j: INTEGER; d: ARRAY 32 OF CHAR;
+	BEGIN
+		ASSERT(n >= 0, 20);
+		i := 0; REPEAT
+			d[i] := CHR(SHORT(30H + n MOD 10)); INC(i); n := n DIV 10;
+			IF useSeparators & (i MOD 4 = 3) & (n # 0) THEN d[i] := "'"; INC(i) END
+		UNTIL n = 0;
+		len := LEN(s) - 1;
+		j := 0; WHILE s[j] # 0X DO INC(j) END;
+		IF j + i < len THEN
+			REPEAT DEC(i); s[j] := d[i]; INC(j) UNTIL i = 0;
+			s[j] := 0X
+		END
+	END AppendInt;
+
+	PROCEDURE UpdateMetrics;
+		VAR  alloc, used: LONGINT;
+	BEGIN
+		alloc := Kernel.Allocated(); used := Kernel.Used();
+		IF (alloc # metrics.alloc) OR (used # metrics.used) THEN
+			metrics.alloc := alloc; metrics.used := used;
+			metricsStr := allocStr$;
+			AppendInt(metricsStr, alloc, useSeparators);
+			metricsStr := metricsStr + " " + byteStr + " | " + actionsStr + " ";
+			AppendInt(metricsStr, Services.actionsInTheQueue, useSeparators);
+			updateStatusBar := TRUE
+		END
+	END UpdateMetrics;
+
+	PROCEDURE (v: StatusBar) GetBackground (VAR col: Ports.Color); 
+	BEGIN col := param.statusBg
+	END GetBackground;
+
+	PROCEDURE (v: StatusBar) Restore (f: Views.Frame; l_, t_, r_, b_: INTEGER);
+		VAR asc, dsc, wid, w, h: INTEGER;
+	BEGIN
+		param.font.GetBounds(asc, dsc, wid);
+		f.DrawString(mm, mm + asc, param.statusColor, status, param.font);
+		wid := param.font.StringWidth(metricsStr);
+		IF Dialog.memInStatus THEN
+			v.context.GetSize(w, h);
+			f.DrawString(w - wid - mm, mm + asc, param.statusColor, metricsStr, param.font)
+		END
+	END Restore;
+
+	PROCEDURE GetStatusBounds (v: StatusBar; OUT w, h: INTEGER);
+		VAR w_: INTEGER;
+	BEGIN
+		param.font.GetBounds(w, h, w_); INC(h, w + 2 * mm);
+		w := 2 * mm + param.font.StringWidth(status);
+		IF  Dialog.memInStatus THEN
+			INC(w, param.font.StringWidth(metricsStr))
+		END
+	END GetStatusBounds;
+
+	PROCEDURE (v: StatusBar) HandlePropMsg (VAR msg: Properties.Message);
+	BEGIN
+		WITH msg: Properties.BoundsPref DO GetStatusBounds(v, msg.w, msg.h)
+		| msg: Properties.SizePref DO GetStatusBounds(v, msg.w, msg.h)
+		ELSE
+		END
+	END HandlePropMsg;
+
+	PROCEDURE (a: StatusBarUpdater) Do;
+	BEGIN
+		IF Dialog.memInStatus THEN
+			UpdateMetrics
+		END;
+		IF updateStatusBar & (a.bar # NIL) THEN
+			Views.Update(a.bar, Views.keepFrames);
+			updateStatusBar := FALSE
+		END;
+		Services.DoLater(a, Services.immediately)
+	END Do;
+
+	PROCEDURE SetStatus* (IN in: ARRAY OF CHAR);
+	BEGIN
+		status := in$;
+		Dialog.UpdateString(status);
+		updateStatusBar := TRUE
+	END SetStatus;
+
+	PROCEDURE DepositStatusBar*;
+	VAR statusBar: StatusBar;
+	BEGIN
+		Dialog.MapString(allocKey, allocStr);
+		Dialog.MapString(totalKey, totalStr);
+		Dialog.MapString(byteKey, byteStr);
+		Dialog.MapString(actionsKey, actionsStr);
+		status := "";
+		metricsStr := "";
+		NEW(statusBar);
+		NEW(statusBar.updater);
+		statusBar.updater.bar := statusBar;
+		updateStatusBar := TRUE;
+		Views.Deposit(statusBar);
+		(* just because it is deposited doesn't mean it will be used, so the updater is out of place *)
+		Services.DoLater(statusBar.updater, Services.now)
+	END DepositStatusBar;
+
+	PROCEDURE NewMainLine* (): Views.View;
+		VAR ml: LineView;
+	BEGIN
+		NEW(ml);
+		ml.removed := Services.Ticks();
+		Rebuild(ml);
+		RETURN ml
+	END NewMainLine;
+
+	PROCEDURE (line: LineView) Externalize (VAR wr: Stores.Writer);
+	BEGIN wr.WriteVersion(version)
+	END Externalize;
+
+	PROCEDURE (line: LineView) Internalize (VAR rd: Stores.Reader);
+		VAR thisVersion_: INTEGER;
+	BEGIN
+		rd.ReadVersion(version, version, thisVersion_);
+		IF ~rd.cancelled THEN Rebuild(line) END
+	END Internalize;
+
+	PROCEDURE DropMenu*;
+	(** Drop the menu determined by the most recently used shortcut Alt+CHAR. Used internally *)
+		VAR msg: DropMenuMsg;
+	BEGIN
+		IF dropReq.menu # NIL THEN Views.Omnicast(msg) END;
+		dropReq.menu := NIL
+	END DropMenu;
+
+
+	PROCEDURE InitParam (p: ANYPTR);
+		VAR w: INTEGER;
+	BEGIN
+		WITH p: Param DO
+			p.font := Fonts.dir.This(p.typeface, p.size * Ports.point, {}, Fonts.normal);
+			p.checkW := p.font.StringWidth(p.check);
+			p.font.GetBounds(p.asc, p.dsc, w);
+			p.itemH := 2 * Ports.mm + p.asc + p.dsc; 
+			p.separH := p.itemH DIV 2;
+			p.margin := p.asc;
+			p.initX := p.asc DIV 2
+		END
+	END InitParam;
+
+	PROCEDURE InitDefaults (p: ANYPTR);
+	BEGIN
+		WITH p: Param DO
+			param.typeface := StdCFrames.defaultFont.typeface;
+			param.size := StdCFrames.defaultFont.size DIV Ports.point;
+			IF Dialog.isWine THEN
+				p.check := "v"
+			ELSE
+				p.check := "?"
+			END;
+			p.bgColorLine := Ports.RGBColor(50, 50, 50);
+			p.bgColor := Ports.RGBColor(70, 70, 70);
+			
+			p.color := Ports.RGBColor(220, 220, 220);
+			p.colorLine := Ports.RGBColor(160, 160, 160);
+			
+			p.disabledColor := Ports.grey50;
+			p.focusColor := Ports.black;
+			p.focusColorLine := Ports.white;
+			p.focusBgLine := Ports.RGBColor(70, 70, 70);
+			p.shortcutColor := Ports.grey50;
+			p.focusBg := Ports.RGBColor(255, 215, 50);
+			
+			p.statusBg := Ports.RGBColor(50, 50, 50);
+			p.statusColor := Ports.grey25;
+			
+			p.debug := FALSE;
+			p.era := 0;
+			p.InitDefaults := InitDefaults; p.Init := InitParam;
+			
+			NEW(dropReq.item);
+			StdDialog.AddItem(dropReq.item, "Fake", "StdMenus.DropMenu", "", "")
+		END
+	END InitDefaults;
+
+	
+	PROCEDURE HidingGuard* (VAR par: Dialog.Par);
+	BEGIN
+		par.label := hidden
+	END HidingGuard;
+
+	PROCEDURE SetFontFromDialogFont*;
+	VAR upd: MainMenuUpdateMsg;
+	BEGIN
+		param.typeface := StdCFrames.defaultFont.typeface;
+		param.size := StdCFrames.defaultFont.size DIV Ports.point;
+		InitParam(param);
+		INC(param.era);
+		upd.what := menuUpdate; Views.Omnicast(upd)
+	END SetFontFromDialogFont;
+
+	PROCEDURE Install*;
+	BEGIN
+		NEW(dir); StdMenuTool.SetDir(dir);
+		targetTypeName := '';
+		NEW(actor);
+		Services.DoLater(actor, Services.Ticks() + 100);
+		NEW(dir);
+		InitParam(param);
+		Dialog.MapString("#Tyler:Guard trapped", trappedLbl); 
+		Dialog.MapString("#Tyler:Failed to call guard", failedLbl);
+		(* Need a laguage change notification! *)
+	END Install;
+	
+BEGIN
+	NEW(param);
+	InitDefaults(param)
+END StdMenus.

@@ -1,0 +1,17 @@
+MODULE ObxProbe38;
+
+	IMPORT SYSTEM, LinLibc;
+
+	PROCEDURE C* (a: LONGINT; count: INTEGER; f: LinLibc.PtrFILE): LinLibc.size_t;
+	BEGIN
+		RETURN LinLibc.fread(a, 1, count, f)
+	END C;
+
+	PROCEDURE D* (buf: POINTER TO ARRAY OF BYTE; f: LinLibc.PtrFILE): LinLibc.size_t;
+		VAR a: LONGINT;
+	BEGIN
+		a := SYSTEM.ADR(buf[0]);
+		RETURN LinLibc.fread(a, 1, 1, f)
+	END D;
+
+END ObxProbe38.

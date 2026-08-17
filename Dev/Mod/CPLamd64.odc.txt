@@ -116,6 +116,7 @@ MODULE DevCPLamd64;
 	PROCEDURE MakeConst* (VAR x: Item; val: INTEGER; form: BYTE);
 	BEGIN
 		x.mode := Con; x.offset := val; x.form := form; x.obj := NIL;
+		x.scale := ASH(val, -31)	(* hi32 = знак-расширение: GenConst для Int64/Pointer/ProcTyp эмитит scale как hi-половину imm64; без инициализации там мусор (0xF1B390C0xxxxxxxx в NIL) *)
 	END MakeConst;
 
 	PROCEDURE AllocConst* (VAR x: Item; con: DevCPT.Const; form: BYTE);
@@ -388,14 +389,13 @@ MODULE DevCPLamd64;
 		ELSE
 			CheckSize(from.form, w);
 			IF from.mode = Con THEN
-				IF (from.form = Int64) & (from.obj = NIL) &
-					((from.scale = 0) & (from.offset >= 0) OR (from.scale = -1) & (from.offset < 0)) THEN
+				IF from.form = NilTyp THEN from.form := Pointer END;	(* NIL = 64-битный ноль: иначе C7 movl занулит только младшие 4 байта 8-байтного слота (0x00007fff00000000-мутации) *)
+				IF (from.form = Int64) & (from.obj = NIL) &					((from.scale = 0) & (from.offset >= 0) OR (from.scale = -1) & (from.offset < 0)) THEN
 					(* константа влезает в imm32: mov m64, imm32 (sign-extended) *)
 					ripTrail := 4;
 					DevCPE.GenByte(REXW); DevCPE.GenByte(0C7H); GenCExt(0, to); GenConst32(from, FALSE);	(* у C7 нет imm8-формы: short=FALSE обязателен! *)
 					ripTrail := 0
 				ELSIF from.form IN {Int64, Pointer, ProcTyp} THEN
-					(* no MOV [mem], imm64: go via scratch r11 *)
 					DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(from, FALSE);	(* mov r11, imm64 *)
 					IF to.reg >= 8 THEN DevCPE.GenByte(4DH) ELSE DevCPE.GenByte(4CH) END; DevCPE.GenByte(89H); GenCExt(3 * 8, to)	(* mov [to], r11 *)
 				ELSE
@@ -513,6 +513,7 @@ MODULE DevCPLamd64;
 	PROCEDURE GenConOp (op: INTEGER; VAR src, dst: Item);
 		VAR w, s: INTEGER;
 	BEGIN
+		IF (src.form = NilTyp) & (dst.form IN {Pointer, ProcTyp, Int64}) THEN src.form := Pointer END;	(* NIL = 64-битный ноль *)
 		IF Size[src.form] # Size[dst.form] THEN
 			IF dst.form = Pointer THEN src.form := Pointer
 			ELSIF src.form = Pointer THEN dst.form := Pointer
@@ -684,7 +685,7 @@ MODULE DevCPLamd64;
 		IF src.mode = Con THEN
 			IF (src.offset = 0) & (src.obj = NIL) & (dst.mode = Reg) THEN 
 				CheckSize(dst.form, w);
-				IF dst.form = Int64 THEN DevCPE.GenByte(REXW) END;	(* or r64,r64: SF из бита 63 *)
+				IF dst.form IN {Int64, Pointer, ProcTyp} THEN DevCPE.GenByte(REXW) END;	(* or r64,r64: SF из бита 63; без REXW or eax,eax ОБНУЛЯЕТ старшие 32 бита указателя! *)
 				DevCPE.GenByte(8 + w); DevCPE.GenByte(0C0H + 9 * dst.reg) (* or r,r *)
 			ELSE GenConOp(38H, src, dst)
 			END

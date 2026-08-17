@@ -1,0 +1,50 @@
+MODULE DevCompiler;
+(** 64-битный мир: фасад к DevCompiler64.
+	Меню Dev/Rsrc/Menus.odc и документы зовут команды DevCompiler.* —
+	в мире 32-битного DevCompiler нет, есть DevCompiler64 (amd64 backend).
+	Исходник живёт в bbcp/Mod64/DevCompiler.odc.txt; build-dev64.sh кладёт его
+	в bbcp64use/Dev/Mod/Compiler.odc и компилирует после DevCompiler64. *)
+
+	IMPORT TextModels, DevCompiler64;
+
+	PROCEDURE Compile*;
+	BEGIN DevCompiler64.Compile
+	END Compile;
+
+	PROCEDURE CompileOpt* (opt: ARRAY OF CHAR);
+	BEGIN DevCompiler64.CompileOpt(opt)
+	END CompileOpt;
+
+	PROCEDURE CompileText* (text: TextModels.Model; beg: INTEGER; OUT error: BOOLEAN);
+	BEGIN DevCompiler64.CompileText(text, beg, error)
+	END CompileText;
+
+	PROCEDURE CompileTextOpt* (text: TextModels.Model; beg: INTEGER; IN opt: ARRAY OF CHAR; OUT error: BOOLEAN);
+	BEGIN DevCompiler64.CompileTextOpt(text, beg, opt, error)
+	END CompileTextOpt;
+
+	PROCEDURE CompileAndUnload*;
+	BEGIN DevCompiler64.CompileAndUnload
+	END CompileAndUnload;
+
+	PROCEDURE CompileSelection*;
+	BEGIN DevCompiler64.CompileSelection
+	END CompileSelection;
+
+	PROCEDURE CompileModuleList*;
+	BEGIN DevCompiler64.CompileModuleList
+	END CompileModuleList;
+
+	PROCEDURE CompileThis*;
+	BEGIN DevCompiler64.CompileThis
+	END CompileThis;
+
+	PROCEDURE MakeList*;
+	BEGIN DevCompiler64.MakeList
+	END MakeList;
+
+	PROCEDURE CompileSubs*;
+	BEGIN DevCompiler64.CompileSubs
+	END CompileSubs;
+
+END DevCompiler.

@@ -1,0 +1,99 @@
+MODULE ObxProbe35;
+
+	IMPORT SYSTEM, Console, Strings, Kernel;
+
+	VAR bad: INTEGER;
+
+	PROCEDURE CHK (IN s: ARRAY OF CHAR; ok: BOOLEAN);
+	BEGIN
+		IF ~ok THEN INC(bad); Console.WriteStr("BAD "); Console.WriteStr(s); Console.WriteLn END
+	END CHK;
+
+	PROCEDURE PInt (IN s: ARRAY OF CHAR; x: LONGINT);
+		VAR t: ARRAY 40 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t)
+	END PInt;
+
+	PROCEDURE PLn;
+	BEGIN
+		Console.WriteLn
+	END PLn;
+
+	PROCEDURE Go*;
+		CONST n = 80; chunk = 64 * 1024 * 1024;	(* 80 x 64 МБ = 5 ГБ > 4 ГБ *)
+		TYPE Arr = POINTER TO ARRAY OF CHAR;
+		VAR p: ARRAY n OF Arr;
+			i, k: INTEGER; j: LONGINT; maxAdr, minAdr, a0, u0, u1, uAlloc: LONGINT;
+	BEGIN
+		bad := 0;
+		a0 := Kernel.Allocated(); u0 := Kernel.Used();
+		maxAdr := 0; minAdr := MAX(LONGINT);
+		(* 1) аллоцируем 5 ГБ, трогаем каждую страницу *)
+		i := 0;
+		WHILE i < n DO
+			NEW(p[i], chunk);
+			IF p[i] = NIL THEN
+				INC(bad); Console.WriteStr("BAD alloc"); PInt(" i=", i); PLn; i := n	(* стоп *)
+			ELSE
+				j := 0;
+				WHILE j < chunk DO p[i][j] := CHR(i + 1); INC(j, 4096) END;
+				j := SYSTEM.VAL(LONGINT, p[i]);
+				IF j > maxAdr THEN maxAdr := j END;
+				IF j < minAdr THEN minAdr := j END;
+				INC(i)
+			END
+		END;
+		PInt("alloc chunks=", i); PInt(" minAdr=", minAdr); PInt(" maxAdr=", maxAdr);
+		PInt(" used=", Kernel.Used()); PLn;
+		uAlloc := Kernel.Used();
+		CHK("heap above 4G", maxAdr > 4000000000L);
+		(* 2) полный GC на живой куче > 4 ГБ, затем проверка данных *)
+		Kernel.Collect;
+		i := 0;
+		WHILE i < n DO
+			IF p[i] # NIL THEN
+				j := 0;
+				WHILE j < chunk DO
+					IF p[i][j] # CHR(i + 1) THEN INC(bad); Console.WriteStr("BAD data"); PInt(" i=", i); PLn; j := chunk END;
+					INC(j, 4096)
+				END
+			END;
+			INC(i)
+		END;
+		(* 3) освобождаем нечётные куски, GC, Used должен уменьшиться *)
+		i := 1;
+		WHILE i < n DO p[i] := NIL; INC(i, 2) END;
+		Kernel.Collect;
+		u1 := Kernel.Used();
+		PInt("used after free half=", u1); PLn;
+		CHK("used decreased", u1 <= uAlloc - (n DIV 2) * chunk);	(* кластеры округляются вверх (~2x), поэтому сравниваем с измеренным uAlloc, а не с n*chunk *)
+		(* 4) чётные куски должны пережить GC *)
+		i := 0;
+		WHILE i < n DO
+			j := 0;
+			WHILE j < chunk DO
+				IF p[i][j] # CHR(i + 1) THEN INC(bad); Console.WriteStr("BAD surv"); PInt(" i=", i); PLn; j := chunk END;
+				INC(j, 4096)
+			END;
+			INC(i, 2)
+		END;
+		(* 5) ре-аллокация освобождённого объёма *)
+		i := 1;
+		WHILE i < n DO
+			NEW(p[i], chunk);
+			IF p[i] = NIL THEN INC(bad); Console.WriteStr("BAD realloc"); PInt(" i=", i); PLn; i := n END;
+			INC(i, 2)
+		END;
+		Kernel.Collect;
+		(* 6) всё освобождаем *)
+		i := 0;
+		WHILE i < n DO p[i] := NIL; INC(i) END;
+		Kernel.Collect;
+		PInt("used final=", Kernel.Used()); PInt(" allocated final=", Kernel.Allocated()); PLn;
+		IF bad = 0 THEN Console.WriteStr("Probe35 OK")
+		ELSE Console.WriteStr("Probe35 FAILURES") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe35.

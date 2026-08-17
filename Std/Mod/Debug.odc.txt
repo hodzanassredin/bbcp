@@ -386,7 +386,7 @@ MODULE StdDebug;
 		ELSIF f = 20X THEN
 			out.WriteChar("["); WriteHex(adr); out.WriteChar("]");
 			out.WriteChar(" "); c := SYSTEM.VAL(Cluster, Kernel.Root());
-			WHILE (c # NIL) & ((adr < SYSTEM.VAL(INTEGER, c)) OR (adr >= SYSTEM.VAL(INTEGER, c) + c.size)) DO c := c.next END;
+			WHILE (c # NIL) & ((adr < SYSTEM.VAL(LONGINT, c)) OR (adr >= SYSTEM.VAL(LONGINT, c) + c.size)) DO c := c.next END;
 			IF c # NIL THEN
 				ptr := SYSTEM.VAL(ArrayPtr, adr)
 			END
@@ -396,7 +396,7 @@ MODULE StdDebug;
 				out.WriteChar("["); WriteHex(adr); out.WriteChar("]");
 				IF (f = 13X) OR (f = 0CX) THEN
 					out.WriteChar(" "); c := SYSTEM.VAL(Cluster, Kernel.Root());
-					WHILE (c # NIL) & ((adr < SYSTEM.VAL(INTEGER, c)) OR (adr >= SYSTEM.VAL(INTEGER, c) + c.size)) DO
+					WHILE (c # NIL) & ((adr < SYSTEM.VAL(LONGINT, c)) OR (adr >= SYSTEM.VAL(LONGINT, c) + c.size)) DO
 						c := c.next
 					END;
 					IF c # NIL THEN

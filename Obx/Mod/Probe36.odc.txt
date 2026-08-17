@@ -1,0 +1,19 @@
+MODULE ObxProbe36;
+
+	IMPORT SYSTEM, Console, Strings;
+
+	PROCEDURE Go*;
+		VAR b: POINTER TO ARRAY OF CHAR; a, p: LONGINT; s: ARRAY 64 OF CHAR;
+	BEGIN
+		NEW(b, 100);
+		p := SYSTEM.VAL(LONGINT, b);
+		a := SYSTEM.ADR(b[0]);
+		Console.WriteStr("ptr="); Strings.IntToString(p, s); Console.WriteStr(s);
+		Console.WriteStr(" adr="); Strings.IntToString(a, s); Console.WriteStr(s);
+		(* dyn array ptr указывает на поле last заголовка; данные по p + headSize, headSize = 4*nofdim+24 = 28 *)
+		IF a = p + 28 THEN Console.WriteStr(" Probe36 OK")
+		ELSE Console.WriteStr(" BAD adr trunc"); Console.WriteStr(" Probe36 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe36.

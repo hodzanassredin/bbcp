@@ -747,3 +747,41 @@ sym-rot); полный цикл GUI-верификации пользовате�
 рецепт ловли: G_DEBUG=fatal-criticals + трап-репортёр со стеком);
 ObxCompileLog FP249 на dev0-side (known sym-rot, KB/Bootstrap32-symrot.md).
 
+== 2026-08-17 (16): снятие MAP_32BIT с GC-кучи (heap > 4 ГБ) ===
+50. Пользователь: "переписать нормально, без костылей" → полный аудит кучи
+    (explore-агент) + правки по каталогу B1-B5 (детали KB/HeapAbove4GB.md):
+    B1 NewRec/NewArr/Allocated/Used/Root -> LONGINT (EAX обнулял верх RAX);
+    B2 Mark: free-блок по инварианту tag = ADR(last) вместо InHeap(усечённый
+    тег); B3 [code] Next переписан на RCX/RAX; B4 LONGINT-сортировка кластеров
+    в MakeFreeMulticluster + dealloc-check в Sweep; B5 LastBlock(LONGINT).
+    LinKernel AllocateClusterMem: MAP_32BIT убран. Счётчики allocated/used/
+    ttotal: LONGINT. StdDebug/StdMenus подогнаны под LONGINT.
+51. ЛОВУШКА диагностики: err 111 сообщал pos в MakeFreeMulticluster, реальная
+    ошибка — LONG(allocated) в ПРЕДЫДУЩЕЙ процедуре MakeFreeMonocluster
+    (allocated стал LONGINT, LONG(Int64) неприменим). Позиция ошибки = позиция
+    сканера при детекции (конец процедуры), не конструкции. Метод: бисекция —
+    если pos не сдвинулся после удаления строки, ошибка раньше неё.
+52. ИЗМЕНЕНИЕ FINGERPRINT Kernel.osf (NewRec/NewArr/Allocated/Used/Root):
+    обязательна полная пересборка мира test64.sh + build-dev64.sh после
+    компиляции Kernel, иначе мир неконсистентен.
+53. ВНИМАНИЕ: исходник Kernel теперь 64-бит-only (Mark читает тег 8-байтно).
+    32-битный Kernel.ocf из него НЕ пересобирать; dev0 ходит на старом ocf.
+54. Пробник ObxProbe35: 80x64МБ = 5 ГБ, touch страниц, полный GC на живой
+    куче > 4 ГБ, проверка данных, половинное освобождение, ре-аллокация.
+ОТКРЫТО: коммит этапа; git add -f для *.odc.txt (gitignore!): Std/Mod/
+Menus.odc.txt, Mod64/DevCompiler.odc.txt, Obx/Mod/Probe35.odc.txt —
+untracked, без -f не попадут в коммит. Подтверждение Dev->Compile в GUI
+от пользователя (фасад DevCompiler собран, окно истекло по таймауту).
+55. Найден и убит 4-й латентный баг кодгена (KB/HeapAbove4GB.md): CPLamd64.
+    MakeConst не инициализировал Item.scale — после NIL-коерсии (баг №3)
+    GenConst стал эмитить scale как hi32 imm64, и в NIL уходил мусор стека
+    (0xF1B390C000000000) → бут падал в Kernel.NewBlock. Фикс:
+    x.scale := ASH(val, -31). Проверка: movabs $0 в ocf, бут до конца.
+56. probes.sh 22/22. Probe36: ложное ожидание ptr==ADR(b[0]) — dyn array ptr
+    указывает на поле last заголовка Block, данные по +headSize=28 (4*nofdim+24);
+    так было и в 32-битном Kernel. Ожидание исправлено на a = p + 28.
+57. Probe35: 80x64МБ, адреса 0x7AE8... (куча реально >4ГБ), данные пережили
+    полный GC, выжившие — второй GC, ре-аллокация и полное освобождение ок.
+    Первый фейл — арифметика пробника: used округляется кластерами ~2x
+    (64МБ+заголовок -> 128МБ), чек сравнивал с n*chunk. Чек переведён на
+    измеренный uAlloc.

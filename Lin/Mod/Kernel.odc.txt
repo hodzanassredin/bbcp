@@ -171,15 +171,15 @@ MODULE LinKernel;
 	(** Allocate at least size bytes of memory for a heap cluster; return base, actually allocated capacity and committed size
 	Post: base MOD 16 = 0, 60 *)
 		CONST protection = Libc.PROT_READ + Libc.PROT_WRITE; 
-			flags = Libc.MAP_PRIVATE + Libc.MAP_ANON + Libc.MAP_32BIT;	(* GC Mark ходит по тегам 32-битными чтениями — куча пока < 4 ГБ *)
+			flags = Libc.MAP_PRIVATE + Libc.MAP_ANON;	(* 64-бит: куча может быть выше 4 ГБ — GC ходит полными LONGINT-адресами *)
 		VAR s: ADDRESS;
 	BEGIN
 		(* IF platform.p.Debug() THEN log.String("LinKernel.AllocateClusterMem "); log.Int(size) END; *)
 		IF monoClusterMem THEN s := MAX(size, monoClusterSize) ELSE s := MAX(size, clusterSize) END;
-		base := SHORT(Libc.mmap(0, s, protection, flags, -1, 0));
+		base := Libc.mmap(0, s, protection, flags, -1, 0);
 		IF (base = Libc.MAP_FAILED) & (s # size) THEN
 			s := size;
-			base := SHORT(Libc.mmap(0, s, protection, flags, -1, 0)) 
+			base := Libc.mmap(0, s, protection, flags, -1, 0) 
 		END;
 		IF base = Libc.MAP_FAILED THEN base := 0
 		ELSE size := s; capacity := s

@@ -1662,14 +1662,16 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				GenB(48H); GenB(0B8H); GenD(ap.offset); GenD(ap.scale);	(* mov rax, imm64 *)
 				GenB(50H)	(* push rax *)
 			ELSIF ap.mode = Reg THEN
-				IF ap.form = Int64 THEN	(* один 64-битный регистр *)
+				(* 8-байтные формы (Int64, Pointer/ADR, ProcTyp, Real64-биты в GP) — полный push;
+				   иначе movsxd убивал старшие 32 бита адреса (куча/стек > 4 ГБ: fread(ADR(buf)) -> SIGSEGV) *)
+				IF ap.form IN {Int64, Pointer, ProcTyp, Real64} THEN	(* один 64-битный регистр *)
 					DevCPLamd64.GenPush(ap)	(* push r64 *)
 				ELSE	(* 32-битное значение: sign-extend через rax *)
 					GenB(48H); GenB(63H); GenB(0C0H + ap.reg);	(* movsxd rax, r32 *)
 					GenB(50H)	(* push rax *)
 				END;
 				Free(ap)
-			ELSIF ap.form = Int64 THEN
+			ELSIF ap.form IN {Int64, Pointer, ProcTyp, Real64} THEN
 				(* ap.mode = Stk: FPU-вычисленное значение уже на машстеке — не дублировать слот *)
 				IF ap.mode # Stk THEN DevCPLamd64.GenPush(ap) END; Free(ap)	(* push qword [mem] *)
 			ELSE	(* 32-битный источник: через Load в регистр, затем movsxd (иначе 4 байта мусора в старшем dword) *)

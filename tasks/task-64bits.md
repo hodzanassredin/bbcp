@@ -539,3 +539,20 @@ err 249; conv-узел вокруг THISARRAY-adr (создатель не на�
 выходе GUI (minor); Lin/Registry:210 Meta.Lookup hang; ld.so _dl_fini
 после трапа в консоли (низкий); ObxCompileLog err 249; verify-
 callconv.py; ASSERT-постусловия в кодегене; CPCamd64:2586 TLS.
+
+== 2026-08-17 (5): нативный Int64 (этап 2) сдан; ОТКРЫТА regress-зависалка ===
+24. Этап 2 закрыт коммитом 5a19d12f: single-reg Int64, UseReals off,
+    мир 222 модуля (failed=1 known FP249), probes 20/20, GUI грузится,
+    About/Contents/меню работают. Подробности KB п.122.
+25. ОТКРЫТО (блокер): зависание OpenBrowser('Docu/Tut-2') — куча
+    раздувается до ~1300 кластеров 256KB -> квадратичный GC
+    (Kernel.InHeap). Разбор и план: KB/HangTut2-GC-clusters.md.
+    Консольная репродукция: echo "StdCmds.OpenBrowser('Docu/Tut-2','x')"
+    | BB_CONSOLE=1 BB_STANDARD_DIR=~/sources/bbcp64use bbrun64 --console.
+26. Workflow-улучшения: bbcp64use/*/Mod — симлинки (было протухшие
+    копии — ловушка!); test64.sh добирает Kernel64; gdb-gui.sh —
+    GUI под gdb через FIFO (ptrace_scope=1); Probe31.cp (Allocated/Used).
+ОТКРЫТО: зависалка Tut-2 (п.25); g_object_unref на выходе (minor);
+Registry:210 Meta.Lookup; ObxCompileLog FP249; INTO->JO (ovflchk);
+мёртвый код пары lo/hi + intrealtyp — удалить (этап 3); CPCamd64:2586
+TLS redesign.

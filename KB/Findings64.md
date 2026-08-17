@@ -1009,3 +1009,25 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      прочие invalid real-опы тоже будут трапать — отличие от 32-бит.
      Решение осознанное (трап вместо тихой порчи), но задокументировать.
      NB: LSH/ROT в bbcp — SYSTEM-функции (CPT:1676), не преdeclared.
+
+122. **Нативный single-reg Int64 (этап 2, коммит 5a19d12f).** UseReals
+     (CPH) больше не вызывается из CPVamd64.Module — Int64-выражения
+     идут целочисленно: значение = один 64-битный регистр (как Pointer).
+     LoadLong/PtrToLong/LongToPtr = retype/один mov; DivMod через
+     GenDiv (cqo+idiv REX.W); результат функции Int64 в RAX (SysV тоже).
+     Переполнение = wrap (как в 32-бит), SYSTEM.LSH/ROT на LONGINT
+     работают. Пара lo/hi мертва (LongAdd/LongSub/LongCmp/LongNeg/
+     MakeLongHi — удалить при чистке). intrealtyp-машинерия спит.
+     Конверсии Int64<->Real по-прежнему x87 (fild/fistp).
+     УРОКИ этапа: (а) GenConst32(short=TRUE) для C7 m64,imm32 —
+     десинхрон потока кода (у C7 нет imm8): эмиттер съехал на 3 байта,
+     crash в Kernel64.Init; (б) GetReg не знал Int64 — trap 130
+     "invalid case"; (в) LoadLong->Load рекурсия (form=Pointer при
+     typ=Int64); (г) Param (SysV ccall) использовал ap.index пары —
+     мусор 99 (FReg sentinel) -> ASSERT в MakeReg. Все пойманы
+     пробниками/пересборкой мира.
+123. **ЗАВИСАНИЕ OpenBrowser('Docu/Tut-2') — открытая проблема.**
+     Полный разбор: KB/HangTut2-GC-clusters.md. Кратко: куча раздувается
+     до ~1300 кластеров по 256KB -> GC квадратичен (InHeap O(n) на
+     кандидата) -> "вечный" GC при открытии документа со вложенными
+     view. Регресс vs FPU-мира. Консольная репродукция есть.

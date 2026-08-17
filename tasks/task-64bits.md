@@ -652,3 +652,24 @@ GrowBuf округление (Kernel:610).
     ("== ObxCompileLog ok"). Примечание: CompileSubs в test64.sh
     по-прежнему печатает failed=1 (косметика), финальный ocf верный.
 Проверки: probes.sh 20/20 PASS после каждого шага.
+
+== 2026-08-17 (9): lazy InitModule — детерминированная загрузка ===
+36. ЗАКРЫТО "GUI не стартует / окно без меню / LinInit fileNotFound".
+    Корень: LinRegistry.SearchVar шла по всему modList через Meta.Lookup
+    → ленивый Kernel.InitModule каскадом исполнял ~80 тел в ОБРАТНОМ
+    порядке посреди тела LinRegistry: GTK до gtk_init (CRITICAL-спам,
+    отравленное состояние — нет меню), тело LinLoader стреляло
+    преждевременно → LoadMod("LinInit") res=1 (мир не готов) →
+    FatalError-диалог. appStartupProcedure нигде не определена —
+    каскад был бесполезен. Фикс: SearchVar сканирует только
+    инициализированные модули (16 IN m.opts); bbrun64.c помечает оба
+    лоадера init ДО цикла тел (пометка в цикле запаздывает — LinLoader
+    в loadOrder после LinRegistry), тело выбранного — явно в хвосте
+    main. KB/LazyInitModule.md. Загрузка чистая: 0 CRITICAL,
+    body loop finished, окно с меню (подтверждено пользователем).
+37. [LL]-диагностика из LinLoader убрана (включая закоммиченный
+    ранее "[LL] LoadMod res=" принт). [LI]-принты в LinInit оставлены
+    до общей чистки.
+ОТКРЫТО: GUI-проверка About/Help→Contents/Tut-2 после фикса;
+коммит+пуш; INTO->JO (ovflchk); CPCamd64:2586 TLS;
+g_object_unref (minor).

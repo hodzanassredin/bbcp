@@ -773,6 +773,19 @@ out:
     for (int a = 1; a < argc; a++) if (strcmp(argv[a], "--console") == 0) consoleMode = 1;
     if (getenv("BB_CONSOLE") != NULL) consoleMode = 1;
 
+    /* лоадеры помечаем init ДО выполнения любых тел: ленивый
+       Kernel.InitModule (ThisLoadedMod <- Meta.Lookup <- LinRegistry.SearchVar
+       идёт по ВСЕМУ modList) иначе исполняет тело лоадера ПРЕЖДЕВРЕМЕННО,
+       в середине чужого тела — LinInit грузится до готовности остальных
+       модулей и падает с fileNotFound. Пометки внутри цикла тел недостаточно:
+       LinLoader в loadOrder идёт ПОСЛЕ LinRegistry. Тело выбранного
+       лоадера вызывается явно в хвосте main. */
+    {
+        Module* ml;
+        ml = ThisModule("LinLoader");    if (ml != NULL) ml->opts = ml->opts | init;
+        ml = ThisModule("LinIntLoader"); if (ml != NULL) ml->opts = ml->opts | init;
+    }
+
     /* инфраструктура загрузчика — первой, в порядке 32-битного dev0 link:
        тела этих модулей устанавливают хуки (Files.dir, SetLoader...),
        без которых тела остальных модулей падают (Librarian нужен Files.dir).
@@ -793,15 +806,15 @@ out:
     }
 
     /* run all module bodies in load order (like Kernel.InitModule);
-       лоадеры (LinLoader/LinIntLoader) — ПОСЛЕДНИМИ: их тела грузят
-       главный модуль через StdLoader, и к этому моменту все остальные
-       тела уже отработали (иначе InitModule-рекурсия бежит по неинициализи-
-       рованным модулям: Dialog требует Librarian.lib из тела Librarian) */
+       лоадеры (LinLoader/LinIntLoader) уже помечены init выше и здесь
+       пропускаются — их тела грузят главный модуль через StdLoader, и к
+       этому моменту все остальные тела уже отработали (иначе InitModule-
+       рекурсия бежит по неинициализированным модулям: Dialog требует
+       Librarian.lib из тела Librarian) */
     for (i = 0; i < nLoaded; i++) {
         Module* m = loadOrder[i];
         if (m == k) continue;
         if (m->opts & init) continue;
-        if (strcmp(m->name, "LinLoader") == 0 || strcmp(m->name, "LinIntLoader") == 0) continue;
         m->opts = m->opts | init;
         BodyProc body = (BodyProc) m->code;
         printf("init %s...\n", m->name);
@@ -827,13 +840,10 @@ out:
     if (getenv("BB_TRAP") != NULL) __builtin_trap();	/* gdb hook: модули загружены, можно ставить bp в коде модулей */
     {
         Module* m = ThisModule(consoleMode ? "LinIntLoader" : "LinLoader");
-        Module* other = ThisModule(consoleMode ? "LinLoader" : "LinIntLoader");
-        /* тело НЕвыбранного лоадера не должно исполняться никогда: иначе ленивый
-           InitModule (напр. из LinInit.SearchVar по modList) запускает консольный
-           LinIntLoader в GUI-режиме -> REPL на EOF stdin -> тихий exit(0) */
-        if (other != NULL) other->opts = other->opts | init;
-        if (m != NULL && !(m->opts & init)) {
-            m->opts = m->opts | init;
+        /* оба лоадера уже помечены init в цикле тел выше (защита от
+           преждевременного ленивого InitModule) — тело выбранного
+           вызываем явно, независимо от флага */
+        if (m != NULL) {
             fprintf(stderr, "init %s (main loader, %s mode)...\n", m->name, consoleMode ? "console" : "gui");
             ((BodyProc) m->code)();
         }

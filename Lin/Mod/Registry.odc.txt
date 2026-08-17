@@ -210,7 +210,11 @@ MODULE LinRegistry;
 		m := Kernel.modList;
 		ok := FALSE;
 		WHILE (m # NIL) & ~ ok DO
-			IF ~ (m.refcnt < 0) THEN
+			(* 16 = Kernel init flag (Kernel.init не экспортирован): сканируем
+			   только уже инициализированные модули — иначе Meta.Lookup лениво
+			   инициализирует каждый модуль прямо посреди загрузки (каскад тел
+			   в обратном порядке, GTK вызовы до gtk_init) *)
+			IF (16 IN m.opts) & ~(m.refcnt < 0) THEN
 				Meta.Lookup(m.name$, module);
 				IF module.obj = Meta.modObj THEN
 					module.Lookup(name, variable);

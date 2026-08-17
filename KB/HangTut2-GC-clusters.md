@@ -1,68 +1,62 @@
-# Зависание при открытии Docu/Tut-2 (Compound Documents) — расследование
+# Зависание при открытии Docu/Tut-2 (Compound Documents) — РЕШЕНО
 
-Статус на 2026-08-17 ~13:45: НЕ РЕШЕНО, механизм локализован, корень (раздувание
-кластеров) не найден. Коммит состояния: 5a19d12f.
+Статус на 2026-08-17 ~15:00: РЕШЕНО. Корень — sliver-shadowing в
+Kernel.GetOldFreeBlock (наша же 64-битная поправка). Консольный OpenBrowser
+('Docu/Tut-2') завершается, probes 20/20 PASS.
 
-## Симптом
+## Корень (доказан)
+
+Бакеты free-листа = ТОЧНЫЕ классы размеров: blk.size всегда ≡ 8 (mod 16),
+поэтому bucket i = size DIV 16 хранит ровно размер 16i+8. Оригинальный
+GetOldFreeBlock сканирует только ОДИН непустой бакет — в оригинале это
+корректно, т.к. первый же блок в нём заведомо ≥ s.
+
+Наша 64-битная поправка (sliver-правило `b.size - s = 16` → skip) сломала
+инвариант: sliver-блок в низком бакете (напр. size=40 в бакете 2 при s=24)
+отвергался, скан НЕ шёл в старшие бакеты → промах при ЖИВОМ большом блоке в
+бакете 7 → FastCollect/Collect на каждый промах (спин Mark→InHeap) →
+MakeFreeMulticluster → новый кластер 256KB на каждый NewBlock(≤9 байт) →
+цепочка 300..1300 кластеров → квадратичный GC = «вечное» зависание.
+Поймано fail-fast'ом: дамп free[] на 301-м кластере показал bucket2=40,
+bucket3=56, bucket7=41464 — классическая картина затенения.
+
+## Фикс (System/Mod/Kernel.odc.txt, GetOldFreeBlock ~2073)
+
+При отвержении блоков в бакете i ПЕРЕХОДИМ к бакету i+1 (внешний цикл по
+бакетам), а не возвращаем NIL. Sliver-правило сохранено (a=16 нельзя ни
+Insert, ни absorb — Next/Sweep его не перешагнёт). OldBlock (мёртвый код,
+не зовётся) не тронут.
+
+## Побочные находки
+
+1. **Инструментация Гейзенберга**: НЕЛЬЗЯ логировать из AllocateCluster через
+   BString/BInt — BAppend растит blog.buf через GrowBuf→NewBlock→(промах)→
+   AllocateCluster → рекурсия-шторм (тысячи «AC req=» без чисел в логе).
+   Живой лог только через blog.string/blog.ln (platform.String = libc,
+   не аллоцирует). В Kernel.AllocateCluster оставлены неаллоцирующие
+   LStr/LInt/LLn/LDump + fail-fast: цепочка > 300 кластеров → дамп free[]
+   + HALT(77). Это постоянный инвариант, не снимать.
+2. **GrowBuf баг округления** (Kernel.odc.txt:610): `len := (pos+by) +
+   (logInc-1) DIV logInc * logInc` — DIV связывает не то: (logInc-1) DIV
+   logInc = 0 → len = pos+by БЕЗ округления вверх. Каждый BAppend сверх
+   ёмкости реаллоцирует впритык. Отдельный follow-up (не трогали).
+3. **Трап-репортёр зацикливается** на битом fp-стеке: 437k одинаковых строк
+   «0: Kernel. <PC=..>» при крахе во время GC. Нужен cycle-guard в
+   LogThisStack/walker. Follow-up.
+4. Таймауты: `timeout` без `-k` не добивает зависший bbrun64 (игнорит TERM
+   в спине) — всегда `timeout -k 5 N`.
+5. Остаточная «гроза» req=2136 при Tut-2 — НЕ баг: 41 кластер × 256KB для
+   ~5000 объектов по 2KB (в логе только AllocateCluster, между ними ~124
+   молчаливых NewBlock). Probe32 (3000 NEW по 2100 байт): 50 кластеров,
+   dAlloc≈dUsed — reuse работает идеально.
+
+## Симптом (историческая справка)
 
 - GUI: Help → Contents работает; клик на ссылку «Compound Documents»
-  (`StdCmds.OpenBrowser('Docu/Tut-2', ...)`) — окно зависает, CPU ~40-50%.
-- Консольная репродукция ЕСТЬ (GUI не нужен!):
-  `echo "StdCmds.OpenBrowser('Docu/Tut-2', 'x')" | BB_CONSOLE=1 BB_STANDARD_DIR=~/sources/bbcp64use timeout 30 ~/sources/bbcp/Dev/Rsrc/bbrun64 --console`
-  → bbrun64 крутится на 99.9% CPU. `OpenBrowser('Docu/Tour')` — НЕ виснет
-  (+60KB allocated, открывается мгновенно).
-- На FPU-мире (до native Int64, коммит ≤14b0d8b7) ссылка работала.
-
-## Механизм зависания (доказано gdb)
-
-- Спин в `Kernel.InHeap` (System/Code/Kernel.ocf, proc span (0x3627,0x368c],
-  цикл 0x3642-0x3680): `c := c.next` = `mov 0x4(%rax),%rax` (8-байтное чтение
-  next по +4 — штатно, компилятор пакует указатели без 8-выравнивания),
-  выход по `cmpl $0,-8(%rbp)` (младшие 32 бита c).
-- Цепочка кластеров НЕ циклична (прогулка до 0), но ДЛИННА: ~1300 кластеров
-  по 256KB (0x40000). Замеры: от 0x6c0c4000 → 136 до конца; от 0x63284000 →
-  1127 до конца. Адреса кластеров 0x63..0x6f_xx_4000 (выше арены 0x40000000-
-  0x60000000 — отдельные mmap через Platform.AllocateClusterMem).
-- Стек вызовов: NewBlock → MakeFreeMulticluster → AllocateCluster →
-  platform.AllocateClusterMem (LinKernel); GC: Collect → Mark → InHeap(dt)
-  (Mark+0x21f, Kernel.odc.txt:1661) и InHeap(son-8) (:1689). InHeap O(n) на
-  кандидата × тысячи кандидатов × 1300 кластеров ≈ квадрат/куб → «вечный» GC.
-- RSS виснущего GUI 527MB (FPU-утренний GUI: 67MB) — но был и вис при RSS
-  78MB: кластеры почти пустые, RSS не показатель; показатель — ЧИСЛО кластеров.
-
-## Что исключено / проверено
-
-- Kernel.Collect в консоли на свежем буте — мгновенно (GC сам по себе жив).
-- Probe31 (~/sources/bbcp64use/Probe31.cp): печатает Kernel.Allocated()/Used()
-  — работает; бут: allocated≈193024, used≈274432.
-- LONGINT-арифметика верна (Probe24/27/28/29 самопроверяющиеся, 20/20 PASS).
-- Цепочка next консистентна (size@0=0x40000, next@+4, max@+8=base).
-
-## Гипотезы (по убыванию)
-
-1. Free-list reuse сломан → каждый NewBlock при промахе делает новый кластер
-   256KB (AllocateCluster(tsize+24)), остаток не переиспользуется. Подозреваемые
-   места: Insert (Kernel.odc.txt ~1939: `blk.size := size-8`, bucket i=MIN(N-1,
-   size DIV 16)), GetOldFreeBlock (~2061: sliver-правило `b.size - s = 16`),
-   Next (~1738: stride=(size+23) DIV 16*16, min 32), Sweep (~1944: `end` LONGINT,
-   VAL(INTEGER,...) усечения — кластеры пока < 4ГБ, безвредны).
-2. Размер кластера 256KB слишком мелкий + аллокационный шторм при инстанцировании
-   вложенных view (Tut-2 = глава про compound docs, в тексте формы/картинки).
-3. Счётчики allocated/used (LONGINT) съезжают → эвристика роста кучи
-   (`(tsize + LONG(allocated)) DIV 2 * 3`, Kernel.odc.txt:2114) врёт.
-
-## План следующего захода (консоль, без GUI)
-
-1. Инструментировать Kernel.NewBlock/AllocateCluster счётчиками/логом
-   (каждый новый кластер: size, allocated, used) → консольный прогон
-   OpenBrowser('Docu/Tut-2') покажет шторм аллокаций и его источник
-   (размеры запросов).
-2. Если шторм мелких запросов → смотреть, почему GetOldFreeBlock не находит
-   остатки (дамп free[] бакетов до/после).
-3. Минимизация триггера: Tut-1/Tut-3..., синтетический документ с одной
-   вложенной формой (Obx формы через TextViews) — найти минимальный кейс.
-4. Проверить FPU-билд на том же сценарии (откат компилятора на 14b0d8b7 →
-   go32 → test64) — подтвердить, что регресс именно от native Int64.
+  (`StdCmds.OpenBrowser('Docu/Tut-2', ...)`) — окно зависало, CPU ~40-50%.
+- Консольная репродукция:
+  `echo "StdCmds.OpenBrowser('Docu/Tut-2', 'x')" | BB_CONSOLE=1 BB_STANDARD_DIR=~/sources/bbcp64use timeout -k 5 60 ~/sources/bbcp/Dev/Rsrc/bbrun64 --console`
+- На FPU-мире (≤14b0d8b7) ссылка работала — sliver-правило появилось позже.
 
 ## Техника отладки (важно!)
 
@@ -72,24 +66,10 @@
   (gdb отвечает Y на quit!) — держит вечный писатель (fifo_holder.pid).
 - bbrun64 печатает ~TRAP sig=.. pc=.. при SIGSEGV — `kill -SEGV <pid>` даёт pc
   спина. Маппинг pc → модуль: таблица `+ Mod dad=... cad=...` в логе бута
-  (есть и в GUI-логе); дальше `ocf.py refs/dis <ocf> <off>`.
+  (есть и в GUI-логе); дальше `ocf.py refs/dis <ocf> <off>`. ВНИМАНИЕ:
+  refs-оффсеты ocf.py могут съезжать на процедуру назад — сверять ret $N.
 - Пользователь кликает UI САМ (без MCP-кликов); я только направляю.
-- ~TRAP-цепочки после SIGSEGV — это каскад обработчика трапов (известная
-  хрупкость), смотреть только ПЕРВУЮ строку (code=0/SI_USER = мой сигнал → pc
-  спина; code=1 = настоящий SEGV).
-
-## Дополнение (перед сжатием контекста)
-
-Принятый подход — fail-fast инварианты (Дейкстра): не ловить hang, а трапать
-в точке нарушения. Конкретные следующие шаги:
-1. В Kernel.AllocateCluster (System/Mod/Kernel.odc.txt:772) добавить подсчёт
-   цепочки root с капом: `c2 := root; n := 0; WHILE (c2 # NIL) & (n < 300) DO
-   c2 := c2.next; INC(n) END; ASSERT(n < 300, 77)` + лог размера через
-   BString/BInt/BLn (существуют, строки 631-663). НЕ добавлять глобалов в
-   Kernel (раскладка varBase хрупкая: modList/root/baseStack вместе).
-   Пересборка: `go64.sh Kernel` (интерфейс не меняется — каскада нет).
-2. Консольный прогон OpenBrowser('Docu/Tut-2') → трап на 301-м кластере
-   со стеком = источник шторма аллокаций.
-3. A/B-доказательство (если надо): откат компилятора на 14b0d8b7 (go32 всех
-   CP*) + test64 + тот же сценарий — подтвердить/снять регресс native Int64.
-4. Кандидаты корня: Insert/GetOldFreeBlock/Next/Sweep (см. гипотезы выше).
+- ~TRAP-цепочки после SIGSEGV — каскад обработчика трапов, смотреть только
+  ПЕРВУЮ строку (code=0/SI_USER = мой сигнал → pc спина; code=1 = настоящий
+  SEGV; sig=15 code=0 = SIGTERM от timeout — НЕ баг).
+- Свежий Kernel.ocf — в bbcp64use/*/Code (go64.sh пишет туда), НЕ в bbcp/!

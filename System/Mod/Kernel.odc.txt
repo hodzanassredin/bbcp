@@ -769,9 +769,42 @@ MODULE Kernel;
 
 	(* A. V. Shiryaev, 2012.10: NOTE: it seems that GC works correctly with positive addesses only *)
 
-	PROCEDURE AllocateCluster (size: INTEGER; VAR c: Cluster); 
+	PROCEDURE AllocateCluster (size: INTEGER; VAR c: Cluster);
 	(** Allocate cluster c of at least size bytes in either mono- or multi-cluster heap layout *)
-		VAR a, base, capacity, sz: ADDRESS;
+		VAR a, base, capacity, sz: ADDRESS; x: Cluster; n: INTEGER;
+
+		(* TODO64 diag: неаллоцирующий лог (BString/BInt растят blog.buf → NewBlock → рекурсия!) *)
+		PROCEDURE LStr (IN s: ARRAY OF CHAR);
+		BEGIN IF blog.string # NIL THEN blog.string(s) END
+		END LStr;
+
+		PROCEDURE LInt (x: LONGINT);
+			VAR a: ARRAY 25 OF CHAR; b: ARRAY 25 OF CHAR; i, j: INTEGER; y: LONGINT;
+		BEGIN
+			IF blog.string = NIL THEN RETURN END;
+			IF x < 0 THEN x := -x; a[0] := '-'; j := 1 ELSIF x > 0 THEN j := 0 ELSE j := 1; a[0] := '0' END;
+			i := 0;
+			WHILE x # 0 DO y := x MOD 10; b[i] := SHORT(CHR(y + ORD('0'))); x := x DIV 10; INC(i) END;
+			DEC(i); WHILE (i >= 0) & (j < 25) DO a[j] := b[i]; INC(j); DEC(i) END;
+			a[j] := 0X; blog.string(a)
+		END LInt;
+
+		PROCEDURE LLn;
+		BEGIN IF blog.ln # NIL THEN blog.ln END
+		END LLn;
+
+		PROCEDURE LDump;
+			VAR i: INTEGER; f: FreeBlock;
+		BEGIN
+			i := 0;
+			WHILE i < N DO
+				LInt(i); LStr(":");
+				f := free[i];
+				WHILE (f # sentinel) & (f # NIL) DO LStr(" "); LInt(f.size); f := f.next END;
+				LLn; INC(i)
+			END
+		END LDump;
+
 	BEGIN
 		ASSERT(platform.initialized, 99);
 		sz := size; platform.AllocateClusterMem(sz, base, capacity);
@@ -789,7 +822,18 @@ MODULE Kernel;
 				(*INC(total, size)*) 
 				(* ;IF debug THEN BString("~monoClusterMem: c.max = "); BHex(c.max); BLn END; *)
 			END;
-			INC(used, SHORT(sz)); 
+			INC(used, SHORT(sz));
+		END;
+		(* TODO64 diag: fail-fast на бесконтрольный рост цепочки кластеров (инвариант;
+		   поймано зависание Tut-2 — sliver-shadowing в GetOldFreeBlock). Лог через
+		   LStr/LInt/LLn/LDump — НЕ через BString/BInt: те растят blog.buf → NewBlock → рекурсия *)
+		n := 0; x := root;
+		WHILE (x # NIL) & (n <= 300) DO INC(n); x := x.next END;
+		IF n > 300 THEN
+			LStr("AllocateCluster: chain overflow n="); LInt(n);
+			LStr(" reqsize="); LInt(size); LStr(" used="); LInt(used); LLn;
+			LDump;
+			HALT(77)
 		END
 		(* post: (c = NIL) OR (c MOD 16 = 0) & (c.size >= size) *)
 	END AllocateCluster;
@@ -2064,14 +2108,19 @@ MODULE Kernel;
 		IF debug & (watcher # NIL) THEN watcher(3) END;
 		s := size - 8;	(* free size field = total - 8 *)
 		i := MIN(N - 1, s DIV 16);
-		WHILE (i # N - 1) & (free[i] = sentinel) DO INC(i) END;
-		b := free[i]; l := NIL;
 		(* 64-бит: остаток a = b.size - s: a = 16 нельзя ни Insert (минимум 32), ни absorb
-		   (Next его не видит — sweep проваливается в sliver и падает) — такой блок пропускаем *)
-		WHILE (b.size < s) OR (b.size - s = 16) DO l := b; b := b.next END;
-		IF b # sentinel THEN
-			IF l = NIL THEN free[i] := b.next ELSE l.next := b.next END
-		ELSE b := NIL
+		   (Next его не видит — sweep проваливается в sliver и падает) — такой блок пропускаем.
+		   При промахе ОБЯЗАТЕЛЬНО идём в следующий бакет: иначе sliver-блок в низком
+		   бакете навсегда затеняет большие блоки старших бакетов (шторм кластеров, Tut-2 hang) *)
+		b := NIL;
+		WHILE (b = NIL) & (i < N) DO
+			l := NIL; b := free[i];
+			WHILE (b # sentinel) & ((b.size < s) OR (b.size - s = 16)) DO l := b; b := b.next END;
+			IF b # sentinel THEN
+				IF l = NIL THEN free[i] := b.next ELSE l.next := b.next END
+			ELSE
+				b := NIL; INC(i)
+			END
 		END;
 		fb := b
 	END GetOldFreeBlock;

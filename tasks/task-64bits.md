@@ -556,3 +556,29 @@ callconv.py; ASSERT-постусловия в кодегене; CPCamd64:2586 TL
 Registry:210 Meta.Lookup; ObxCompileLog FP249; INTO->JO (ovflchk);
 мёртвый код пары lo/hi + intrealtyp — удалить (этап 3); CPCamd64:2586
 TLS redesign.
+
+== 2026-08-17 (6): зависалка Tut-2 РЕШЕНА (sliver-shadowing) ===
+27. ЗАКРЫТ блокер п.25: корень — наша же 64-битная поправка в
+    Kernel.GetOldFreeBlock (sliver-правило `b.size - s = 16` skip)
+    ломала инвариант «бакет = точный класс размера»: отвергнутый
+    sliver-блок в низком бакете навсегда затенял большие блоки
+    бакета 7 → каждый NewBlock мимо → GC на каждый промах → новый
+    кластер 256KB → 1300 кластеров → квадратичный InHeap = вис.
+    Фикс: внешний цикл по бакетам (i<N) при промахе. Доказано
+    fail-fast'ом: дамп free[] на 301-м кластере (bucket2=40,
+    bucket3=56, bucket7=41464). Полный разбор: KB/HangTut2-GC-clusters.md.
+28. Уроки: (а) fail-fast инварианты > ловля виса gdb (Дейкстра):
+    трап в точке нарушения дал дамп и корень за один прогон;
+    (б) логирование из аллокатора ТОЛЬКО неаллоцирующими средствами
+    (blog.string), BString/BInt растят blog.buf → NewBlock →
+    рекурсия (Гейзенбаг в диагностике); (в) timeout всегда с -k.
+29. В Kernel оставлен постоянный инвариант: цепочка > 300 кластеров
+    → LDump free[] + HALT(77). Проверки: консольный OpenBrowser
+    (Tut-2) завершается (allocated 6.3MB), Probe32 (3000 NEW ×
+    2100B) — 50 кластеров, reuse идеален, probes.sh 20/20 PASS.
+ОТКРЫТО: GUI-проверка Tut-2 пользователем; коммит фикса; этап 3
+(мёртвый код lo/hi + intrealtyp); g_object_unref (minor);
+Registry:210 Meta.Lookup; ObxCompileLog FP249; INTO->JO (ovflchk);
+CPCamd64:2586 TLS; трап-репортёр зацикливается на битом fp-стеке
+(cycle-guard в LogThisStack); GrowBuf округление (Kernel:610,
+DIV прецеденс — len без округления вверх).

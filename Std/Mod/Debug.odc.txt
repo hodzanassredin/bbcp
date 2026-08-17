@@ -391,7 +391,7 @@ MODULE StdDebug;
 				ptr := SYSTEM.VAL(ArrayPtr, adr)
 			END
 		ELSE
-			IF (f = 13X) OR (f = 0CX) THEN x := adr - 4 ELSE x := adr END;
+			IF (f = 13X) OR (f = 0CX) THEN x := adr - 8 ELSE x := adr END;	(* 64-бит: тег объекта по -8 *)
 			IF ((adr < -4) OR (adr >= 65536)) & Kernel.IsReadable(x, adr + 16) THEN
 				out.WriteChar("["); WriteHex(adr); out.WriteChar("]");
 				IF (f = 13X) OR (f = 0CX) THEN

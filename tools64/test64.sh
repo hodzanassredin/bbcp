@@ -20,6 +20,13 @@ case " $subs " in
 		;;
 esac
 
+# Fig не входит в стандартный список подсистем, но wipe выше стирает и его ocf —
+# добираем всегда, если подсистема есть в мире (нужна для FigViews.StdView в Tut-доках;
+# без неё встроенные схемы рисуются серым квадратом с крестом)
+if [ -d "Fig/Mod" ]; then
+	"$HOME/sources/bbcp/tools64/go64.sh" FigModels FigViews FigPoints FigBasic FigCmds 2>&1 | tail -1
+fi
+
 # Dev-пайплайн (для компиляции внутри BB64) — всегда добираем в конце
 "$HOME/sources/bbcp/tools64/build-dev64.sh" 2>&1 | grep -E '== ConsCompiler64|== DevCompiler64' | tail -2
 

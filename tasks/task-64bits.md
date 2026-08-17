@@ -582,3 +582,17 @@ Registry:210 Meta.Lookup; ObxCompileLog FP249; INTO->JO (ovflchk);
 CPCamd64:2586 TLS; трап-репортёр зацикливается на битом fp-стеке
 (cycle-guard в LogThisStack); GrowBuf округление (Kernel:610,
 DIV прецеденс — len без округления вверх).
+
+== 2026-08-17 (7): GUI-проверка пройдена, Fig добран ===
+30. GUI: Tut-2 открывается без виса (подтверждено пользователем),
+    фикс sliver-shadowing запушен b14e1102.
+31. ЗАКРЫТО: серые X-боксы вместо схем в Tut-2 — подсистема Fig не
+    была собрана в мире (FigViews.StdView — встроенные, не ресурсы).
+    Создан bbcp64use/Fig (симлинки), собраны FigModels/FigViews/
+    FigPoints/FigBasic/FigCmds; test64.sh теперь добирает Fig сам
+    (wipe стирает ВСЕ подсистемы мира!). KB/FigViews-missing-X-box.md.
+    GUI-проверка пользователем: схемы рисуются.
+ОТКРЫТО: этап 3 (мёртвый код lo/hi + intrealtyp); g_object_unref
+(minor); Registry:210 Meta.Lookup; ObxCompileLog FP249; INTO->JO
+(ovflchk); CPCamd64:2586 TLS; cycle-guard трап-репортёра;
+GrowBuf округление (Kernel:610).

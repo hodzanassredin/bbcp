@@ -796,3 +796,20 @@ untracked, без -f не попадут в коммит. Подтвержден
     (pkill -9 -f Rsrc/bbrun64, но НЕ из задачи, чей cmdline содержит паттерн
     — pkill убьёт саму задачу); go64.sh оставляет мир без Dev если убит
     (.dev-stash-go64); после правки кодгена обязателен build-dev64.sh заново.
+
+== 2026-08-18: аудит INTEGER-указателей ==
+61. Полный аудит VAL(INTEGER, ptr)/INTEGER-адресов по всем подсистемам
+    (explore-агент) -> KB/IntPtrAudit-64.md. Скоуп: [base] чиним сейчас,
+    [ext] (Aos/Crypto/_Http/Comm/Json/Mcp/Fjson/Sdl2/Ogl/W3c) — отдельный
+    этап, [ref] Hr — только сверка, не чинить.
+62. Корневые typedef'ы [base], от которых веер: Libc.PtrVoid (+long/size_t/
+    off_t — LP64 ABI!), Dl.HANDLE, Gtk2GLib.gpointer, Net.PtrVoid — все
+    INTEGER. Смена = fingerprint-шок -> полная пересборка мира.
+63. Точечные [base]: Files64 MOVE from/to, Services.AdrOf/SafeRecAction,
+    Meta.Item.adr, DevDebug/HeapSpy/Decoder386/MsgSpy (Dev-инструменты).
+64. TODO64-маркеры в коде: Kernel:776,828 (diag-логи AllocateCluster —
+    оставить до конца этапа), Std/Rasters:33,326 (сделано), Compiler64:663.
+65. GUI-смоук пройден: меню, File->Open, Dev->Compile изнутри BB64,
+    командер ObxTestBig.Go. TestBig v2: alloc accounting точный
+    (allocated == expected до байта), GC на 5 ГБ, слабина 1-2 кластера на
+    консервативный MarkLocals (KB/HeapAbove4GB.md).

@@ -1488,12 +1488,12 @@ MODULE Kernel;
 
 	(* -------------------- reference information (portable) --------------------- *)
 
-	PROCEDURE RefCh (VAR ref: INTEGER; OUT ch: SHORTCHAR);
+	PROCEDURE RefCh (VAR ref: LONGINT; OUT ch: SHORTCHAR);
 	BEGIN
 		S.GET(ref, ch); INC(ref)
 	END RefCh;
 
-	PROCEDURE RefNum (VAR ref: INTEGER; OUT x: INTEGER);
+	PROCEDURE RefNum (VAR ref: LONGINT; OUT x: INTEGER);
 		VAR s, n: INTEGER; ch: SHORTCHAR;
 	BEGIN
 		s := 0; n := 0; RefCh(ref, ch);
@@ -1501,7 +1501,7 @@ MODULE Kernel;
 		x := n + ASH(ORD(ch) MOD 64 - ORD(ch) DIV 64 * 64, s)
 	END RefNum;
 
-	PROCEDURE RefName (VAR ref: INTEGER; OUT n: Utf8Name);
+	PROCEDURE RefName (VAR ref: LONGINT; OUT n: Utf8Name);
 		VAR i: INTEGER; ch: SHORTCHAR;
 	BEGIN
 		i := 0; RefCh(ref, ch);
@@ -1509,7 +1509,7 @@ MODULE Kernel;
 		n[i] := 0X
 	END RefName;
 
-	PROCEDURE GetRefProc* (VAR ref: INTEGER; OUT adr: INTEGER; OUT name: Utf8Name);
+	PROCEDURE GetRefProc* (VAR ref: LONGINT; OUT adr: INTEGER; OUT name: Utf8Name);
 		VAR ch: SHORTCHAR;
 	BEGIN
 		S.GET(ref, ch);
@@ -1527,7 +1527,7 @@ MODULE Kernel;
 	END GetRefProc;
 	
 	(* A. V. Shiryaev, 2012.11 *)
-	PROCEDURE CheckRefVarReadable (ref: INTEGER): BOOLEAN;
+	PROCEDURE CheckRefVarReadable (ref: LONGINT): BOOLEAN;
 		VAR ok: BOOLEAN; ch: SHORTCHAR;
 			p: INTEGER; (* address *)
 
@@ -1567,7 +1567,7 @@ MODULE Kernel;
 		RETURN ok
 	END CheckRefVarReadable;
 
-	PROCEDURE GetRefVar* (VAR ref: INTEGER; OUT mode, form: SHORTCHAR; OUT desc: Type;
+	PROCEDURE GetRefVar* (VAR ref: LONGINT; OUT mode, form: SHORTCHAR; OUT desc: Type;
 																OUT adr: INTEGER; OUT name: Utf8Name);
 	BEGIN
 		IF CheckRefVarReadable(ref) THEN
@@ -1589,10 +1589,10 @@ MODULE Kernel;
 	END GetRefVar;
 
 	PROCEDURE SourcePos* (mod: Module; codePos: INTEGER): INTEGER;
-		VAR ref, pos, ad, d: INTEGER; ch: SHORTCHAR; name: Utf8Name;
+		VAR pos, ad, d: INTEGER; ref: LONGINT; ch: SHORTCHAR; name: Utf8Name;
 	BEGIN
 		IF mod # NIL THEN	(* mf, 12.02.04 *)
-			ref := SHORT(mod.refs); pos := 0; ad := 0; S.GET(ref, ch);
+			ref := mod.refs; pos := 0; ad := 0; S.GET(ref, ch);
 			WHILE ch # 0X DO
 				WHILE (ch > 0X) & (ch < 0FCX) DO	(* srcref: {dAdr,dPos} *)
 					INC(ad, ORD(ch)); INC(ref); RefNum(ref, d);
@@ -1616,7 +1616,7 @@ MODULE Kernel;
 	(* adimetrius, 2020.01, 2021.05 *)
 
 	PROCEDURE GetRefFrameDo (VAR fr: FrameDesc);				(* based on DefaultTrapView *)
-		VAR res, end, refs: INTEGER; name: Utf8Name; m: Module;
+		VAR res, end: INTEGER; refs: LONGINT; name: Utf8Name; m: Module;
 	BEGIN
 		<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA1AMAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABOAwAAAAAAAAAARQIAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAMwAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAiAAAAAAAAAADXGwIAOgkCAILyAAAAAAAAAACtAQAADAAAAJMBAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAHUBAAAAAAAAAABNAQAAAILyCAAAAAAAAAAzAAAAAAAAABoAAAAAAPQqvAAAAAAAKgAY8AEAAAAAAJABAAAAAA0AAAAAAAAAANcbAgA6CQIAgvIAAAAAAAAAAKAAAAAMAAAAiwAAAAAAAAAAAAAAg@IDAAAAAAAAAAAAAAAPAAAAbQAAAAAAAAAAADYAAAAAgvIIAAAAAAAAAAAAAAAAAAAAGgAAAAAA9Cq8AAAAAAAqABjwAQAAAAAAkAEAAAAALQAAAP9BRDogaSB0aGluayB0aGlzIGlzIGEgdGF1dG9sb2d5IC0gYWx3YXlzIFRSVUUAAAAAANcbAgA6CQIAgvIAAAAAAAAAABoAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAA8AAAD@KGxvIDw9IGZyLmZwKQICICYgKGZyLmZwIDwgaGkpAEEAAAAAAAAAANcbAgA6CQIAgvIAAAAAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAAJoAAAD@aGkgOj0gYmFzZVN0YWNrOw0JCWluTWFpblN0YWNrIDo9IAIoKHRyYXAudG9wID0gZnIuZnApIE9SIEJlbG93KHRyYXAudG9wLCBmci5mcCkpICYgQmVsb3coZnIuZnAsIGhpKQI7DQkJaW5TaWduYWxTdGFjayA6PSAoKHNpZ1N0YWNrID0gZnIuZnApIE9SIEJlbG93KHNpZ1N0YWNrLCBmci5mcCkpICYgQmVsb3coZnIuZnAsIHNpZ1N0YWNrICsgc2lnU3RhY2tTaXplKTsNCQlmci5lb3MgOj0gfmluTWFpblN0YWNrICYgfmluU2lnbmFsU3RhY2s7DQkJ"/>fr.eos := ~platform.InActivationStack(fr.fp);<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
 		IF fr.eos THEN fr.m := ''; fr.p := ''; fr.pos := undefined; fr.sentry := NIL
@@ -1625,7 +1625,7 @@ MODULE Kernel;
 			WHILE (m # NIL) & ((fr.modpc < m.code) OR (fr.modpc >= m.code + m.csize)) DO m := m.next END;
 			IF m # NIL THEN
 				DEC(fr.modpc, m.code);
-				IF m.refcnt >= 0 THEN refs := SHORT(m.refs);
+				IF m.refcnt >= 0 THEN refs := m.refs;
 					REPEAT GetRefProc(refs, end, name) UNTIL (end = 0) OR (fr.modpc < end);
 					IF fr.modpc < end THEN Utf8ToString(name, fr.p, res); fr.pos := SourcePos(m, SHORT(fr.modpc))
 					END 

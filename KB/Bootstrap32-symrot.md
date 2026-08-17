@@ -84,3 +84,14 @@ for f in glob.glob('*/Sym/*.osf'):
 или замороженный bbcp32-снапшот для bootstrap. Пока: правила — (1) 32-бит
 пересобираем ТОЛЬКО модули компилятора DevCP*, (2) перед сменой интерфейса
 CPT/CPH — полный go32-прогон всей цепочки в ОДНОЙ сессии.
+
+## 2026-08-17 (2): DevCPM тоже не пересобирается 32-бит
+
+`go32.sh DevCPM` → PVFP mismatch (CPT.InStruct, private-part footprints
+imпортированных struct'ов: размеры/смещения совпадают, расходится pvfp-хэш)
+— классический sym-rot, pre-existing. Следствие: подавление -777/-778/-779
+(register not released) снято ТОЛЬКО в 64-битном мире (build-dev64.sh
+компилирует свежий DevCPM 64-бит). dev0-side DevCPM.ocf остался старый —
+кросс-компиляции из dev0 эти диагностики глушат, in-world — рапортуют.
+Проверка после снятия: in-world компиляция TextViews, TextControllers,
+StdWindows, DevCPCamd64, DevCPT, StdCFrames, Kernel — ни одного 777/778/779.

@@ -699,3 +699,18 @@ Std/Debug (ref-курсоры LONGINT, SHORT-куча) и Dev/CPM:475.
     переменную цепочки (см. LinKernel.currentTryContext), не на FS.
 ОТКРЫТО: g_object_unref (minor); TODO64 в Std/Debug (ref-курсоры
 LONGINT, SHORT-куча) и Dev/CPM:475; чистка [LI]-принтов LinInit.
+
+== 2026-08-17 (12): TODO64 — ref-курсоры LONGINT, CPM -777 ===
+41. ЗАКРЫТО GetRefProc/GetRefVar: курсор ref INTEGER→LONGINT (Kernel:
+    RefCh/RefNum/RefName/GetRefProc/GetRefVar/CheckRefVarReadable/
+    SourcePos/GetRefFrameDo; Std/Debug: 3 места, SHORT() убраны).
+    Std/Debug ShowPointer: adr INTEGER→LONGINT (SYSTEM.GET 8 байт,
+    SHORT(SYSTEM.ADR) убран). Адреса кода/кучи и так <4ГБ (MAP_32BIT),
+    но усечение убрано по-честному. probes 20/20, trap 1/1.
+42. ЗАКРЫТО CPM:475: подавление -777/-778/-779 снято — in-world
+    компиляция 7 крупных модулей без единой диагностики. dev0-side
+    DevCPM не пересобирается (sym-rot, PVFP mismatch) — там подавление
+    осталось, безвредно. KB/Bootstrap32-symrot.md.
+ОТКРЫТО: g_object_unref на выходе (проверяется — в свежих логах чисто);
+чистка [LI]-принтов LinInit; Std/Debug остатки (WriteHex и пр. уже
+LONGINT-ready).

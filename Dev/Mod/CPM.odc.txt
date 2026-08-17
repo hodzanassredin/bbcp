@@ -472,12 +472,7 @@ MODULE DevCPM;
 			END;
 			IF trap IN options THEN HALT(100) END;
 		ELSIF (n <= -700) & (errors < maxErrors) THEN
-			(* TODO64: -777/-778/-779 (register not released) — диагностика учёта регистров
-			   бэкенда с ленивой позицией; код уже сгенерирован корректно, сброс безвреден.
-			   Не считать ошибкой компиляции. Снять после починки учёта в CPCamd64. *)
-			IF (n # -777) & (n # -778) & (n # -779) THEN
-				errNo[errors] := -n; errPos[errors] := pos; INC(errors)
-			END
+			errNo[errors] := -n; errPos[errors] := pos; INC(errors)
 		END
 	END Mark;
 	

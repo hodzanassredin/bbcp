@@ -357,7 +357,7 @@ MODULE StdDebug;
 	END ShowArray;
 	
 	PROCEDURE ShowProcVar (a: LONGINT);
-		VAR vli, n, ref: INTEGER; m: Kernel.Module; modName, name: Kernel.Name; res: INTEGER; nn: Kernel.Utf8Name;
+		VAR vli, n: INTEGER; ref: LONGINT; m: Kernel.Module; modName, name: Kernel.Name; res: INTEGER; nn: Kernel.Utf8Name;
 	BEGIN
 		SYSTEM.GET(a, vli);
 		Kernel.SearchProcVar(vli, m, vli);
@@ -367,7 +367,7 @@ MODULE StdDebug;
 			END
 		ELSE
 			IF m.refcnt >= 0 THEN
-				Kernel.GetModName(m, modName); out.WriteString(modName); ref := SHORT(m.refs);	(* TODO64: ref-курсоры LONGINT *)
+				Kernel.GetModName(m, modName); out.WriteString(modName); ref := m.refs;
 				REPEAT Kernel.GetRefProc(ref, n, nn) UNTIL (n = 0) OR (vli < n);
 				IF vli < n THEN out.WriteChar("."); Utf.Utf8ToString(nn, name, res); out.WriteString(name) END
 			ELSE
@@ -378,7 +378,7 @@ MODULE StdDebug;
 	END ShowProcVar;
 
 	PROCEDURE ShowPointer (a: LONGINT; f: SHORTCHAR; desc: Kernel.Type; back: RefView; VAR sel: Kernel.Name);
-		VAR adr, x: INTEGER; ptr: ArrayPtr; c: Cluster; btyp: Kernel.Type;
+		VAR adr, x: LONGINT; ptr: ArrayPtr; c: Cluster; btyp: Kernel.Type;
 	BEGIN
 		SYSTEM.GET(a, adr);
 		IF f = 13X THEN btyp := desc.base[0] ELSE btyp := NIL END;
@@ -402,7 +402,7 @@ MODULE StdDebug;
 					IF c # NIL THEN
 						ptr := SYSTEM.VAL(ArrayPtr, adr);
 						IF (f = 13X) & (FormOf(btyp) = 12X) THEN	(* array *)
-							adr := SHORT(SYSTEM.ADR(ptr.len[btyp.id DIV 16 MOD 16]))	(* TODO64: SHORT — куча <4ГБ (MAP_32BIT) *)
+							adr := SYSTEM.ADR(ptr.len[btyp.id DIV 16 MOD 16])
 						END
 					ELSE OutString("#Dev:IllegalPointer")
 					END
@@ -503,7 +503,7 @@ MODULE StdDebug;
 	
 
 	PROCEDURE ShowStack;
-		VAR ref, end, i, j, x, c: INTEGER; a, b, ta: LONGINT; m, f: SHORTCHAR; mod: Kernel.Module; modName, name, sel: Kernel.Name;
+		VAR end, i, j, x, c: INTEGER; ref, a, b, ta: LONGINT; m, f: SHORTCHAR; mod: Kernel.Module; modName, name, sel: Kernel.Name;
 			d: Kernel.Type; res: INTEGER; nn: Kernel.Utf8Name;
 	BEGIN
 		a := Kernel.pc; b := Kernel.fp; c := 100;
@@ -513,7 +513,7 @@ MODULE StdDebug;
 			IF mod # NIL THEN
 				DEC(a, mod.code);	(* 64-бит *)
 				IF mod.refcnt >= 0 THEN
-				Kernel.GetModName(mod, modName); out.WriteChar(" "); out.WriteString(modName); ref := SHORT(mod.refs);
+				Kernel.GetModName(mod, modName); out.WriteChar(" "); out.WriteString(modName); ref := mod.refs;
 					REPEAT Kernel.GetRefProc(ref, end, nn) UNTIL (end = 0) OR (a < end);
 					IF a < end THEN
 						Utf.Utf8ToString(nn, name, res); out.WriteChar("."); out.WriteString(name);
@@ -563,14 +563,14 @@ MODULE StdDebug;
 	END Do;
 
 	PROCEDURE GetTrapMsg(OUT msg: ARRAY OF CHAR);
-		VAR ref, end, res: INTEGER; a: LONGINT; mod: Kernel.Module; nn: Kernel.Utf8Name;
+		VAR end, res: INTEGER; ref, a: LONGINT; mod: Kernel.Module; nn: Kernel.Utf8Name;
 			name, head, tail: Kernel.Name; errstr: ARRAY 12 OF CHAR;
 			key: ARRAY Kernel.nameLen * 3 + LEN(errstr) OF CHAR;
 	BEGIN
 		a := Kernel.pc; mod := Kernel.modList; msg := "";
 		WHILE (mod # NIL) & ((a < mod.code) OR (a >= mod.code + mod.csize)) DO mod := mod.next END;
 		IF mod # NIL THEN
-			DEC(a, mod.code); ref := SHORT(mod.refs);	(* 64-бит *)
+			DEC(a, mod.code); ref := mod.refs;	(* 64-бит *)
 			REPEAT Kernel.GetRefProc(ref, end, nn) UNTIL (end = 0) OR (a < end);
 			Utf.Utf8ToString(nn, name, res);
 			IF a < end THEN

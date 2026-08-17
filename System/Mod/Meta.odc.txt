@@ -603,10 +603,10 @@ MODULE Meta;
 	PROCEDURE AdrOf (VAR x: Value): LONGINT;
 		VAR a: LONGINT;
 	BEGIN
-		a := SYSTEM.ADR(x); RETURN a	(* напрямую RETURN ADR — регистровая утечка 777 в бэкенде *)
+		a := SYSTEM.ADR(x); RETURN a	(* РЅР°РїСЂСЏРјСѓСЋ RETURN ADR вЂ” СЂРµРіРёСЃС‚СЂРѕРІР°СЏ СѓС‚РµС‡РєР° 777 РІ Р±СЌРєРµРЅРґРµ *)
 	END AdrOf;
 
-PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-записи сломан в бэкенде (777) *)
+PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-РїР°СЂР°РјРµС‚СЂР°-Р·Р°РїРёСЃРё СЃР»РѕРјР°РЅ РІ Р±СЌРєРµРЅРґРµ (777) *)
 		VAR desc: Kernel.Type;
 	BEGIN
 		desc := DescOf(x);
@@ -651,7 +651,7 @@ PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-запис
 	END EqualSignature;
 	
 	PROCEDURE Copy (IN a, b: Item; OUT ok: BOOLEAN);	(* b := a *)
-		VAR n: INTEGER; at, bt: Item;
+		VAR n: LONGINT; at, bt: Item;
 	BEGIN
 		ok := FALSE;
 		IF a.obj = procObj THEN
@@ -666,7 +666,7 @@ PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-запис
 					bt.desc := b.desc.base[0]; bt.typ := TypOf(bt.desc); bt.ptr := dummy; bt.ext := NIL;
 					SYSTEM.GET(SYSTEM.VAL(ANYPTR, a.adr), n);
 					IF (at.typ = recTyp) & (n # 0) THEN
-						SYSTEM.GET(SYSTEM.VAL(INTEGER, n) - 4, at.desc);	(* dynamic type *)
+						SYSTEM.GET(n - 8, at.desc);	(* dynamic type; 64-bit tag slot *)
 						at.desc :=  at.desc.base[bt.desc.id DIV 16 MOD 16]	(* projection to b *)
 					END
 				ELSE at := a; bt := b
@@ -705,7 +705,7 @@ PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-запис
 	PROCEDURE PutParam (IN par: Item; sig: Kernel.Signature; p: INTEGER;
 										VAR data: ARRAY OF LONGINT; VAR n: INTEGER;
 										OUT ok: BOOLEAN);	(* check & assign a parameter *)
-		VAR mode, fTyp, aTyp, i, top: INTEGER; padr: LONGINT; fDesc, aDesc: Kernel.Type;
+		VAR mode, fTyp, aTyp, i, top: INTEGER; padr, pl: LONGINT; fDesc, aDesc: Kernel.Type;
 			l: LONGINT; s: SHORTINT; b: BYTE;
 	BEGIN
 		ok := FALSE;
@@ -725,7 +725,7 @@ PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-запис
 				OR (mode = value) & (aDesc # fDesc)
 				OR (fTyp = recTyp) & (aDesc.base[fDesc.id DIV 16 MOD 16] # fDesc) THEN RETURN END;
 			data[n] := padr; INC(n);
-			data[n] := SYSTEM.VAL(INTEGER, aDesc); INC(n)
+			data[n] := SYSTEM.VAL(LONGINT, aDesc); INC(n)
 		ELSIF fTyp = arrTyp THEN
 			data[n] := padr; INC(n);
 			IF fDesc.size # 0 THEN data[n] := SizeOf(par); INC(n)
@@ -746,7 +746,7 @@ PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-запис
 				fDesc := fDesc.base[0];	(* formal base type *)
 				IF (mode = value) & (TypOf(fDesc) = recTyp) THEN
 					IF (aTyp # ptrTyp) & (aTyp # anyPtrTyp) THEN RETURN END;
-					SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), i); SYSTEM.GET(i - 4, aDesc);	(* dynamic record type *)
+					SYSTEM.GET(SYSTEM.VAL(ANYPTR, padr), pl); SYSTEM.GET(pl - 8, aDesc);	(* dynamic record type; 64-bit tag slot *)
 					aDesc := aDesc.base[fDesc.id DIV 16 MOD 16]	(* projection *)
 				ELSE
 					IF aTyp # ptrTyp THEN RETURN END;
@@ -886,7 +886,7 @@ PROCEDURE ValToItem (VAR x: Value; VAR i: Item);  (* VAR: ADR IN-параметра-запис
 		END
 	END GetVal;
 
-	PROCEDURE (IN var: Item) PutVal* (VAR x: Value; OUT ok: BOOLEAN), NEW;  (* VAR: через ValToItem нужен адрес *)
+	PROCEDURE (IN var: Item) PutVal* (VAR x: Value; OUT ok: BOOLEAN), NEW;  (* VAR: С‡РµСЂРµР· ValToItem РЅСѓР¶РµРЅ Р°РґСЂРµСЃ *)
 		VAR xi: Item;
 	BEGIN
 		ASSERT(var.ext = NIL, 31);

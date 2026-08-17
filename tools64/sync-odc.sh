@@ -1,6 +1,7 @@
 #!/bin/sh
 # Import all *.odc.txt that are newer than their .odc (or missing .odc)
-# back into .odc via the bbcb2 OdcText round-trip host.
+# back into .odc via the bbcb2 OdcTextU round-trip host (UTF-8 variant of OdcText;
+# all *.odc.txt are UTF-8, see KB/OdcTextUtf8.md).
 BBCP="$HOME/sources/bbcp"
 BB2="$HOME/sources/bbcb2-2.0~a1.build332"
 cmds=""
@@ -9,7 +10,7 @@ for txt in "$BBCP"/Dev/Mod/*.odc.txt "$BBCP"/Mod64/*.odc.txt "$BBCP"/System/Mod/
 	odc="${txt%.txt}"
 	if [ ! -e "$odc" ] || [ "$txt" -nt "$odc" ]; then
 		cmds="$cmds
-OdcText.Import \"$txt\" \"$odc\""
+OdcTextU.Import \"$txt\" \"$odc\""
 		echo "sync: $txt"
 	fi
 done

@@ -357,7 +357,7 @@ MODULE Controls;
 		IF ~c.readOnly & ~ c.disabled THEN
 			CallNotifier(c, op, from, to);
 			IF op >= Dialog.changed THEN
-				msg.id0 := SHORT(c.item.adr); msg.id1 := msg.id0 + c.item.Size(); msg.frame := f;	(* SHORT: контролы в арене <4ГБ *)
+				msg.id0 := SHORT(c.item.adr); msg.id1 := msg.id0 + c.item.Size(); msg.frame := f;	(* SHORT: РєРѕРЅС‚СЂРѕР»С‹ РІ Р°СЂРµРЅРµ <4Р“Р‘ *)
 				msg.op := op; msg.from := from; msg.to := to;
 				msg.opts := {update, guardCheck};
 				Views.Omnicast(msg)

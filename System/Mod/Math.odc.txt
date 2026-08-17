@@ -371,7 +371,7 @@ MODULE Math;
 	PROCEDURE SignBit* (x: REAL): BOOLEAN;	(*  IEEE 754-2008, section 5.7.2  *)
 		VAR s: SET; a: LONGINT;
 	BEGIN
-		a := SYSTEM.ADR(x); a := a + 4;	(* ADR+смещение только через LONGINT-времянку: adr-узел в арифметике ломает бэкенд *)
+		a := SYSTEM.ADR(x); a := a + 4;	(* ADR+СЃРјРµС‰РµРЅРёРµ С‚РѕР»СЊРєРѕ С‡РµСЂРµР· LONGINT-РІСЂРµРјСЏРЅРєСѓ: adr-СѓР·РµР» РІ Р°СЂРёС„РјРµС‚РёРєРµ Р»РѕРјР°РµС‚ Р±СЌРєРµРЅРґ *)
 		SYSTEM.GET(SYSTEM.VAL(ANYPTR, a), s);
 		RETURN 31 IN s
 	END SignBit;

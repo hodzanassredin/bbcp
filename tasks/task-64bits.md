@@ -4,6 +4,34 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18)
+
+### Точечные фиксы из аудита IntPtr (KB/IntPtrAudit-64.md)
+- `System/Mod/Meta`: Copy — `n: INTEGER` -> LONGINT (принимал кучевой указатель,
+  усечение!), тег динамического типа читается по `-8` (было -4); PutParam —
+  новый локал `pl: LONGINT`, тег по `pl - 8`; recTyp-ветка пишет дескриптор
+  типа в data-слот как LONGINT (был VAL(INTEGER) — работало т.к. модули <2ГБ).
+- `Lin/Mod/Files`:687 — THISARRAY(VAL(LONGINT, target)) (был INTEGER; указатель
+  из libc canonicalize_file_name может быть высоким).
+- `Std/Mod/Debug`:~490 проверен — `ta := a + 4` там КОРРЕКТЕН (чтение старшей
+  половины 8-байтного LONGINT для hex-вывода), не баг.
+- Скомпилированы Meta, LinFiles (go64.sh), probes.sh 22/22.
+
+### Унификация .odc.txt в UTF-8 (KB/OdcTextUtf8.md)
+- Причина cp1251: OdcText ходил через StdTextConv ExportText/ImportText
+  (8-бит ANSI). Создан OdcTextU в bbcb2 (Odc/Mod/TextU.odc) на
+  ImportUtf8/ExportUtf8; sync-odc.sh и build-dev64.sh переключены.
+- 6 файлов cp1251 -> UTF-8; в System/Mod/Dialog сырой байт 0xC0 был в КОДЕ
+  (char-литерал "À") -> заменён на 0C0X. Все 40 не-ASCII файлов
+  переимпортированы: в .odc теперь настоящая кириллица (был mojibake).
+- Round-trip проверен (Meta): diff только в косметических w/h view-тегов.
+
+### Дальше
+- TODO64-маркеры: инвентаризация и разбор (Kernel:776,828 diag-логи;
+  Compiler64:663; StdRasters Q-процедуры — проверить что закрыто).
+- Аудит расширений (Aos, Crypto, _Http, Comm, Json, Mcp...) — отдельный этап
+  после финиша ядра. Hr — только сверка, не чинить.
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-17)
 
 ### Этап 3: мёртвый код Int64-пар/FPU удалён (native Int64 — единственный путь)

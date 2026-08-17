@@ -124,7 +124,7 @@ MODULE LinGtk2Gtk ["libgtk-x11-2.0.so.0"];
 		GtkSelectionData* = RECORD [untagged]
 			selection*, target*, type*: Gdk.GdkAtom;
 			format*: INTEGER;
-			sdpad0*: INTEGER;	(* data по +32 (C) *)
+			sdpad0*: INTEGER;	(* data РїРѕ +32 (C) *)
 			data*: PString;
 			length*: INTEGER;
 			display: Gdk.GdkDisplay;
@@ -203,7 +203,7 @@ MODULE LinGtk2Gtk ["libgtk-x11-2.0.so.0"];
 			private_flags*: SHORTINT;	(* C: guint16 @32 *)
 			state*: BYTE;     (* see GTK_STATE_TYPE enum above; C guint8 @34 *)
 			saved_state*: BYTE;	(* C guint8 @35 *)
-			wpad0*: INTEGER;	(* name по +40 (C): 8-выравнивание указателя *)
+			wpad0*: INTEGER;	(* name РїРѕ +40 (C): 8-РІС‹СЂР°РІРЅРёРІР°РЅРёРµ СѓРєР°Р·Р°С‚РµР»СЏ *)
 			name*: PString;  
 			style*: GtkStyle;    
 			requisition*: GtkRequisition;    
@@ -511,7 +511,7 @@ MODULE LinGtk2Gtk ["libgtk-x11-2.0.so.0"];
 	PROCEDURE [ccall] gtk_get_current_event* (): Gdk.GdkEvent;
 	PROCEDURE [ccall] gtk_get_event_widget* (event: Gdk.GdkEvent): GtkWidget;
 	
-(* GtkEditable — Interface for text-editing widgets.	
+(* GtkEditable вЂ” Interface for text-editing widgets.	
 		GtkEditable is implemented by GtkEntry, GtkSpinButton, GtkOldEditable and GtkText.*)
 	
 	PROCEDURE [ccall] gtk_editable_get_chars* (editable: GtkWidget; start, end: INTEGER): PString;
@@ -896,7 +896,7 @@ PROCEDURE [ccall] gtk_fixed_set_has_window*(fixed:GtkFixed; f: gboolean);
 	PROCEDURE [ccall] gtk_file_selection_hide_fileop_buttons*(filesel: GtkFileSelection);
 	*)
 
-(* GtkFileChooser — File chooser interface used by GtkFileChooserWidget and GtkFileChooserDialog. *)		
+(* GtkFileChooser вЂ” File chooser interface used by GtkFileChooserWidget and GtkFileChooserDialog. *)		
 	PROCEDURE [ccall] gtk_file_chooser_get_filename* (fc: GtkDialog): PString;
 	PROCEDURE [ccall] gtk_file_chooser_set_filename* (fc: GtkDialog; IN filename: String);
 	PROCEDURE [ccall] gtk_file_chooser_set_current_name* (fc: GtkDialog; IN name: String);

@@ -402,7 +402,7 @@ CONST
   GDK_RELEASE_MASK * = 1073741824;<odc-view type="StdFolds.Fold" w="195647" h="169150" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/> *)
 
 	
-TYPE	GdkNativeWindow = INTEGER;	(* C: guint32 в gtk2 *)
+TYPE	GdkNativeWindow = INTEGER;	(* C: guint32 РІ gtk2 *)
 TYPE	GdkAtom* = LONGINT; 
 CONST  GDK_NONE=0;  
 
@@ -616,9 +616,9 @@ TYPE	GdkDisplay* = POINTER TO LIMITED RECORD (GObject.GObject)	END;
 TYPE	GdkEvent*  = POINTER TO GdkEventDesc;
 			GdkEventDesc* = ABSTRACT RECORD [untagged]
 				type*      : GdkEventType;
-				evpad0*: INTEGER;	(* window по +8 (C) *)
+				evpad0*: INTEGER;	(* window РїРѕ +8 (C) *)
 				window*    : GdkWindow;
-				send_event*: BYTE;	(* @16; размер базы = 20 (C кладёт поля на +20) *)
+				send_event*: BYTE;	(* @16; СЂР°Р·РјРµСЂ Р±Р°Р·С‹ = 20 (C РєР»Р°РґС‘С‚ РїРѕР»СЏ РЅР° +20) *)
 			END;
 
 TYPE	GdkEventKey*=POINTER  TO GdkEventKeyDesc;
@@ -627,7 +627,7 @@ TYPE	GdkEventKey*=POINTER  TO GdkEventKeyDesc;
 				state*: SET;
 				keyval*: INTEGER;
 				length*: INTEGER;
-				kpad0*: INTEGER;	(* string по +40 (C) *)
+				kpad0*: INTEGER;	(* string РїРѕ +40 (C) *)
 				string*: PString;
 				hardware_keycode*: SHORTINT;
 				group*: BYTE;
@@ -641,7 +641,7 @@ TYPE	GdkEventButton*= POINTER  TO GdkEventButtonDesc;
 			axes*: POINTER[untagged] TO ARRAY OF REAL;
 			state*: SET;
 			button*: INTEGER;
-			device*: GdkDevice;	(* C: GdkDevice* @56 (было deviceid: INTEGER) *)
+			device*: GdkDevice;	(* C: GdkDevice* @56 (Р±С‹Р»Рѕ deviceid: INTEGER) *)
 			x_root*, y_root*: REAL
   END;
 
@@ -651,7 +651,7 @@ TYPE	GdkEventConfigure* = POINTER  TO  RECORD    (GdkEvent)
 
 TYPE	GdkEventExpose*  = POINTER TO RECORD (GdkEvent)
     area    * : GdkRectangle;
-    epad0*: INTEGER;	(* region по +40 (C) *)
+    epad0*: INTEGER;	(* region РїРѕ +40 (C) *)
     region  * : GdkRegion;
     count   * : INTEGER;            (*  If non-zero, how many more events follow.  *)
   END;
@@ -661,7 +661,7 @@ TYPE	GdkEventFocus* = POINTER TO RECORD
     fpad0*  : INTEGER;
     window* : GdkWindow;
     send_event*: BYTE;
-    in      * : SHORTINT;	(* @18, как в C *)
+    in      * : SHORTINT;	(* @18, РєР°Рє РІ C *)
   END;
 
 TYPE	GdkEventMotion* = POINTER  TO RECORD  (GdkEvent)
@@ -695,7 +695,7 @@ TYPE
 			END;
 
 TYPE	GdkEventProperty = RECORD    (GdkEvent)
-    ppad0*: INTEGER;	(* atom по +24 (C) *)
+    ppad0*: INTEGER;	(* atom РїРѕ +24 (C) *)
     atom    * : GdkAtom;
     time    * :  INTEGER;
     state * : SET;
@@ -707,10 +707,10 @@ TYPE	GdkEventProximity = RECORD     (GdkEvent)
   END;
 
 TYPE	GdkEventClient = RECORD (GdkEvent)
-    cpad0*: INTEGER;	(* message_type по +24 (C) *)
+    cpad0*: INTEGER;	(* message_type РїРѕ +24 (C) *)
     message_type: GdkAtom;
     data_format : INTEGER;	(* C: gint @32 *)
-    cpad1*: INTEGER;	(* data по +40 (C) *)
+    cpad1*: INTEGER;	(* data РїРѕ +40 (C) *)
     data * : RECORD [union]
       b: ARRAY [untagged] 20 OF BYTE;
       s: ARRAY [untagged] 10 OF SHORTINT;
@@ -719,8 +719,8 @@ TYPE	GdkEventClient = RECORD (GdkEvent)
   END;
 
 TYPE	GdkEventCrossing = RECORD    (GdkEvent)
-    xpad0*: INTEGER;	(* subwindow по +24 (C) *)
-    subwindow : GdkWindow;	(* C: GdkWindow* (было GdkAtom) *)
+    xpad0*: INTEGER;	(* subwindow РїРѕ +24 (C) *)
+    subwindow : GdkWindow;	(* C: GdkWindow* (Р±С‹Р»Рѕ GdkAtom) *)
     time    * :  INTEGER;
     x       * : REAL;
     y       * : REAL;
@@ -734,7 +734,7 @@ TYPE	GdkEventCrossing = RECORD    (GdkEvent)
 
 
 TYPE	GdkEventSelection = RECORD    (GdkEvent)
-    spad0*: INTEGER;	(* selection по +24 (C) *)
+    spad0*: INTEGER;	(* selection РїРѕ +24 (C) *)
     selection : GdkAtom;
     target  * : GdkAtom;
     property* : GdkAtom;
@@ -743,7 +743,7 @@ TYPE	GdkEventSelection = RECORD    (GdkEvent)
   END;
 
 TYPE	GdkEventDND = RECORD     (GdkEvent)
-    dpad0*: INTEGER;	(* context по +24 (C) *)
+    dpad0*: INTEGER;	(* context РїРѕ +24 (C) *)
     context * : GdkDragContext;
     time    * :  INTEGER;
     x_root  * : SHORTINT;
@@ -811,7 +811,7 @@ TYPE
 	ByteArrPtr* = POINTER TO ARRAY [untagged] OF BYTE; 	(* unsafe *)
 	Pattern* = ARRAY [untagged] OF SHORTCHAR;
 	
-(* General — Library initialization and miscellaneous functions *)
+(* General вЂ” Library initialization and miscellaneous functions *)
 
 PROCEDURE [ccall] gdk_init* (VAR [nil] argc: INTEGER; VAR [nil] argv: APString);
 PROCEDURE [ccall] gdk_init_check(VAR argc: INTEGER; VAR argv: APString): BOOLEAN;
@@ -1034,7 +1034,7 @@ PROCEDURE [ccall] gdk_pixmap_lookup(anid: GdkNativeWindow): GdkDrawable;
 PROCEDURE [ccall] gdk_pixmap_foreign_new_for_display(display: GdkDisplay; anid: GdkNativeWindow): GdkDrawable;
 PROCEDURE [ccall] gdk_pixmap_lookup_for_display(display: GdkDisplay; anid: GdkNativeWindow): GdkDrawable;
 
-(*  GdkRGB — Renders RGB, grayscale, or indexed image data to a GdkDrawable  *)
+(*  GdkRGB вЂ” Renders RGB, grayscale, or indexed image data to a GdkDrawable  *)
 	PROCEDURE [ccall] gdk_rgb_init();
 	PROCEDURE [ccall] gdk_rgb_xpixel_from_rgb(rgb:  INTEGER): INTEGER;
 	PROCEDURE [ccall] gdk_rgb_gc_set_foreground(gc: GdkGC; rgb: INTEGER);
@@ -1129,7 +1129,7 @@ PROCEDURE [ccall] gdk_pixmap_lookup_for_display(display: GdkDisplay; anid: GdkNa
 	PROCEDURE [ccall] gdk_list_visuals(): GdkVisual;
 	PROCEDURE [ccall] gdk_visual_get_screen(visual: GdkVisual):GdkScreen ;
 
-(* Fonts — Loading and manipulating fonts *)
+(* Fonts вЂ” Loading and manipulating fonts *)
 	PROCEDURE [ccall] gdk_font_load*(IN font_name: String): GdkFont;
 	PROCEDURE [ccall] gdk_fontset_load*(IN fontset_name: String): GdkFont;
 	PROCEDURE [ccall] gdk_font_load_for_display(display: GdkDisplay; IN font_name: String): GdkFont;

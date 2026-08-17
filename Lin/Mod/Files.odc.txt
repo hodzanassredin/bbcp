@@ -684,7 +684,7 @@ MODULE LinFiles;
 			ELSE len := LEN(target$);
 				IF len > LEN(ShortName) - 1 THEN res := resolvedPathTooLong
 				ELSE res := ok;
-					Utf.Utf8ToString(SYSTEM.THISARRAY(SYSTEM.VAL(INTEGER, target), len + 1), fname, res1);
+					Utf.Utf8ToString(SYSTEM.THISARRAY(SYSTEM.VAL(LONGINT, target), len + 1), fname, res1);
 					GetThisPath(fname, path)
 				END;
 				Libc.free(SYSTEM.VAL(Libc.PtrVoid, target))

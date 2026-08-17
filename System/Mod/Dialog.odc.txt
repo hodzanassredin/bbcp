@@ -558,14 +558,14 @@ MODULE Dialog;
 		ELSE
 			i := 0; ch := in[1];
 			ident := ("A" <= ch) & (ch <= "Z") OR ("a" <= ch) & (ch <= "z")
-				OR ("À" <= ch) & (ch <= 0FFX) & (ch # 0D7X) & (ch # 0F7X)
+				OR (0C0X <= ch) & (ch <= 0FFX) & (ch # 0D7X) & (ch # 0F7X)
 				OR (ch = "_") OR Strings.IsAlpha(ch);
 			WHILE (ch # ":") & (ch # 0X) & ident DO
 				mod[i] := ch;
 				INC(i); ch := in[i + 1];
 				ident := ("0" <= ch) & (ch <= "9") OR
 					("A" <= ch) & (ch <= "Z") OR ("a" <= ch) & (ch <= "z")
-					OR ("À" <= ch) & (ch <= 0FFX) & (ch # 0D7X) & (ch # 0F7X)
+					OR (0C0X <= ch) & (ch <= 0FFX) & (ch # 0D7X) & (ch # 0F7X)
 					OR (ch = "_") OR Strings.IsAlpha(ch)
 			END;
 			mod[i] := 0X;

@@ -99,7 +99,7 @@ MODULE DevCPM;
 		maxErrors = 64;
 		
 	TYPE
-		WordPair = RECORD lo, hi: INTEGER END;	(* VAL-оверлей для REAL, портируемый 32/64 *)
+		WordPair = RECORD lo, hi: INTEGER END;	(* VAL-РѕРІРµСЂР»РµР№ РґР»СЏ REAL, РїРѕСЂС‚РёСЂСѓРµРјС‹Р№ 32/64 *)
 	
 	VAR
 		LEHost*: BOOLEAN;	(* little or big endian host *)
@@ -168,7 +168,7 @@ MODULE DevCPM;
 		RETURN lineNum
 	END LineOf;
 
-	PROCEDURE LoWord (r: REAL): INTEGER;	(* портируемо: VAL-оверлей вместо ADR (32/64) *)
+	PROCEDURE LoWord (r: REAL): INTEGER;	(* РїРѕСЂС‚РёСЂСѓРµРјРѕ: VAL-РѕРІРµСЂР»РµР№ РІРјРµСЃС‚Рѕ ADR (32/64) *)
 		VAR v: WordPair;
 	BEGIN
 		v := SYSTEM.VAL(WordPair, r);

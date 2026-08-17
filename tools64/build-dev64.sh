@@ -26,11 +26,11 @@ for f in "$BB"/Dev/Mod/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.
   mkdir -p "$(dirname "$dest")"
   cp "$f" "$dest"
 done
-# convert .odc.txt to .odc via OdcText.Import
+# convert .odc.txt to .odc via OdcTextU.Import (UTF-8; все .odc.txt в UTF-8)
 for f in "$USE"/Dev/Mod/*.odc.txt "$USE"/System/Mod/*.odc.txt "$USE"/Std/Mod/*.odc.txt "$USE"/Text/Mod/*.odc.txt "$USE"/Form/Mod/*.odc.txt "$USE"/Cons/Mod/*.odc.txt "$USE"/Obx/Mod/*.odc.txt; do
   [ -e "$f" ] || continue
   odc="${f%.txt}"
-  echo "OdcText.Import \"$f\" \"$odc\"" >> /tmp/odc_cmds.txt
+  echo "OdcTextU.Import \"$f\" \"$odc\"" >> /tmp/odc_cmds.txt
 done
 if [ -f /tmp/odc_cmds.txt ]; then
   # cwd=BB2 обязателен (BB_USE_DIR=cwd): иначе хост грузит чужие Sym и молча

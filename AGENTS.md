@@ -5,9 +5,11 @@ Oberon document); редактируемые копии — `.odc.txt` (OdcText 
 
 ## Главное правило
 
-**Источник истины — `*.odc.txt`.** Правим только их; `.odc` генерируется
-`tools64/sync-odc.sh` (через OdcText в bbcb2). Перед `git checkout` .odc —
-учитывать, что .odc.txt мог быть отдельно изменён.
+**Источник истины — `*.odc.txt`, все в UTF-8** (см. KB/OdcTextUtf8.md; cp1251
+запрещён, не-ASCII литералы в коде — hex-константами вида `0C0X`). Правим только
+их; `.odc` генерируется `tools64/sync-odc.sh` (через OdcTextU в bbcb2 — UTF-8
+вариант OdcText). Перед `git checkout` .odc — учитывать, что .odc.txt мог быть
+отдельно изменён.
 
 ## Структура
 
@@ -25,7 +27,7 @@ Oberon document); редактируемые копии — `.odc.txt` (OdcText 
 - `~/sources/bbcp` — это дерево (32-бит dev0 + исходники).
 - `~/sources/bbcp64use` — изолированные 64-битные Sym/Code (+ симлинки на Mod).
   Поддерева Dev там быть НЕ ДОЛЖНО.
-- `~/sources/bbcb2-2.0~a1.build332` — хост для OdcText (run-BlackBoxInterp) и
+- `~/sources/bbcb2-2.0~a1.build332` — хост для OdcTextU (run-BlackBoxInterp) и
   эталон Hr (правильный amd64 OCF).
 
 ## Команды

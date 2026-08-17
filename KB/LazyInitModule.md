@@ -47,11 +47,12 @@ gtk_init выполнялся рано, и всё остальное работ�
 
 - ноль `CRITICAL` до `init LinGui...`;
 - `done LinRegistry` → тела всех модулей по порядку → `body loop finished`
-  → `init LinLoader (main loader, gui mode)...` → `[LI] ... res=0` →
-  `before Loop.Start`; окно с меню.
+  → `init LinLoader (main loader, gui mode)...` → окно с меню.
+  (`[LI]`-принты убраны при чистке 2026-08-17.)
 
-## Остатки-диагностики (убрать на общей чистке)
+## Остатки-диагностики
 
-- `[LI] ...` принты в Lin/Mod/Init.odc.txt (закоммичены, безвредны, stderr).
+- `[LI] ...` принты из Lin/Mod/Init.odc.txt убраны (2026-08-17, вместе с
+  процедурами P/PR и импортами Console/Strings).
 - LinLoader: ветка `ELSE Kernel.FatalError(1, err)` с неинициализированным
   `err` — pre-existing, не трогали.

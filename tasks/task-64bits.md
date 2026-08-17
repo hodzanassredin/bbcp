@@ -668,8 +668,7 @@ GrowBuf округление (Kernel:610).
     main. KB/LazyInitModule.md. Загрузка чистая: 0 CRITICAL,
     body loop finished, окно с меню (подтверждено пользователем).
 37. [LL]-диагностика из LinLoader убрана (включая закоммиченный
-    ранее "[LL] LoadMod res=" принт). [LI]-принты в LinInit оставлены
-    до общей чистки.
+    ранее "[LL] LoadMod res=" принт).
 ОТКРЫТО: GUI-проверка About/Help→Contents/Tut-2 после фикса;
 коммит+пуш; INTO->JO (ovflchk); CPCamd64:2586 TLS;
 g_object_unref (minor).
@@ -711,6 +710,9 @@ LONGINT, SHORT-куча) и Dev/CPM:475; чистка [LI]-принтов LinIni
     компиляция 7 крупных модулей без единой диагностики. dev0-side
     DevCPM не пересобирается (sym-rot, PVFP mismatch) — там подавление
     осталось, безвредно. KB/Bootstrap32-symrot.md.
-ОТКРЫТО: g_object_unref на выходе (проверяется — в свежих логах чисто);
-чистка [LI]-принтов LinInit; Std/Debug остатки (WriteHex и пр. уже
-LONGINT-ready).
+== 2026-08-17 (13): чистка [LI]-принтов LinInit ===
+43. Убраны debug-процедуры P/PR, их вызовы и импорты Console/Strings из
+    Lin/Mod/Init.odc.txt. GUI после чистки проверен: окно с меню, Log.
+ОТКРЫТО: g_object_unref на выходе (в свежих логах чисто, ждём
+воспроизведения под G_DEBUG=fatal-criticals); Std/Debug остатки
+(WriteHex и пр. уже LONGINT-ready).

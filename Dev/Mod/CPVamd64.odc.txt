@@ -909,7 +909,7 @@ MODULE DevCPVamd64;
 	END InitializeIPVars;
 	
 	PROCEDURE ReleaseIPVars (proc: DevCPT.Object);
-		VAR x, ax, dx, si, di: DevCPLamd64.Item; obj: DevCPT.Object;
+		VAR x, ax, si: DevCPLamd64.Item; obj: DevCPT.Object;
 	BEGIN
 		obj := proc.link;
 		WHILE (obj # NIL) & ((obj.mode # Var) OR ~obj.used OR ~DevCPCamd64.ContainsIPtrs(obj.typ)) DO
@@ -921,9 +921,8 @@ MODULE DevCPVamd64;
 			IF obj = NIL THEN RETURN END
 		END;
 		DevCPLamd64.MakeReg(ax, AX, Int32); DevCPLamd64.MakeReg(si, SI, Int32);
-		DevCPLamd64.MakeReg(dx, DX, Int32); DevCPLamd64.MakeReg(di, DI, Int32);
+		IF proc.typ.form = Int64 THEN ax.form := Int64; si.form := Int64 END;	(* результат RAX целиком *)
 		IF ~(proc.typ.form IN {Real32, Real64, NoTyp}) THEN DevCPLamd64.GenMove(ax, si) END;
-		IF proc.typ.form = Int64 THEN DevCPLamd64.GenMove(dx, di) END;
 		x.mode := Ind; x.reg := BP; x.scale := 0; x.form := Pointer;
 		obj := proc.link;
 		WHILE obj # NIL DO
@@ -941,8 +940,7 @@ MODULE DevCPVamd64;
 			END;
 			obj := obj.link
 		END;
-		IF ~(proc.typ.form IN {Real32, Real64, NoTyp}) THEN DevCPLamd64.GenMove(si, ax) END;
-		IF proc.typ.form = Int64 THEN DevCPLamd64.GenMove(di, dx) END
+		IF ~(proc.typ.form IN {Real32, Real64, NoTyp}) THEN DevCPLamd64.GenMove(si, ax) END
 	END ReleaseIPVars;
 	
 	PROCEDURE CompareIntTypes (
@@ -1240,9 +1238,8 @@ MODULE DevCPVamd64;
 							DevCPCamd64.Load(x, hint + stop, {})
 					| minus, abs, cap:
 							expr(n.left, x, hint + stop, {mem, stk});
-							IF (f = Int64) & (n.subcl # minus) THEN DevCPM.err(260)
-							ELSIF f IN realSet THEN DevCPCamd64.FloatMOp(x, n.subcl)
-							ELSE DevCPCamd64.IntMOp(x, n.subcl)
+							IF f IN realSet THEN DevCPCamd64.FloatMOp(x, n.subcl)
+							ELSE DevCPCamd64.IntMOp(x, n.subcl)	(* Int64: нативный neg/abs, один регистр *)
 							END
 					END
 			| Ndop:
@@ -1809,8 +1806,7 @@ MODULE DevCPVamd64;
 		VAR end: DevCPLamd64.Label; name: DevCPT.Name; obj, p: DevCPT.Object; n: DevCPT.Node;
 			aAd, rAd: INTEGER; typ: DevCPT.Struct; useFpu: BOOLEAN;
 	BEGIN
-		DevCPH.UseReals(prog, {DevCPH.longDop, DevCPH.longMop});
-		DevCPM.NewObj(DevCPT.SelfName);
+		DevCPM.NewObj(DevCPT.SelfName);	(* UseReals не вызываем: Int64 — нативный один 64-битный регистр, не FPU *)
 		IF DevCPM.noerr THEN
 			DevCPE.OutHeader; n := prog.right;
 			WHILE (n # NIL) & (n.class = Ninittd) DO n := n.link END;

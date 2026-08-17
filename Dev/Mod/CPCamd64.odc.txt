@@ -239,7 +239,7 @@ MODULE DevCPCamd64;
 				IF ~(n IN s) THEN n := n + 4 END
 			END;
 			EXCL(BReg, n); EXCL(WReg, n MOD 4)
-		| Int16, Int32, Set, String8, NilTyp, Pointer, ProcTyp, Comp, Char16, String16: 
+		| Int16, Int32, Set, String8, NilTyp, Pointer, ProcTyp, Comp, Char16, String16, Int64: 
 			s := WReg - stop;
 			IF high IN stop THEN s := s * {0..3} END;
 			IF s = {} THEN DevCPM.err(215); WReg := wreg; BReg := {0..7}; s := wreg END;
@@ -289,19 +289,14 @@ MODULE DevCPCamd64;
 		| Var, VarPar, Abs: IF x.scale # 0 THEN FreeWReg(x.index) END
 		| Ind: FreeWReg(x.reg);
 			IF x.scale # 0 THEN FreeWReg(x.index) END
-		| Reg: FreeReg(x.reg, x.form);
-			IF x.form = Int64 THEN FreeWReg(x.index) END
+		| Reg: FreeReg(x.reg, x.form)	(* Int64 — один регистр, index не занят *)
 		ELSE
 		END
 	END Free;
 	
 	PROCEDURE FreeHi (VAR x: DevCPLamd64.Item);	(* free hi byte of word reg *)
 	BEGIN
-		IF x.mode = Reg THEN
-			IF x.form = Int64 THEN FreeWReg(x.index)
-			ELSIF x.reg < 4 THEN INCL(BReg, x.reg + 4)
-			END
-		END
+		IF (x.mode = Reg) & (x.form # Int64) & (x.reg < 4) THEN INCL(BReg, x.reg + 4) END
 	END FreeHi;
 
 	PROCEDURE Fits* (VAR x: DevCPLamd64.Item; stop: SET): BOOLEAN;	(* x.mode = Reg *)
@@ -309,25 +304,14 @@ MODULE DevCPCamd64;
 		IF (short IN stop) & (x.form <= Int8) THEN RETURN FALSE END;
 		IF x.form <= Int8 THEN RETURN ~(x.reg MOD 4 IN stop) & ((x.reg < 4) OR ~(high IN stop))
 		ELSIF x.form IN realSet THEN RETURN ~(float IN stop)
-		ELSIF x.form = Int64 THEN RETURN ~(x.reg IN stop) & ~(x.index IN stop)
 		ELSE RETURN ~(x.reg IN stop) & ((x.reg < 4) OR ~(high IN stop))
 		END
 	END Fits;
 	
 	PROCEDURE Pop* (VAR r: DevCPLamd64.Item; f: BYTE; hint, stop: SET);
-		VAR rh: DevCPLamd64.Item;
 	BEGIN
-		IF f = Int64 THEN
-			GetReg(r, Int32, hint, stop); DevCPLamd64.GenPop(r);
-			GetReg(rh, Int32, hint, stop);
-			(* 64-bit: один pop забрал 8 байт (low|high); high dword -> rh *)
-			r.form := Int64; rh.form := Int64; DevCPLamd64.GenMove(r, rh);
-			DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E8H + rh.reg); DevCPE.GenByte(32);	(* shr rh, 32 *)
-			r.form := Int64; r.index := rh.reg
-		ELSE
-			IF f < Int16 THEN INCL(stop, high) END;
-			GetReg(r, f, hint, stop); DevCPLamd64.GenPop(r)
-		END
+		IF f < Int16 THEN INCL(stop, high) END;
+		GetReg(r, f, hint, stop); DevCPLamd64.GenPop(r)	(* Int64: один 64-битный pop *)
 	END Pop;
 	
 	PROCEDURE^ LoadLong* (VAR x: DevCPLamd64.Item; hint, stop: SET);
@@ -455,60 +439,41 @@ MODULE DevCPCamd64;
 	END LoadL;
 	
 	PROCEDURE LoadLong* (VAR x: DevCPLamd64.Item; hint, stop: SET);
-		VAR r, rh: DevCPLamd64.Item; offs: INTEGER;
+		(* Int64 = один 64-битный регистр *)
+		VAR r: DevCPLamd64.Item;
 	BEGIN
-		IF x.form = Int64 THEN
-			IF  x.mode = Stk THEN
-				Pop(x, x.form, hint, stop)
-			ELSIF x.mode = Reg THEN
-				FreeReg(x.reg, Int32); GetReg(r, Int32, hint, stop);
-				FreeReg(x.index, Int32); GetReg(rh, Int32, hint, stop);
-				x.form := Int32; DevCPLamd64.GenMove(x, r);
-				x.reg := x.index; DevCPLamd64.GenMove(x, rh);
-				x.reg := r.reg; x.index := rh.reg
-			ELSE
-				GetReg(rh, Int32, hint, stop + {AX});
-				Free(x);
-				GetReg(r, Int32, hint, stop); 
-				x.form := Int32; offs := x.offset;
-				IF x.mode = Con THEN x.offset := x.scale ELSE INC(x.offset, 4) END;
-				DevCPLamd64.GenMove(x, rh);
-				x.offset := offs;
-				DevCPLamd64.GenMove(x, r);
-				x.mode := Reg; x.reg := r.reg; x.index := rh.reg
+		IF x.form IN {Int64, Pointer, ProcTyp} THEN
+			(* 64-битное значение: загрузить как есть, перетипировать в конце *)
+			IF x.mode = Stk THEN
+				Pop(x, Int64, hint, stop)
+			ELSIF (x.mode # Reg) OR ~Fits(x, stop) THEN
+				Free(x); GetReg(r, Int64, hint, stop); DevCPLamd64.GenMove(x, r);
+				x.mode := Reg; x.reg := r.reg; x.index := 0; x.scale := 0
 			END
 		ELSE
-			LoadL(x, hint, stop); GetReg(rh, Int32, hint, stop); DevCPLamd64.GenSignExt(x, rh);
-			x.index := rh.reg
+			(* узкая целая форма -> Int64: расширение в один 64-битный регистр *)
+			Free(x); GetReg(r, Int64, hint, stop);
+			IF x.form IN {Int32, Set} THEN
+				DevCPE.GenByte(48H); DevCPE.GenByte(63H); DevCPLamd64.GenDExt(r, x)	(* movsxd r64, r/m32 *)
+			ELSE
+				DevCPLamd64.GenExtMove(x, r)	(* movsx/movzx r64 (REX.W внутри) *)
+			END;
+			x.mode := Reg; x.reg := r.reg; x.index := 0; x.scale := 0
 		END;
 		x.form := Int64
 	END LoadLong;
 
 	PROCEDURE PtrToLong* (VAR y: DevCPLamd64.Item; hint, stop: SET);
-		(* 64-bit: Pointer/ProcTyp (один 64-битный регистр) -> пара Int64 lo/hi *)
-		VAR rh: DevCPLamd64.Item;
+		(* Pointer/ProcTyp (один 64-битный регистр) -> Int64: просто перетипировать *)
 	BEGIN
-		Load(y, hint, stop);
-		GetReg(rh, Int32, hint, stop);
-		y.form := Int64; rh.form := Int64; DevCPLamd64.GenMove(y, rh);	(* mov rh, r (REXW) *)
-		DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E8H + rh.reg); DevCPE.GenByte(32);	(* shr rh, 32 *)
-		y.form := Int64; y.index := rh.reg
+		Load(y, hint, stop); y.form := Int64
 	END PtrToLong;
 
 	PROCEDURE LongToPtr* (VAR y: DevCPLamd64.Item; hint, stop: SET);
-		(* 64-bit: пара Int64 (y.reg=lo, y.index=hi) -> один 64-битный регистр *)
-		VAR r, rl: DevCPLamd64.Item;
+		(* Int64 (один 64-битный регистр) -> Pointer: просто перетипировать *)
 	BEGIN
-		IF y.mode # Reg THEN LoadLong(y, hint, stop) END;	(* пара обязана быть в регистрах *)
-		ASSERT(y.mode = Reg, 90);
-		GetReg(r, Pointer, hint, stop + {y.reg, y.index});
-		rl.mode := Reg; rl.form := Int32; rl.scale := 0; rl.offset := 0; rl.index := 0; rl.obj := NIL;
-		rl.reg := y.index; DevCPLamd64.GenMove(rl, r);	(* mov r32, hi (zero-extend) *)
-		DevCPE.GenByte(48H); DevCPE.GenByte(0C1H); DevCPE.GenByte(0E0H + r.reg); DevCPE.GenByte(32);	(* shl r, 32 *)
-		rl.reg := y.reg;
-		DevCPE.GenByte(48H); DevCPE.GenByte(09H); DevCPE.GenByte(0C0H + rl.reg * 8 + r.reg);	(* or r64, rl64 (REX.W! иначе 32-битный or обнуляет старшие биты) *)
-		FreeReg(y.index, Int32); FreeReg(y.reg, Int32);
-		y.form := Pointer; y.reg := r.reg; y.index := 0
+		IF y.mode # Reg THEN LoadLong(y, hint, stop) END;
+		y.form := Pointer
 	END LongToPtr;
 	
 	(*------------------------------------------------*)
@@ -955,13 +920,7 @@ MODULE DevCPCamd64;
 						END;
 						y.form := f;
 						IF (m # Undef) & (m # Stk) THEN
-							IF f = Int64 THEN
-								Free(y); y.form := Int32; z := x; z.form := Int32; DevCPLamd64.GenMove(y, z);
-								IF z.mode = Reg THEN z.reg := z.index ELSE INC(z.offset, 4) END;
-								y.reg := y.index; DevCPLamd64.GenMove(y, z);
-							ELSE
-								Free(y); DevCPLamd64.GenMove(y, x);
-							END
+							Free(y); DevCPLamd64.GenMove(y, x)	(* Int64: один 64-битный mov *)
 						END
 					END
 				END
@@ -1017,8 +976,7 @@ MODULE DevCPCamd64;
 				| Int64:
 						IF f IN {Bool..Int32, Char16} THEN
 							(* make range checks !!! *)
-							FreeHi(y);
-							IF f IN {Bool..Int8} THEN y.form := Int32; FreeHi(y) END
+							(* один 64-битный регистр: младшие биты уже на месте, пара не нужна *)
 						END
 				END
 			END;
@@ -1057,9 +1015,7 @@ MODULE DevCPCamd64;
 				ELSIF m # Undef THEN
 					IF f = Int64 THEN
 						IF y.mode # Reg THEN LoadLong(y, hint, stop) END;
-						Free(y); y.form := Int32; z := x; z.form := Int32; DevCPLamd64.GenMove(y, z);
-						IF z.mode = Reg THEN ASSERT(z.reg # y.index); z.reg := z.index ELSE INC(z.offset, 4) END;
-						y.reg := y.index; DevCPLamd64.GenMove(y, z);
+						Free(y); DevCPLamd64.GenMove(y, x)	(* один 64-битный mov *)
 					ELSE
 						IF y.mode # Reg THEN LoadW(y, hint, stop) END;
 						Free(y); DevCPLamd64.GenMove(y, x)
@@ -1178,19 +1134,11 @@ MODULE DevCPCamd64;
 		VAR local: DevCPLamd64.Label;
 	BEGIN
 		ASSERT((x.mode = Reg) OR (y.mode = Reg) OR (y.mode = Con));
-		IF (x.form = Int64) OR (y.form = Int64) THEN	(* 64-битная арифметика на паре lo/hi *)
-			CASE subcl OF
-			| plus: LongAdd(x, y); Free(y)
-			| minus: IF rev THEN LongSub(y, x); x := y ELSE LongSub(x, y) END; Free(y)
-			| eql..geq: LongCmp(x, y, subcl, rev)
-			ELSE DevCPM.err(260)
-			END;
-			RETURN
-		END;
+		(* Int64 — один 64-битный регистр: общий путь с REX.W по форме *)
 		CASE subcl OF
 		| eql..geq:
 				DevCPLamd64.GenComp(y, x); Free(x);
-				setCC(x, subcl, rev, x.typ.form IN {Int8..Int32})
+				setCC(x, subcl, rev, x.typ.form IN {Int8..Int32, Int64})
 		| times: 
 				IF x.form = Set THEN DevCPLamd64.GenAnd(y, x) ELSE DevCPLamd64.GenMul(y, x, ovflchk) END
 		| slash:
@@ -1235,12 +1183,14 @@ MODULE DevCPCamd64;
 	PROCEDURE LargeInc* (VAR x, y: DevCPLamd64.Item; dec: BOOLEAN);	(* INC(x, y) or DEC(x, y) *)
 	BEGIN
 		ASSERT(x.form = Int64);
-		IF ~(y.mode IN {Reg, Con}) THEN LoadLong(y, {}, {}) END;
-		Free(x); Free(y); x.form := Int32; y.form := Int32;
-		IF dec THEN DevCPLamd64.GenSubC(y, x, TRUE, FALSE) ELSE DevCPLamd64.GenAddC(y, x, TRUE, FALSE) END;
-		INC(x.offset, 4);
-		IF y.mode = Reg THEN y.reg := y.index ELSE y.offset := y.scale END;
-		IF dec THEN DevCPLamd64.GenSubC(y, x, FALSE, ovflchk) ELSE DevCPLamd64.GenAddC(y, x, FALSE, ovflchk) END;
+		IF y.mode = Con THEN
+			IF (y.form # Int64) & (y.offset < 0) THEN y.scale := -1 END;	(* знаковое расширение константы *)
+			y.form := Int64
+		ELSE
+			LoadLong(y, {}, {})	(* узкую форму расширит знаком, Int64-значение загрузит в один регистр *)
+		END;
+		Free(x); Free(y);
+		IF dec THEN DevCPLamd64.GenSubC(y, x, TRUE, ovflchk) ELSE DevCPLamd64.GenAddC(y, x, TRUE, ovflchk) END
 	END LargeInc;
 	
 	PROCEDURE FloatDOp* (VAR x, y: DevCPLamd64.Item; subcl: BYTE; rev: BOOLEAN);
@@ -1317,8 +1267,7 @@ MODULE DevCPCamd64;
 		CASE subcl OF
 		| minus:
 				IF x.form = Set THEN DevCPLamd64.GenNot(x)
-				ELSIF x.form = Int64 THEN LongNeg(x)
-				ELSE DevCPLamd64.GenNeg(x, ovflchk) END
+				ELSE DevCPLamd64.GenNeg(x, ovflchk) END	(* Int64: REX.W neg, один регистр *)
 		| abs:
 				L := DevCPLamd64.NewLbl; DevCPLamd64.MakeConst(c, 0, x.form);
 				DevCPLamd64.GenComp(c, x);
@@ -1544,13 +1493,8 @@ MODULE DevCPCamd64;
 			IF y.form IN {Real32, Real64} THEN
 				DevCPLamd64.GenFLoad(y); GetReg(y, Real32, {}, {});
 				IF x.mode # Reg THEN Free(y); DevCPLamd64.GenFStore(x, TRUE) END	(* ??? move const *)
-			ELSIF x.form = Int64 THEN
-				ASSERT(x.mode IN {Ind, Abs});
-				y.form := Int32; x.form := Int32; DevCPLamd64.GenMove(y, x);
-				y.offset := y.scale; INC(x.offset, 4); DevCPLamd64.GenMove(y, x);
-				DEC(x.offset, 4); x.form := Int64
 			ELSE
-				DevCPLamd64.GenMove(y, x)
+				DevCPLamd64.GenMove(y, x)	(* Int64: один mov (r11/imm32 по размеру константы) *)
 			END
 		ELSE
 			IF y.form IN {Comp, String8, String16, VString8, VString16} THEN	(* convert to pointer *)
@@ -1779,11 +1723,8 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 				GenB(48H); GenB(0B8H); GenD(ap.offset); GenD(ap.scale);	(* mov rax, imm64 *)
 				GenB(50H)	(* push rax *)
 			ELSIF ap.mode = Reg THEN
-				IF ap.form = Int64 THEN	(* регистровая пара lo/hi *)
-					AdjustStack(-8);
-					c.mode := Ind; c.reg := SP; c.offset := 0; c.scale := 0; c.form := Int32;
-					DevCPLamd64.MakeReg(a, ap.reg, Int32); DevCPLamd64.GenMove(a, c);
-					c.offset := 4; DevCPLamd64.MakeReg(a, ap.index, Int32); DevCPLamd64.GenMove(a, c)
+				IF ap.form = Int64 THEN	(* один 64-битный регистр *)
+					DevCPLamd64.GenPush(ap)	(* push r64 *)
 				ELSE	(* 32-битное значение: sign-extend через rax *)
 					GenB(48H); GenB(63H); GenB(0C0H + ap.reg);	(* movsxd rax, r32 *)
 					GenB(50H)	(* push rax *)
@@ -1921,16 +1862,12 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 		DevCPLamd64.MakeReg(r, AX, proc.typ.form);	(* don't allocate AX ! *)
 		IF res.mode = Con THEN
 			IF r.form IN {Real32, Real64} THEN DevCPLamd64.GenFLoad(res);
-			ELSIF r.form = Int64 THEN
-				r.form := Int32; res.form := Int32; DevCPLamd64.GenMove(res, r);
-				r.reg := DX; res.offset := res.scale; DevCPLamd64.GenMove(res, r)
-			ELSE DevCPLamd64.GenMove(res, r);
+			ELSE DevCPLamd64.GenMove(res, r);	(* Int64: mov rax, imm64 — один регистр *)
 			END
 		ELSIF res.form IN {Comp, String8, String16, VString8, VString16} THEN	(* convert to pointer *)
 			ASSERT(r.form = Pointer);
 			GetAdr(res, {}, wreg - {AX})
 		ELSE
-			r.index := DX;	(* for int64 *)
 			ConvMove(r, res, FALSE, wreg - {AX} + {high}, {});
 		END;
 		Free(res)
@@ -2220,19 +2157,8 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 			InitFpu
 		END;
 		CheckReg;
-		IF x.typ.form = Int64 THEN
-			IF cc THEN	(* SysV: int64 возвращается в rax, делим на пару lo/hi *)
-				GetReg(x, Int32, {}, {AX}); GetReg(y, Int32, {}, {AX});
-				GenB(89H); GenB(0C0H + x.reg);				(* mov r32(x), eax *)
-				GenB(48H); GenB(0C1H); GenB(0E8H); GenB(20H);	(* shr rax, 32 *)
-				GenB(89H); GenB(0C0H + y.reg);				(* mov r32(y), eax *)
-				x.index := y.reg; x.form := Int64
-			ELSE
-				GetReg(x, Int32, {}, wreg - {AX}); GetReg(y, Int32, {}, wreg - {DX});
-				x.index := y.reg; x.form := Int64
-			END
-		ELSIF x.typ.form # NoTyp THEN GetReg(x, x.typ.form, {}, wreg - {AX} + {high})
-		END;
+		IF x.typ.form # NoTyp THEN GetReg(x, x.typ.form, {}, wreg - {AX} + {high}) END;
+		(* Int64: результат в RAX, один регистр (SysV тоже отдаёт int64 в rax) *)
 		curCCall := savedCC
 	END Call;
 	

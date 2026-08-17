@@ -314,7 +314,7 @@ MODULE DevCPLamd64;
 		END
 	END GenCExt;
 	
-	PROCEDURE GenDExt (VAR r, x: Item);
+	PROCEDURE GenDExt* (VAR r, x: Item);
 	BEGIN
 		ASSERT(r.mode = Reg);
 		GenCExt(r.reg * 8, x)
@@ -387,7 +387,13 @@ MODULE DevCPLamd64;
 		ELSE
 			CheckSize(from.form, w);
 			IF from.mode = Con THEN
-				IF from.form IN {Int64, Pointer, ProcTyp} THEN
+				IF (from.form = Int64) & (from.obj = NIL) &
+					((from.scale = 0) & (from.offset >= 0) OR (from.scale = -1) & (from.offset < 0)) THEN
+					(* константа влезает в imm32: mov m64, imm32 (sign-extended) *)
+					ripTrail := 4;
+					DevCPE.GenByte(REXW); DevCPE.GenByte(0C7H); GenCExt(0, to); GenConst32(from, FALSE);	(* у C7 нет imm8-формы: short=FALSE обязателен! *)
+					ripTrail := 0
+				ELSIF from.form IN {Int64, Pointer, ProcTyp} THEN
 					(* no MOV [mem], imm64: go via scratch r11 *)
 					DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(from, FALSE);	(* mov r11, imm64 *)
 					IF to.reg >= 8 THEN DevCPE.GenByte(4DH) ELSE DevCPE.GenByte(4CH) END; DevCPE.GenByte(89H); GenCExt(3 * 8, to)	(* mov [to], r11 *)
@@ -423,6 +429,7 @@ MODULE DevCPLamd64;
 		ELSE op := 0BEH (* MOVSX *)
 		END;
 		IF from.form IN {Int16, Char16} THEN INC(op) END;
+		IF to.form = Int64 THEN DevCPE.GenByte(REXW) END;	(* movsx/movzx r64 — расширение до 64 бит *)
 		DevCPE.GenByte(0FH); DevCPE.GenByte(op); GenDExt(to, from);
 		IF to.reg = AX THEN a1.mode := 0; a2.mode := 0 END
 	END GenExtMove;
@@ -474,6 +481,10 @@ MODULE DevCPLamd64;
 				DevCPE.GenByte(4CH); DevCPE.GenByte(8DH); DevCPE.GenByte(1DH);
 				GenLinked(src, absolute);
 				DevCPE.GenByte(41H); DevCPE.GenByte(53H)
+			ELSIF (src.form = Int64) & ~((src.scale = 0) & (src.offset >= 0) OR (src.scale = -1) & (src.offset < 0)) THEN
+				(* push imm64 нет: mov r11, imm64; push r11 *)
+				DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(src, FALSE);
+				DevCPE.GenByte(41H); DevCPE.GenByte(53H)
 			ELSE
 				CheckConst(src, s); DevCPE.GenByte(68H + s); GenConst32(src, TRUE)
 			END
@@ -514,6 +525,17 @@ MODULE DevCPLamd64;
 				DevCPE.GenByte(49H); DevCPE.GenByte(op + 3); DevCPE.GenByte(0C0H + dst.reg * 8 + 3)	(* op dst, r11 *)
 			ELSE
 				IF dst.reg >= 8 THEN DevCPE.GenByte(4DH) ELSE DevCPE.GenByte(4CH) END;	(* REX.W+R(=r11) [+B если база r8+] *)
+				DevCPE.GenByte(op + 1); GenCExt(3 * 8, dst)	(* op [dst], r11 *)
+			END;
+			RETURN
+		END;
+		IF (src.form = Int64) & ~((src.scale = 0) & (src.offset >= 0) OR (src.scale = -1) & (src.offset < 0)) THEN
+			(* Int64-константа не влезает в imm32: mov r11, imm64; op dst, r11 *)
+			DevCPE.GenByte(49H); DevCPE.GenByte(0BBH); GenConst(src, FALSE);	(* mov r11, imm64 *)
+			IF dst.mode = Reg THEN
+				DevCPE.GenByte(49H); DevCPE.GenByte(op + 3); DevCPE.GenByte(0C0H + dst.reg * 8 + 3)	(* op dst, r11 *)
+			ELSE
+				IF dst.reg >= 8 THEN DevCPE.GenByte(4DH) ELSE DevCPE.GenByte(4CH) END;
 				DevCPE.GenByte(op + 1); GenCExt(3 * 8, dst)	(* op [dst], r11 *)
 			END;
 			RETURN

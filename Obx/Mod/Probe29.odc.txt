@@ -34,7 +34,7 @@ MODULE ObxProbe29;
 		CHK("Twice(21)", Twice(21), 42);
 		a := 1234567890123;
 		i := SHORT(a);	(* LONGINT -> INTEGER: младшие 32 бита *)
-		CHK("SHORT(a)", i, 1911301323);
+		CHK("SHORT(a)", i, 1912276171);
 		i := -5;
 		CHK("int->long", i, -5);	(* INTEGER -> LONGINT: знаковое расширение *)
 		CHK("ASH(1,62)", ASH(1, 62), 4611686018427387904);

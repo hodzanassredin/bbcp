@@ -773,7 +773,7 @@ MODULE Kernel;
 	(** Allocate cluster c of at least size bytes in either mono- or multi-cluster heap layout *)
 		VAR a, base, capacity, sz: ADDRESS; x: Cluster; n: INTEGER;
 
-		(* TODO64 diag: неаллоцирующий лог (BString/BInt растят blog.buf → NewBlock → рекурсия!) *)
+		(* diag: неаллоцирующий лог (BString/BInt растят blog.buf → NewBlock → рекурсия!) *)
 		PROCEDURE LStr (IN s: ARRAY OF CHAR);
 		BEGIN IF blog.string # NIL THEN blog.string(s) END
 		END LStr;
@@ -825,8 +825,8 @@ MODULE Kernel;
 			END;
 			INC(used, sz);
 		END;
-		(* TODO64 diag: fail-fast на бесконтрольный рост цепочки кластеров (инвариант;
-		   поймано зависание Tut-2 — sliver-shadowing в GetOldFreeBlock). Лог через
+		(* invariant: fail-fast на бесконтрольный рост цепочки кластеров
+		   (поймано зависание Tut-2 — sliver-shadowing в GetOldFreeBlock). Лог через
 		   LStr/LInt/LLn/LDump — НЕ через BString/BInt: те растят blog.buf → NewBlock → рекурсия *)
 		n := 0; x := root;
 		WHILE (x # NIL) & (n <= 300) DO INC(n); x := x.next END;

@@ -30,7 +30,7 @@ MODULE StdRasters;
 
 
 	TYPE
-		ADDRESS = LONGINT;	(* TODO64: был INTEGER; GET/PUT по Int64-адресу поддержаны (processor=12) *)
+		ADDRESS = LONGINT;	(* 64-бит: был INTEGER; GET/PUT по Int64-адресу поддержаны (processor=12) *)
 		SIZET = INTEGER;
 	
 	TYPE
@@ -323,7 +323,7 @@ MODULE StdRasters;
 	(* swap R and B components *)
 	PROCEDURE [code] SwapRB (c: Ports.Color): Ports.Color 0FH, 0C8H, 0C1H, 0C8H, 08H;
 
-	(* TODO64: Q-процедуры переписаны на индексацию RasterData вместо ADDRESS-арифметики:
+	(* Q-процедуры переписаны на индексацию RasterData вместо ADDRESS-арифметики:
 	   SYSTEM.GET/PUT по вычисленному Int64-адресу backend не поддерживает (err 220). *)
 	PROCEDURE Q0BGRA8888BGRA8888Copy (IN src: RasterData; VAR dst: RasterData;
 												srcw, dstw, dl, dt, dr, db: INTEGER;

@@ -660,7 +660,7 @@ MODULE DevCompiler64;
 			IF (v # NIL) & (v IS TextViews.View) THEN
 				t := v(TextViews.View).ThisModel();
 				Do(t, StdLog.text, 0, defopt, error);
-				IF error THEN	(* TODO64: не стопаемся — собираем всё, что компилируется *)
+				IF error THEN	(* не стопаемся — собираем всё, что компилируется, сводка в конце *)
 					INC(failed);
 					LogMarks(t);
 					StdLog.String("== CompileSubs FAILED: " + file.name$); StdLog.Ln

@@ -1314,7 +1314,7 @@ MODULE DevCPCamd64;
 			END
 		ELSE
 			ASSERT(y.mode = Reg);
-			Check(y, -31, 31);
+			IF x.form = Int64 THEN Check(y, -63, 63) ELSE Check(y, -31, 31) END;
 			L1 := DevCPLamd64.NewLbl; L2 := DevCPLamd64.NewLbl; 
 			DevCPLamd64.MakeConst(c, 0, y.form); DevCPLamd64.GenComp(c, y);
 			DevCPLamd64.GenJump(ccNS, L1, TRUE);

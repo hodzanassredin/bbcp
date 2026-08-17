@@ -710,9 +710,33 @@ LONGINT, SHORT-куча) и Dev/CPM:475; чистка [LI]-принтов LinIni
     компиляция 7 крупных модулей без единой диагностики. dev0-side
     DevCPM не пересобирается (sym-rot, PVFP mismatch) — там подавление
     осталось, безвредно. KB/Bootstrap32-symrot.md.
-== 2026-08-17 (13): чистка [LI]-принтов LinInit ===
+== 2026-08-17 (13): чистка [LI]-принтов LinInit (213816ac) ===
 43. Убраны debug-процедуры P/PR, их вызовы и импорты Console/Strings из
     Lin/Mod/Init.odc.txt. GUI после чистки проверен: окно с меню, Log.
-ОТКРЫТО: g_object_unref на выходе (в свежих логах чисто, ждём
-воспроизведения под G_DEBUG=fatal-criticals); Std/Debug остатки
-(WriteHex и пр. уже LONGINT-ready).
+44. Сверка старых ОТКРЫТО с кодом: GrowBuf-округление (Kernel:610) и
+    cycle-guard трап-репортёра (Kernel LogThisStack) УЖЕ сделаны ранее;
+    этап 3 (мёртвый код lo/hi + intrealtyp) сдан коммитом 281611ed —
+    единственная ссылка на intrealtyp осталась внутри (* *) в
+    CPVamd64:1538. Пункты закрыты, просто не были отмечены.
+ОТКРЫТО: g_object_unref на выходе (3 сессии чисто, ждём
+воспроизведения под G_DEBUG=fatal-criticals); SYSTEM.LSH/ROT на
+LONGINT (err 260 — реальная дыра языка); ObxCompileLog FP249 (known,
+sym-rot); полный цикл GUI-верификации пользователем.
+
+== 2026-08-17 (14): SYSTEM.LSH/ROT на LONGINT — уже работает, закрыто пробником ===
+45. ЗАКРЫТО: err 260 для LSH/ROT на LONGINT из п.22 устарел — после этапа 2
+    (single-reg Int64) путь работает: CPB принимает Int64 (intSet включает),
+    CPVamd64 -> CPCamd64.Shift -> CPLamd64.GenShiftOp с REXW. Пробник
+    ObxProbe34 (12 проверок: конст/переменный сдвиг, оба знака, логический
+    сдвиг знакового бита, ROT через границу, INTEGER не сломан) — OK.
+46. Фикс точности ranchk: CPCamd64.Shift для переменного сдвига проверял
+    счётчик в -31..31 — для Int64 поправлено на -63..63. Пересобраны
+    dev0-side (go32 DevCPCamd64) и мир (build-dev64.sh).
+47. Знание (CPS.Number): hex-литералы — суффикс H = 32 бита (<=8 цифр),
+    L = 64 бита (<=16 значащих цифр; 16 цифр и старшая > 7 -> отрицательный).
+    Литерал обязан начинаться с ЦИФРЫ: 0C000000000000000L, не C00...L
+    (иначе сканер читает идентификатор -> undeclared identifier).
+    Копия в KB/CPS-hex-literals.md.
+48. probes.sh: добавлен Probe34.Go (21/21 PASS, probes-trap 1/1).
+ОТКРЫТО: g_object_unref (3+ сессий чисто); ObxCompileLog FP249 (known);
+полный цикл GUI-верификации пользователем.

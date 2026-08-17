@@ -919,3 +919,17 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      должен принимать всё, что expr может вернуть по контракту,
      а не только Reg. Probe26 (a+4 внутри VAL) — компилируется,
      код верен (lea addr; fild/fadd/fistp для +4; mov (rax),eax).
+
+115. **About: поля Version/Build — НЕ баг порта.** System/Rsrc/About.odc
+     в bbcp идентичен оригиналу bbcb2 (diff пуст): значения
+     appVersion/buildNum/buildDate подставляются релизным packaging'ом,
+     в исходниках их никто не заполняет. Закрыто без действий.
+
+116. **Sym-файлы portable; dev0 читает bbcp64use, fallback в bbcp.**
+     LinFiles64.Old: при isUseDir & isCustomDir промах в useDir →
+     customDir. run-dev0: standardDir=bbcp (по пути скрипта), useDir=cwd.
+     Поэтому мир собирался по 32-битным osf и НЕ писал 64-битные в
+     bbcp64use (fp совпадают → "new symbol file" не пишется) — это
+     ШТАТНО. Для in-BB компиляции (bbrun64 без fallback) .osf должны
+     лежать в bbcp64use — решается tools64/link-sym.sh (вызывается из
+     test64.sh после wipe).

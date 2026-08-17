@@ -227,7 +227,7 @@ MODULE LinBackends;
 			kv := h.event.keyval;
 			IF (m.mod - { Controllers.extend } # {}) OR ValidShortcutKey(kv) THEN
 				ok := Gdk.gdk_keymap_get_entries_for_keycode(Gdk.gdk_keymap_get_default(), h.event.hardware_keycode, unused, m.keyvals, m.len);
-				GLib.g_free(SYSTEM.VAL(INTEGER, unused));
+				GLib.g_free(SYSTEM.VAL(GLib.gpointer, unused));	(* 64-бит: g_malloc выше 4ГБ — VAL(INTEGER,...) усекал указатель → free(): invalid pointer *)
 				ASSERT(ok);
 				it := StdMenuTool.dir.FirstMatch(m);
 				IF it # NIL THEN StdMenuTool.dir.Execute(it); done := TRUE END

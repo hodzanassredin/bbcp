@@ -738,5 +738,12 @@ sym-rot); полный цикл GUI-верификации пользовате�
     (иначе сканер читает идентификатор -> undeclared identifier).
     Копия в KB/CPS-hex-literals.md.
 48. probes.sh: добавлен Probe34.Go (21/21 PASS, probes-trap 1/1).
-ОТКРЫТО: g_object_unref (3+ сессий чисто); ObxCompileLog FP249 (known);
-полный цикл GUI-верификации пользователем.
+== 2026-08-17 (15): полный цикл GUI-верификации ПРОЙДЕН ===
+49. Пользователь прокликал полный цикл на мире, пересобранном новым
+    компилятором: меню, About, Help -> Contents, Compound Documents, Tut-2
+    со схемами. Окно закрыто штатно, лог чист (0 CRITICAL, 4-я чистая
+    сессия подряд). Цель "запустить систему в 64 бита" достигнута.
+ОТКРЫТО (minor): g_object_unref на выходе (не воспроизводится 4 сессии,
+рецепт ловли: G_DEBUG=fatal-criticals + трап-репортёр со стеком);
+ObxCompileLog FP249 на dev0-side (known sym-rot, KB/Bootstrap32-symrot.md).
+

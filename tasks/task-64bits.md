@@ -500,3 +500,16 @@ About не подставляет Version/Build; in-BB компиляция не
 About Version/Build; ObxCompileLog err 249; conv-узел вокруг
 THISARRAY-adr (создатель не найден); verify-callconv.py; Int64 в
 одном регистре (KB Verification64 п.6.4).
+
+== 2026-08-17 (3): GUI-верификация пройдена ===
+19. Живой GUI (MCP-клики): Help→Contents ок, Guided Tour ок, About ок,
+    Obx→Trap! → StdDebug-окно трапа работает, система выживает,
+    рекурсии нет. Выход: free(): invalid pointer УШЁЛ (п.117
+    подтверждён). Остаток: GLib-GObject-CRITICAL g_object_unref на
+    выходе (нефатально, minor); фреймы Module.??? в трап-окне для
+    неэкспортированных процедур (косметика). KB п.119.
+ОТКРЫТО: g_object_unref на выходе (minor); ld.so _dl_fini assert при
+выходе из консоли ПОСЛЕ трапа (низкий приоритет); ObxCompileLog
+err 249; conv-узел вокруг THISARRAY-adr (создатель не найден, закрыт
+стражем); verify-callconv.py; ASSERT-постусловия в кодегене; Int64 в
+одном регистре (KB Verification64 п.6.4).

@@ -948,3 +948,28 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      — ловушки по дизайну, в список не включены. NB: вызов несуществу-
      ющей экспортированной команды в консольном REPL подвисает
      (CommandError-диалог ждёт?) — runner ловит это timeout'ом.
+
+119. **GUI-верификация на новом мире (2026-08-17, после всех фиксов
+     п.108-117) — ПРОЙДЕНА.** Живой клик-тест через MCP
+     computer-control:
+     - Help→Contents ОТКРЫВАЕТСЯ (ранее: ASSERT bar=NIL до фикса
+       п.108, затем "index out of range" в StdMenus — оба ушли).
+     - Ссылки в Help Contents работают: Guided Tour открывается,
+       документ рендерится полностью.
+     - Help→About работает (логотип есть; Version/Build пусты —
+       не баг, п.115).
+     - Obx→Trap!: окно трапа StdDebug ОТКРЫВАЕТСЯ и система ВЫЖИВАЕТ:
+       "index out of range", ObxTrap.Do [0x4F] с локалками (.i=777),
+       стек до Loop.Loop [0x132]; фреймы ядра/сервисов показываются
+       как Module.??? (ref-инфо не резолвит неэкспортированные
+       процедуры — косметика). Рекурсивных падений StdDebug больше
+       нет (ранее: deref стекового адреса в StdDebug+0x174D).
+     - Закрытие главного окна: процесс завершается БЕЗ
+       "free(): invalid pointer" (фикс п.117 подтверждён вживую).
+       Остаётся однократный GLib-GObject-CRITICAL
+       "g_object_unref: assertion 'G_IS_OBJECT (object)' failed"
+       на выходе — нефатально, вероятный ещё один усечённый/
+       невалидный указатель в shutdown-пути LinBackends; записано
+       как minor issue.
+     - В логе при трапе: "~TRAP sig=4 code=2" — штатный SIGILL от
+       HALT-инструкции ObxTrap, обработан kernel'ом.

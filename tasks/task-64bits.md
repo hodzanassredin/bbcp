@@ -476,3 +476,27 @@ GdkEvent-офсеты сверить с KB/GdkEvent-offsets.txt, REAL-аргум
 free(): invalid pointer при выходе; StdDebug падает при печати трапа;
 About не подставляет Version/Build; in-BB компиляция не пишет .ocf
 (п.82); ObxCompileLog err 249; ObxTaAdr err 220; smoke console.
+
+== 2026-08-17 (2): in-BB компиляция работает, err 220 убран ===
+14. КОРЕНЬ падения компилятора внутри BB64 (SIGILL HALT(100) в
+    DevCPM.Mark): CPLamd64.GenBitOp не выставлял ripTrail=1 для
+    bt m32,imm8 → rip-фиксап с immLen=0 вместо 1 → чтение глобала по
+    target+1 → `trap IN options` читал мусор → ложный HALT (KB п.113).
+15. КОРЕНЬ ObxTaAdr err 220: CPVamd64.Mem не принимал Stk/Ind от expr
+    (адрес-выражение a+4 в SYSTEM.GET) — фикс: материализация через
+    LongToPtr/Load (KB п.114). Probe26 зелёный, код верен.
+16. п.82 ЗАКРЫТ: .ocf пишется (побочный эффект п.108/109); Probe2.T
+    выполняется в BB64-консоли. Probe24: LONGINT-арифметика верна.
+17. Симлинки: Docu (ранее) + Sym (tools64/link-sym.sh, вызов из
+    test64.sh — иначе wipe). Механизм dev0: BB_USE_DIR=cwd(=bbcp64use),
+    fallback чтения в BB_CUSTOM_DIR/standardDir=bbcp — поэтому мир
+    собирался по 32-битным portable osf и не писал 64-битные.
+18. ObxCompileLog портирован на DevCPVamd64; in-BB компиляция даёт
+    err 249 (inconsistent import, fp TextModels.Attributes^ /
+    Properties.Property^) — смешение 32/64 osf; known issue,
+    не блокер (ConsCompiler64/DevCompiler64 покрывают функциональность).
+ОТКРЫТО: free(): invalid pointer при выходе GUI; ld.so _dl_fini assert
+при выходе из консоли ПОСЛЕ трапа; StdDebug падает при печати трапа;
+About Version/Build; ObxCompileLog err 249; conv-узел вокруг
+THISARRAY-adr (создатель не найден); verify-callconv.py; Int64 в
+одном регистре (KB Verification64 п.6.4).

@@ -1,0 +1,126 @@
+MODULE ObxCompileLog;
+
+IMPORT
+	Files, Strings, Views, TextModels, TextMappers, TextViews,
+	StdLog, DevCPM, DevCPT, DevCPB, DevCPP, DevCPV := DevCPVamd64	(* 64-бит: кодеген amd64 *), DevCommanders, Librarian;
+
+CONST
+	optChecks = 0; optAssert = 2; optObj = 3; optRef = 4;
+	optAllref = 5; optSrcpos = 6; optSigs = 8;
+	defopt = {optChecks, optAssert, optObj, optRef, optAllref, optSrcpos, optSigs};
+	lineSep = 0DX;
+
+VAR
+	srcReader: TextModels.Reader;
+	scan: TextMappers.Scanner;
+
+PROCEDURE LineOfPos (text: TextModels.Model; pos: INTEGER): INTEGER;
+	VAR rd: TextModels.Reader; ch: CHAR; line, p: INTEGER;
+BEGIN
+	rd := text.NewReader(NIL); rd.SetPos(0);
+	line := 1; p := 0;
+	WHILE p < pos DO
+		rd.ReadChar(ch);
+		IF ch = lineSep THEN INC(line) END;
+		INC(p)
+	END;
+	RETURN line
+END LineOfPos;
+
+PROCEDURE ColOfPos (text: TextModels.Model; pos: INTEGER): INTEGER;
+	VAR rd: TextModels.Reader; ch: CHAR; col, p: INTEGER;
+BEGIN
+	IF pos = 0 THEN RETURN 1 END;
+	rd := text.NewReader(NIL); rd.SetPos(0);
+	col := 1; p := 0;
+	WHILE p < pos DO
+		rd.ReadChar(ch);
+		IF ch = lineSep THEN col := 1 ELSE INC(col) END;
+		INC(p)
+	END;
+	RETURN col
+END ColOfPos;
+
+PROCEDURE DoCompile (src: TextModels.Reader; opt: SET; VAR err: BOOLEAN);
+	VAR ext, new: BOOLEAN; p: DevCPT.Node;
+BEGIN
+	DevCPM.Init(src, StdLog.text);
+	INCL(DevCPM.options, DevCPM.comAware);
+	DevCPT.Init(opt);
+	DevCPB.typSize := DevCPV.TypeSize;
+	DevCPT.processor := DevCPV.processor;
+	DevCPP.Module(p);
+	IF DevCPM.noerr THEN
+		IF DevCPT.libName # "" THEN EXCL(opt, optObj) END;
+		DevCPV.Init(opt); DevCPV.Allocate; DevCPT.Export(ext, new);
+		IF DevCPM.noerr & (optObj IN opt) THEN
+			DevCPV.Module(p)
+		END;
+		DevCPV.Close
+	END;
+	IF DevCPM.noerr & (new OR ext) THEN DevCPM.RegisterNewSym
+	ELSE DevCPM.DeleteNewSym
+	END;
+	DevCPT.Close;
+	err := ~DevCPM.noerr;
+	DevCPM.Close;
+	p := NIL
+END DoCompile;
+
+PROCEDURE RunCompile (text: TextModels.Model; beg: INTEGER; opt: SET; VAR err: BOOLEAN);
+BEGIN
+	srcReader := text.NewReader(NIL); srcReader.SetPos(beg);
+	DoCompile(srcReader, opt, err)
+END RunCompile;
+
+PROCEDURE CompileThis*;
+	VAR p: DevCommanders.Par; v: Views.View; t: TextModels.Model;
+		loc: Files.Locator; name: Files.Name; err: BOOLEAN;
+		beg, end: INTEGER; modName: ARRAY 64 OF CHAR;
+		line, col: INTEGER;
+BEGIN
+	p := DevCommanders.par;
+	IF p # NIL THEN
+		DevCommanders.par := NIL;
+		scan.ConnectTo(p.text); beg := p.beg; end := p.end;
+		scan.SetPos(beg);
+		scan.Scan;
+		IF scan.type = TextMappers.string THEN
+			modName := scan.string$;
+			StdLog.String("Compiling: "); StdLog.String(modName); StdLog.Ln;
+			Librarian.lib.GetSpec(modName, "Mod", loc, name);
+			IF (loc # NIL) & (loc.res = 0) THEN
+				v := Views.OldView(loc, name);
+				IF (v # NIL) & (v IS TextViews.View) THEN
+					t := v(TextViews.View).ThisModel();
+					RunCompile(t, 0, defopt, err);
+					IF err THEN
+						StdLog.Ln;
+						StdLog.String("--- Compilation Errors ---"); StdLog.Ln;
+						IF DevCPM.errpos >= 0 THEN
+							line := LineOfPos(t, DevCPM.errpos);
+							col := ColOfPos(t, DevCPM.errpos);
+							StdLog.String("  Last error at Line "); StdLog.Int(line);
+							StdLog.String(", Col "); StdLog.Int(col); StdLog.Ln
+						END;
+						StdLog.String("  Total errors: "); StdLog.Int(DevCPM.errors); StdLog.Ln;
+						StdLog.String("---"); StdLog.Ln
+					ELSE
+						StdLog.String("Compilation successful"); StdLog.Ln
+					END
+				ELSE
+					StdLog.String("Error: Cannot open module file: "); StdLog.String(modName); StdLog.Ln
+				END
+			ELSE
+				StdLog.String("Error: Module not found: "); StdLog.String(modName); StdLog.Ln
+			END
+		ELSE
+			StdLog.String("Error: Module name expected"); StdLog.Ln
+		END
+	ELSE
+		StdLog.String("Error: No command parameters"); StdLog.Ln
+	END
+END CompileThis;
+
+BEGIN
+END ObxCompileLog.

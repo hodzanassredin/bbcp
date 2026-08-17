@@ -1086,7 +1086,13 @@ MODULE DevCPVamd64;
 		ELSE
 			expr(n, x, hint, stop + {mem}); offset := 0
 		END;
-		IF (x.form = Int64) & (x.mode # Con) THEN DevCPCamd64.LongToPtr(x, hint, stop) END;
+		IF x.mode # Con THEN
+			IF x.form = Int64 THEN DevCPCamd64.LongToPtr(x, hint, stop)
+				(* 64-бит: адрес в SYSTEM.GET/PUT/BIT может быть LONGINT (пара lo/hi) — собрать в один регистр *)
+			ELSE DevCPCamd64.Load(x, {}, {})
+				(* 64-бит: expr могла оставить адрес на машстеке/в памяти (Assert при stop wreg) — материализовать в регистр *)
+			END
+		END;
 			(* 64-бит: адрес в SYSTEM.GET/PUT/BIT может быть LONGINT (пара lo/hi) — собрать в один регистр *)
 		DevCPCamd64.Mem(x, offset, typ)
 	END Mem;

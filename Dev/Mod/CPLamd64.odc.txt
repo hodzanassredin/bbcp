@@ -865,7 +865,9 @@ MODULE DevCPLamd64;
 		DevCPE.GenByte(0FH);
 		IF num.mode = Con THEN
 			ASSERT(num.obj = NIL);
-			DevCPE.GenByte(0BAH); GenCExt(op, dst); DevCPE.GenByte(num.offset)
+			ripTrail := 1;	(* 64-бит: bt m32,imm8 — imm8 следует за disp32; иначе [rip]-глобал читается по адресу target+1 (бит 31 options читался мусором -> HALT(100) в DevCPM.Mark) *)
+			DevCPE.GenByte(0BAH); GenCExt(op, dst); DevCPE.GenByte(num.offset);
+			ripTrail := 0
 		ELSE
 			ASSERT((num.mode = Reg) & (num.form = Int32));
 			DevCPE.GenByte(83H + op); GenDExt(num, dst)

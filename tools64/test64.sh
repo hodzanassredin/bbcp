@@ -22,3 +22,6 @@ esac
 
 # Dev-пайплайн (для компиляции внутри BB64) — всегда добираем в конце
 "$HOME/sources/bbcp/tools64/build-dev64.sh" 2>&1 | grep -E '== ConsCompiler64|== DevCompiler64' | tail -2
+
+# долинковать portable .osf из bbcp (см. link-sym.sh)
+"$HOME/sources/bbcp/tools64/link-sym.sh"

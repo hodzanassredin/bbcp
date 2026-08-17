@@ -872,3 +872,50 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      (в) About-диалог показывает литералы appVersion/buildNum/buildDate
      — подстановка полей версии не работает (мелочь, отдельная задача).
      (г) При закрытии GUI: free(): invalid pointer (libc) — открыто.
+
+111. **LONGINT-арифметика (+,-,*,DIV,MOD,сравнения) — ПРАВИЛЬНА**
+     (ObxProbe24: a=1234567890123, b=10007; a+b, a-b, -a, a*2,
+     a DIV b=123370429, a MOD b=7120, c=-a: c DIV b=-123370430
+     (floor!), c MOD b=2887 (неотрицательный) — всё сошлось с CP-
+     семантикой). DIV/MOD для Int64 идут НЕ через CPLamd64.GenDiv
+     (там 32-битный idiv/cdq) — видимо через x87-путь; TODO64-коммент
+     в CPLamd64:804 (dec rax/cqo) относится к мёртвому для Int64 пути.
+     Ошибки err 260 при этом НЕ выдаётся — CPVamd64 потерял проверку
+     `f = Int64 → err(260)` которая была в CPV486; фактически Int64
+     арифметика реализована (LongAdd/LongSub/LongCmp + FPU) — это
+     надо задокументировать, а не "чинить" обратно.
+
+112. **п.82 ЗАКРЫТ: in-BB компиляция пишет .ocf** (2026-08-17).
+     ConsCompiler64.Compile("", "Probe2.cp") в BB64-консоли создаёт
+     System/Code/Probe2.ocf, Probe2.T выполняется без
+     CommandError CodeFileNotFound. Полечено как ПОБОЧНЫЙ ЭФФЕКТ
+     фиксов кодгена п.108/п.109 (Int64-константа в параметрах ломала
+     Files.Register/OutCode — там передаются адреса/размеры).
+
+113. **ripBased-фиксап: bt m32,imm8 эмитился с типом 106 (immLen=0)
+     вместо 107** — CPLamd64.GenBitOp не выставлял ripTrail := 1 для
+     Con-ветки (0F BA /5 ib — imm8 СЛЕДУЕТ за disp32). Лоадер считал
+     disp = target-(linkadr+4+0) вместо -(linkadr+4+1) → ВСЕ
+     rip-relative доступы к глобалам через bt с imm читали target+1:
+     `31 IN options` (trap IN options) читал бит 7 первого байта
+     СЛЕДУЮЩЕГО глобала → флаконо-зависимый HALT(100) в DevCPM.Mark
+     при компиляции внутри BB64 (компилятор падал SIGILL вместо
+     отчёта об ошибке). Диагностика: ocf.py bytes на месте HALT —
+     маркер 6a вместо 6b в старшем байте disp32. Аудит: остальные
+     инструкции с imm после disp32 (mov m,imm; ALU grp1; test; shifts)
+     ripTrail выставляют — GenBitOp был единственным пропущенным.
+     Фикс: ripTrail := 1 ... 0 вокруг 0BAH-эмиссии (идиома как в
+     GenShiftOp). После фикса — полная пересборка мира.
+
+114. **CPCamd64.Mem: SYSTEM.GET/PUT/BIT с адресом-выражением (a+4 в
+     VAL(ANYPTR,...)) — err 220** (проявлялось как ObxTaAdr err 220).
+     expr с stop ⊇ wreg законно оставляет значение в Stk/Ind
+     (Assert в конце expr пушит, если регистры результата ∈ stop);
+     Mem требовал Con|Reg (32-бит: expr всегда отдавала Reg).
+     Фикс в CPVamd64.Mem: `IF x.mode # Con THEN IF x.form = Int64 THEN
+     LongToPtr ELSE Load(x,{},{}) END END` — материализация адреса
+     в регистр. Урок для Verification64 п.6.4-B: постусловие expr —
+     "x.mode ∈ {Con,Reg,Stk,Ind,...} в зависимости от stop" — Mem
+     должен принимать всё, что expr может вернуть по контракту,
+     а не только Reg. Probe26 (a+4 внутри VAL) — компилируется,
+     код верен (lea addr; fild/fadd/fistp для +4; mov (rax),eax).

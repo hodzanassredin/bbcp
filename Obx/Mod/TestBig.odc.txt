@@ -2,33 +2,86 @@ MODULE ObxTestBig;
 
 IMPORT SYSTEM, StdLog, Kernel;
 
-PROCEDURE Go*;
-    CONST n = 80; chunk = 64 * 1024 * 1024;
-    TYPE Arr = POINTER TO ARRAY OF CHAR;
-    VAR p: ARRAY n OF Arr; i: INTEGER; j, a, u: LONGINT;
+VAR bad: INTEGER;
+
+PROCEDURE CHK (IN s: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
+    IF ~ok THEN INC(bad); StdLog.String("BAD "); StdLog.String(s); StdLog.Ln END
+END CHK;
+
+PROCEDURE PInt (IN s: ARRAY OF CHAR; x: LONGINT);
+BEGIN StdLog.String(s); StdLog.Int(x) END PInt;
+
+PROCEDURE Go*;
+    CONST n = 80; chunk = 64 * 1024 * 1024;   (* SHORTCHAR: 1 байт/элемент, ровно 5 ГБ *)
+    TYPE Arr = POINTER TO ARRAY OF SHORTCHAR;
+    VAR p: ARRAY n OF Arr;
+        i: INTEGER; j: LONGINT;
+        u0, uAlloc, u1, uFinal, expect, a: LONGINT;
+BEGIN
+    bad := 0;
+    u0 := Kernel.Used();
+    (* 1) аллоцируем 5 ГБ, трогаем каждую страницу *)
     i := 0;
     WHILE i < n DO
         NEW(p[i], chunk);
-        IF p[i] = NIL THEN StdLog.String("alloc FAIL"); StdLog.Int(i); StdLog.Ln; RETURN END;
-        j := 0;
-        WHILE j < chunk DO p[i][j] := CHR(i + 1); INC(j, 4096) END;
-        INC(i)
+        IF p[i] = NIL THEN
+            CHK("alloc", FALSE); PInt(" i=", i); StdLog.Ln; i := n
+        ELSE
+            j := 0;
+            WHILE j < chunk DO p[i][j] := SHORT(CHR(i + 1)); INC(j, 4096) END;
+            INC(i)
+        END
     END;
+    uAlloc := Kernel.Used();
+    (* кластер = align16(headSize 28 + chunk) + 24 = 67108936 на кусок *)
+    expect := LONG(n) * 67108936;
+    PInt("allocated=", uAlloc - u0); PInt(" expected=", expect); StdLog.Ln;
+    CHK("alloc accounting", (uAlloc - u0 >= expect) & (uAlloc - u0 <= expect + 1024 * 1024));
     a := SYSTEM.VAL(LONGINT, p[n - 1]);
-    StdLog.String("allocated 80 x 64MB = 5GB, last ptr dec="); StdLog.Int(a); StdLog.Ln;
+    PInt(" last ptr=", a); StdLog.Ln;
+    CHK("heap above 4G", a > 4000000000L);
+    (* 2) полный GC на живой куче, данные должны выжить *)
     Kernel.Collect;
     i := 0;
     WHILE i < n DO
         j := 0;
         WHILE j < chunk DO
-            IF p[i][j] # CHR(i + 1) THEN StdLog.String("DATA BAD"); StdLog.Int(i); StdLog.Ln; RETURN END;
+            IF p[i][j] # SHORT(CHR(i + 1)) THEN CHK("data after GC", FALSE); PInt(" i=", i); StdLog.Ln; j := chunk END;
             INC(j, 4096)
         END;
         INC(i)
     END;
-    u := Kernel.Used();
-    StdLog.String("TestBig OK, Used="); StdLog.Int(u); StdLog.Ln
+    (* 3) освобождаем нечётные, GC, Used должен упасть минимум на n/2 кусков.
+       Слабина -2 куска: MarkLocals — консервативный скан стека, темп-слот
+       собственного фрейма Go держит последний тронутый p[i] (это НЕ утечка:
+       после возврата из Go и переиспользования стека блок освобождается) *)
+    i := 1;
+    WHILE i < n DO p[i] := NIL; INC(i, 2) END;
+    Kernel.Collect;
+    u1 := Kernel.Used();
+    PInt("used after free half=", u1 - u0); StdLog.Ln;
+    CHK("free half", u1 <= uAlloc - (n DIV 2 - 2) * 67108836);
+    (* 4) чётные пережили GC *)
+    i := 0;
+    WHILE i < n DO
+        j := 0;
+        WHILE j < chunk DO
+            IF p[i][j] # SHORT(CHR(i + 1)) THEN CHK("survivors", FALSE); PInt(" i=", i); StdLog.Ln; j := chunk END;
+            INC(j, 4096)
+        END;
+        INC(i, 2)
+    END;
+    (* 5) всё освобождаем, GC, Used возвращается к базе (слабина: до 2 кластеров
+       могут остаться пришпиленными сталовыми указателями в стеке — см. выше) *)
+    i := 0;
+    WHILE i < n DO p[i] := NIL; INC(i) END;
+    Kernel.Collect;
+    uFinal := Kernel.Used();
+    PInt("used final=", uFinal - u0); StdLog.Ln;
+    CHK("heap released", uFinal - u0 < 2 * 67108936 + 16 * 1024 * 1024);
+    IF bad = 0 THEN StdLog.String("TestBig OK") ELSE PInt("TestBig FAILURES=", bad) END;
+    StdLog.Ln
 END Go;
 
 END ObxTestBig.

@@ -1,0 +1,31 @@
+MODULE ObxProbe28;
+
+	IMPORT Console, Strings, SYSTEM;
+
+	PROCEDURE WL (IN s: ARRAY OF CHAR; x: LONGINT);
+		VAR t: ARRAY 40 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END WL;
+
+	PROCEDURE Go*;
+		VAR a, b: LONGINT; i, j: INTEGER;
+	BEGIN
+		a := 1234567890123; b := 10007; i := 5;
+		WL("ASH(a,3)=", ASH(a, 3));	(* 9876543120984 *)
+		WL("ASH(a,-2)=", ASH(a, -2));	(* 308641972530 *)
+		WL("ASH(a,i)=", ASH(a, i));	(* переменный сдвиг: 39506172483936 *)
+		WL("ABS(-a)=", ABS(-a));
+		WL("MIN(a,b)=", MIN(a, b));
+		WL("MAX(a,b)=", MAX(a, b));
+		IF ODD(a) THEN Console.WriteStr("ODD(a)=TRUE") ELSE Console.WriteStr("ODD(a)=FALSE") END;
+		Console.WriteLn;
+		a := -a;
+		WL("ASH(-a,2)=", ASH(a, 2));	(* -4938271560492 *)
+		j := 123456789;
+		WL("i: LSH(j,3)=", SYSTEM.LSH(j, 3));	(* INTEGER: 987654312 *)
+		WL("i: LSH(j,-4)=", SYSTEM.LSH(j, -4));	(* 7716049 (логический!) *)
+		WL("i: ROT(j,4)=", SYSTEM.ROT(j, 4))	(* 1975308624 *)
+	END Go;
+
+END ObxProbe28.

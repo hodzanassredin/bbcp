@@ -973,3 +973,39 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
        как minor issue.
      - В логе при трапе: "~TRAP sig=4 code=2" — штатный SIGILL от
        HALT-инструкции ObxTrap, обработан kernel'ом.
+
+120. **РАЗГАДКА intrealtyp (закрывает " conv-узел не найден" из п.108/6.6).
+     Int64-арифметика = x87 FPU, дизайн BB 1.7/2.0 LARGEINT.**
+     DevCPH.UseReals (вызывается из CPVamd64: `UseReals(prog,
+     {longDop, longMop})`) обходит AST ПОСЛЕ CPB и перетипирует:
+     Ndop с Int64-операндом → оба операнда force-Convert в intrealtyp,
+     сам узел → intrealtyp; Nmop abs/minus с Int64 — аналогично.
+     На выходе из рекурсии `~(hide IN opts) & (n.typ = intrealtyp)` →
+     Convert(n, int64typ) — ВОТ создатель conv-узлов с typ=intrealtyp
+     (тот самый вокруг adr-аргумента THISARRAY из п.108; CPH.odc не
+     имеет .txt-экспорта, поэтому grep по txt его не находил!).
+     intrealtyp = клон real64typ (CPT:1735): expr() в CPVamd64 берёт
+     ветку `(f IN realSet)` → FloatDOp → fildll/faddp/fdivrp/fprem/
+     frndint; Push материализует: `IF x.typ = intrealtyp THEN x.form
+     := Int64` → FISTP qword. Целочисленный путь CPCamd64 (LongAdd/
+     LongSub/LongCmp/LongNeg/LargeInc, пары lo/hi) для выражений
+     ЗАТЕНЁН UseReals — жив для INC/DEC (LargeInc) и SYSTEM-путей
+     (LongToPtr для адресов). GenDiv/GenMul (CPLamd64) Int64 НЕ
+     достигают — TODO64-коммент про "dec rax + cqo для Int64" на
+     CPLamd64:804 МОТ (moot): GenDiv видит только <= Int32.
+
+121. **Верификация LONGINT (Probe27+Probe28, сверено с Python):**
+     +,-,*,DIV,MOD (вкл. floor-семантику отрицательных), унарный минус,
+     сравнения, ASH (конст и ПЕРЕМЕННЫЙ сдвиг), ABS, MIN, MAX, ODD,
+     max/min/±2^62 — ВСЁ ВЕРНО. Два известных ограничения:
+     (а) SYSTEM.LSH/ROT на LONGINT → err 260 компиляции (UseReals
+     делает узел intrealtyp, а lsh/rot исключены из FPU-ветки expr →
+     CPVamd64:1258 err(260)); на INTEGER работают. Фикс = целочисленный
+     сдвиг Int64 в кодегене (или не трогать lsh/rot в UseReals).
+     (б) Переполнение Int64 → SIGFPE (FPE_FLTINV от FISTP вне
+     диапазона), НЕ молчаливый wrap: в прологе процедур с FPU
+     стоит `fldcw 0x33E` — invalid-op exception РАЗМАСКИРОВАН
+     (дефолт x87 0x37F маскирует всё). Побочный эффект: 0.0/0.0 и
+     прочие invalid real-опы тоже будут трапать — отличие от 32-бит.
+     Решение осознанное (трап вместо тихой порчи), но задокументировать.
+     NB: LSH/ROT в bbcp — SYSTEM-функции (CPT:1676), не преdeclared.

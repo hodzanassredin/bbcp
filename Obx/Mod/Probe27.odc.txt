@@ -1,0 +1,32 @@
+MODULE ObxProbe27;
+
+	IMPORT Console, Strings;
+
+	PROCEDURE WL (IN s: ARRAY OF CHAR; x: LONGINT);
+		VAR t: ARRAY 40 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(s); Console.WriteStr(t); Console.WriteLn
+	END WL;
+
+	PROCEDURE Go*;
+		VAR a, b, c: LONGINT;
+	BEGIN
+		a := 1234567890123; b := 10007;
+		WL("a+b=", a + b);	(* 1234567890130 *)
+		WL("a-b=", a - b);	(* 1234567880116 *)
+		WL("a*b=", a * b);	(* 12354320876460861 *)
+		WL("a DIV b=", a DIV b);	(* 123370429 *)
+		WL("a MOD b=", a MOD b);
+		c := -a;
+		WL("c DIV b=", c DIV b);
+		WL("c MOD b=", c MOD b);
+		WL("max=", 9223372036854775807);
+		WL("max-1=", 9223372036854775807 - 1);
+		WL("min+1=", -9223372036854775807 - 1 + 1);
+		a := 4611686018427387904;	(* 2^62 *)
+		WL("2^62=", a);
+		WL("2^62 DIV 3=", a DIV 3);
+		WL("2^62 MOD 3=", a MOD 3)
+	END Go;
+
+END ObxProbe27.

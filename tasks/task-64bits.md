@@ -513,3 +513,29 @@ THISARRAY-adr (создатель не найден); verify-callconv.py; Int64 
 err 249; conv-узел вокруг THISARRAY-adr (создатель не найден, закрыт
 стражем); verify-callconv.py; ASSERT-постусловия в кодегене; Int64 в
 одном регистре (KB Verification64 п.6.4).
+
+== 2026-08-17 (4): Int64-архитектура разгадана, LONGINT верифицирован ===
+20. РАЗГАДКА: Int64-арифметика идёт через x87 FPU — DevCPH.UseReals
+    перетипирует Int64-узлы в intrealtyp (клон real64typ) после CPB
+    (KB п.120). Закрыта загадка conv-узла из п.108: его создаёт
+    CPH.Convert(n, int64typ). CPH.odc без txt-экспорта — урок:
+    grep по *.odc.txt не полон, для модулей без txt использовать
+    odcey text.
+21. Probe27/Probe28: LONGINT полностью верифицирован против Python
+    (арифметика, DIV/MOD floor, ASH конст/перем, ABS/MIN/MAX/ODD,
+    границы ±2^62, MAX/MIN LONGINT). Регрессия probes.sh: 19/19 PASS.
+22. Ограничения (задокументированы, KB п.121): SYSTEM.LSH/ROT на
+    LONGINT → err 260 (нужен целочисленный сдвиг Int64); переполнение
+    Int64 → SIGFPE-трап вместо wrap (fldcw 0x33E размаскирует
+    invalid-op); TODO64 на CPLamd64:804 (GenDiv Int64) — moot, GenDiv
+    видит только <=Int32, комментарий можно поправить при чистке.
+23. Инвентаризация TODO64-маркеров: Std/Debug(370,405 — SHORT, куча
+    <4ГБ, безопасно пока MAP_32BIT), Std/Rasters(33,326 — закрыты),
+    Lin/Registry:210 (Meta.Lookup виснет — stub RETURN FALSE),
+    CPCamd64:2586 (TLS redesign), Compiler64:647 (по дизайну),
+    CPM:475 (регистровая диагностика -777/-778/-779), CPLamd64:804
+    (moot, п.120).
+ОТКРЫТО: SYSTEM.LSH/ROT на LONGINT (err 260); g_object_unref на
+выходе GUI (minor); Lin/Registry:210 Meta.Lookup hang; ld.so _dl_fini
+после трапа в консоли (низкий); ObxCompileLog err 249; verify-
+callconv.py; ASSERT-постусловия в кодегене; CPCamd64:2586 TLS.

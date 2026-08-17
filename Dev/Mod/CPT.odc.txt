@@ -97,7 +97,7 @@ MODULE DevCPT;
 		real32typ*, real64typ*, settyp*, string8typ*, niltyp*, notyp*, sysptrtyp*,
 		anytyp*, anyptrtyp*, char16typ*, string16typ*, int64typ*,
 		restyp*, iunktyp*, punktyp*, guidtyp*,
-		intrealtyp*, lreal64typ*, lint64typ*, lchar16typ*: Struct;
+		lreal64typ*, lint64typ*, lchar16typ*: Struct;
 		nofGmod*: BYTE;	(*nof imports*)
 		GlbMod*: ARRAY maxImps OF Object;	(* .right = first object, .name = module import name (not alias) *)
 		SelfName*: Name;	(* name of module being compiled *)
@@ -1732,7 +1732,6 @@ MODULE DevCPT;
 		string16typ.BaseTyp := char16typ;
 		guidtyp.BaseTyp := int8typ;
 		
-		NEW(intrealtyp); intrealtyp^ := real64typ^;
 		impCtxt.ref[Undef] := undftyp; impCtxt.ref[Byte] := bytetyp;
 		impCtxt.ref[Bool] := booltyp;  impCtxt.ref[Char8] := char8typ;
 		impCtxt.ref[Int8] := int8typ;  impCtxt.ref[Int16] := int16typ;

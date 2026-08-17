@@ -357,7 +357,6 @@ MODULE DevCPCamd64;
 		IF x.form IN realSet THEN
 			Load(x, {}, {}); DecStack(x.form);
 			Free(x); x.mode := Stk;
-			IF x.typ = DevCPT.intrealtyp THEN x.form := Int64 END;
 			DevCPLamd64.GenFStore(x, TRUE)
 		ELSIF x.form = Int64 THEN
 			Free(x); DevCPLamd64.GenPush(x); x.mode := Stk
@@ -855,7 +854,7 @@ MODULE DevCPCamd64;
 	
 	PROCEDURE Entier(VAR x: DevCPLamd64.Item; typ: DevCPT.Struct; hint, stop: SET);
 	BEGIN
-		IF typ # DevCPT.intrealtyp THEN Floor(x, FALSE) END;
+		Floor(x, FALSE);
 		DevCPLamd64.GenFStore(x, TRUE);
 		IF (x.mode = Stk) & (stk IN stop) THEN Pop(x, x.form, hint, stop) END
 	END Entier;
@@ -1061,38 +1060,6 @@ MODULE DevCPCamd64;
 	
 	PROCEDURE^ MakeCond* (VAR x: DevCPLamd64.Item);
 
-	PROCEDURE MakeLongHi (VAR z, zh: DevCPLamd64.Item);	(* zh = старшая половина Int64-пары z *)
-	BEGIN
-		zh := z;
-		IF z.mode = Con THEN zh.offset := z.scale ELSE zh.reg := z.index END;
-		zh.form := Int32
-	END MakeLongHi;
-
-	PROCEDURE LongAdd (VAR x, y: DevCPLamd64.Item);	(* x += y (Int64-пара: add lo, adc hi) *)
-		VAR xi, yi: DevCPLamd64.Item;
-	BEGIN
-		MakeLongHi(x, xi); MakeLongHi(y, yi);
-		DevCPLamd64.GenAddC(y, x, TRUE, FALSE);
-		DevCPLamd64.GenAddC(yi, xi, FALSE, FALSE)
-	END LongAdd;
-
-	PROCEDURE LongSub (VAR x, y: DevCPLamd64.Item);	(* x -= y (Int64-пара: sub lo, sbb hi) *)
-		VAR xi, yi: DevCPLamd64.Item;
-	BEGIN
-		MakeLongHi(x, xi); MakeLongHi(y, yi);
-		DevCPLamd64.GenSubC(y, x, TRUE, FALSE);
-		DevCPLamd64.GenSubC(yi, xi, FALSE, FALSE)
-	END LongSub;
-
-	PROCEDURE LongNeg (VAR x: DevCPLamd64.Item);	(* x := -x (neg lo; adc hi,0; neg hi) *)
-		VAR xi, c: DevCPLamd64.Item;
-	BEGIN
-		MakeLongHi(x, xi);
-		DevCPLamd64.GenNeg(x, FALSE);
-		DevCPLamd64.MakeConst(c, 0, Int32); DevCPLamd64.GenAddC(c, xi, FALSE, FALSE);
-		DevCPLamd64.GenNeg(xi, FALSE)
-	END LongNeg;
-
 	PROCEDURE Materialize (VAR x: DevCPLamd64.Item; cc: INTEGER);	(* флаги -> 0/1 в регистре *)
 		VAR c, z: DevCPLamd64.Item;
 	BEGIN
@@ -1101,34 +1068,6 @@ MODULE DevCPCamd64;
 		DevCPLamd64.GenSetCC(cc, c);
 		Free(x); x := c
 	END Materialize;
-
-	PROCEDURE LongCmp (VAR x, y: DevCPLamd64.Item; subcl: BYTE; rev: BOOLEAN);
-		(* сравнение Int64-пар: eql/neq через xor+or; lss..geq: cmp hi, затем unsigned cmp lo *)
-		VAR xi, yi: DevCPLamd64.Item; lab, done: DevCPLamd64.Label; cc: INTEGER;
-	BEGIN
-		MakeLongHi(x, xi); MakeLongHi(y, yi);
-		IF subcl IN {eql, neq} THEN
-			DevCPLamd64.GenXor(yi, xi);
-			DevCPLamd64.GenXor(y, x);
-			DevCPLamd64.GenOr(xi, x);	(* x.lo | x.hi, флаги *)
-			Free(y);
-			setCC(x, subcl, rev, FALSE)
-		ELSE
-			lab := DevCPLamd64.NewLbl; done := DevCPLamd64.NewLbl;
-			DevCPLamd64.GenComp(yi, xi);	(* cmp hi (знаковое) *)
-			DevCPLamd64.GenJump(ccNE, lab, TRUE);
-			DevCPLamd64.GenComp(y, x);	(* hi равны: cmp lo (беззнаковое) *)
-			setCC(x, subcl, rev, FALSE); cc := x.offset;
-			Materialize(x, cc);
-			DevCPLamd64.GenJump(ccAlways, done, FALSE);
-			DevCPLamd64.SetLabel(lab);
-			setCC(x, subcl, rev, TRUE); cc := x.offset;
-			Materialize(x, cc);
-			DevCPLamd64.SetLabel(done);
-			Free(y);
-			MakeCond(x)
-		END
-	END LongCmp;
 
 	PROCEDURE IntDOp* (VAR x, y: DevCPLamd64.Item; subcl: BYTE; rev: BOOLEAN);
 		VAR local: DevCPLamd64.Label;
@@ -1844,7 +1783,7 @@ lx	:= LONG(SHORT(ly))	y b+	y w*	x w	*
 					DevCPLamd64.GenTest(a, c)
 				END
 			END;
-			(* ap.mode = Stk: FPU-вычисленное значение (intrealtyp) уже лежит на машстеке
+			(* ap.mode = Stk: FPU-вычисленное значение уже лежит на машстеке
 			   (DecStack + FISTP в ветке Push), повторный GenPush дублирует слот и сдвигает рамку *)
 			IF ap.mode # Stk THEN DevCPLamd64.GenPush(ap) END; Free(ap);
 			tag.typ := recTyp

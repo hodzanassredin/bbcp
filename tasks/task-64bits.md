@@ -4,6 +4,45 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-17)
+
+### Этап 3: мёртвый код Int64-пар/FPU удалён (native Int64 — единственный путь)
+- Удалено: `CPCamd64` MakeLongHi/LongAdd/LongSub/LongNeg/LongCmp (мёртвые
+  lo/hi-хелперы), ветки intrealtyp в Push/Entier; `CPH.UseReals` целиком
+  (+ константы force/hide); `CPT.intrealtyp` (объявление + PostSetup);
+  мёртвая ветка intrealtyp в `CPVamd64` (Ndop). Зеркально почищены
+  CPC486/CPV486 (486-бэкенд, чтобы хотя бы компилировался).
+- LoadLong ЖИВОЙ (single-reg Int64) — не трогать. x87-ветки для REAL
+  остаются (REAL-арифметика на FPU — отдельная тема).
+- Экспортированный интерфейс CPT изменился → см. инцидент ниже.
+- `CPH.odc.txt` и `CPV486.odc.txt` созданы (их не было — ссылки на
+  intrealtyp прятались в бинарных .odc!).
+
+### Инцидент: сломался 32-битный bootstrap (dev0) и починен
+Удаление CPT.intrealtyp → dev0 не грузил свой компилятор. Починено через
+чужой компилятор bbcb2 + scratch /tmp/recov2 (рецепт в
+KB/Bootstrap32-symrot.md). Полный go32-прогон цепочки CP* — ok (кроме
+DevCPM — pre-existing sym-rot, его ocf рабочий, не трогаем).
+ПОБОЧНЫЙ ЭФФЕКТ этапа 3: 32-битная пересборка Kernel/System больше
+невозможна (нативный Int64 vs 486-бэкенд без intrealtyp → err 260).
+Принято: 32-bit legacy выкидываем, компилируем 32-бит только DevCP*.
+
+### Верификация этапа 3 (всё зелёное)
+- go32.sh: 12/13 модулей ok (DevCPM — rot, пропущен осознанно).
+- test64.sh System Lin Std Text Form Cons Obx: failed=1 of 222
+  (косметический ObxCompileLog в CompileSubs; build-dev64.sh добирает,
+  ocf свежий) + FigCmds/DevCompiler64/ConsCompiler64/Kernel64 ok.
+- probes.sh: **20/20 PASS**.
+- Консоль: OpenBrowser Tut-2 завершается без зависания.
+- GUI-проверка пользователем: ожидается.
+
+### Открыто (следующие задачи)
+- INTO→JO (ovflchk, только allchecks); CPCamd64:2586 TLS redesign;
+  g_object_unref CRITICAL на выходе GUI (minor); ld.so _dl_fini (низкий).
+- Sym-rot bbcp (KB/Bootstrap32-symrot.md): Kernel.osf 64-битный,
+  DevMarkers/DevCPM 32-бит не пересобираются. Стратегия: self-hosting.
+- Потом (отдельный этап): перенос мира в папку bbcb (самодостаточность).
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-08)
 
 ### Что работает

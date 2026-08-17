@@ -1252,7 +1252,6 @@ MODULE DevCPVamd64;
 							DevCPCamd64.FloatDOp(x, y, times, FALSE)
 						ELSE FloatDOp(n, x)
 						END
-					ELSIF n.typ = DevCPT.intrealtyp THEN DevCPM.err(260); expr(n.left, x, {}, {})
 					ELSE
 						CASE n.subcl OF
 						   times:

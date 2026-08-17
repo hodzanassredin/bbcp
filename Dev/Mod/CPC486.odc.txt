@@ -365,7 +365,7 @@ MODULE DevCPC486;
 		IF x.form IN realSet THEN
 			Load(x, {}, {}); DecStack(x.form);
 			Free(x); x.mode := Stk;
-			IF x.typ = DevCPT.intrealtyp THEN x.form := Int64 END;
+
 			DevCPL486.GenFStore(x, TRUE)
 		ELSIF x.form = Int64 THEN
 			Free(x); x.form := Int32; y := x;
@@ -848,7 +848,7 @@ MODULE DevCPC486;
 	
 	PROCEDURE Entier(VAR x: DevCPL486.Item; typ: DevCPT.Struct; hint, stop: SET);
 	BEGIN
-		IF typ # DevCPT.intrealtyp THEN Floor(x, FALSE) END;
+		Floor(x, FALSE);
 		DevCPL486.GenFStore(x, TRUE);
 		IF (x.mode = Stk) & (stk IN stop) THEN Pop(x, x.form, hint, stop) END
 	END Entier;

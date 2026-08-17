@@ -474,7 +474,9 @@ MODULE DevCPVamd64;
 			END;
 			IF proc.sysflag = guarded THEN INCL(proc.conval.setval, isGuarded) END;
 			IF isGuarded IN proc.conval.setval THEN
-				GetComKernel; vadr := -48
+				GetComKernel; vadr := -48;
+				DevCPM.err(271)	(* amd64: SEH-фреймы писались в FS:[0], а там TLS glibc;
+								   InterfaceTrapHandler на Linux — assert-stub. fail-fast *)
 			ELSE
 				vadr := 0;
 				IF imVar IN proc.conval.setval THEN DEC(vadr, 8) END;

@@ -686,3 +686,16 @@ g_object_unref (minor).
     probes.sh 20/20, probes-trap.sh 1/1.
 ОТКРЫТО: CPCamd64:2586 TLS; g_object_unref (minor); TODO64 в
 Std/Debug (ref-курсоры LONGINT, SHORT-куча) и Dev/CPM:475.
+
+== 2026-08-17 (11): TLS/FS:[0] — fail-fast вместо redesign ===
+40. ЗАКРЫТО (как wontfix-failfast): guarded/interface процедуры (isGuarded)
+    генерировали SEH-фреймы через FS:[0] — а там TLS glibc (self-pointer
+    TCB). Потребителя цепочки на Linux нет: Kernel.InterfaceTrapHandler —
+    assert-stub ("Running Windows/COM on Linux?"). Ни один модуль мира не
+    использует TO INTERFACE/[guarded] — путь мёртв. Вместо redesign:
+    CPVamd64.Parameters даёт err 271 ("guarded/interface procedures not
+    supported on amd64 (FS:[0] is glibc TLS)", Dev/Rsrc/Errors.odc).
+    Если когда-нибудь понадобятся интерфейсы — переделывать на глобальную
+    переменную цепочки (см. LinKernel.currentTryContext), не на FS.
+ОТКРЫТО: g_object_unref (minor); TODO64 в Std/Debug (ref-курсоры
+LONGINT, SHORT-куча) и Dev/CPM:475; чистка [LI]-принтов LinInit.

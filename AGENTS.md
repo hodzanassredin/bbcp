@@ -27,20 +27,24 @@ Oberon document); редактируемые копии — `.odc.txt` (OdcText 
 - `~/sources/bbcp` — это дерево (32-бит dev0 + исходники).
 - `~/sources/bbcp64use` — изолированные 64-битные Sym/Code (+ симлинки на Mod).
   Поддерева Dev там быть НЕ ДОЛЖНО.
-- `~/sources/bbcb2-2.0~a1.build332` — хост для OdcTextU (run-BlackBoxInterp) и
-  эталон Hr (правильный amd64 OCF).
+- `~/sources/bbcb2-2.0~a1.build332` — только эталон Hr; для сборки bbcp
+  НЕ нужен (round-trip .odc делает сама BB64 через OdcTextU.Batch).
 
 ## Команды
 
 ```sh
-tools64/sync-odc.sh        # .odc.txt -> .odc (только изменённые)
+tools64/sync-odc.sh        # .odc.txt -> .odc (только изменённые; хост — консоль BB64)
 tools64/go32.sh DevCPE     # 32-бит компиляция модулей (для dev0)
 tools64/go64.sh Kernel64   # amd64 компиляция модулей (в bbcp64use)
 tools64/test64.sh System   # полная amd64 сборка подсистем (wipe Sym/Code)
+tools64/mkworld64.sh       # скелет bbcp64use с нуля
 tools64/repack-dev0.sh     # репак dev0Linux (только для packed-модулей)
 echo 'DevCompiler64.CompileSubs System' | ./run-dev0   # из bbcp64use: полная сборка
 cd Dev/Rsrc && make -f Makefile64                      # загрузчик bbrun64
 ```
+
+Bootstrap с чистого клона: `mkworld64.sh` →
+`test64.sh System Lin Std Text Form Cons Obx` — всё, bbcb2 не нужен.
 
 ## Конвенции
 

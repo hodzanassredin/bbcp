@@ -4,6 +4,23 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, вечер)
+
+### bbcp самодостаточен (коммит 284ff345)
+- Round-trip .odc больше не требует bbcb2: модуль `OdcTextU` (bbcp
+  `Odc/Mod/TextU.odc.txt`) скомпилирован в мир и гоняется в консоли BB64
+  (`BB_CONSOLE=1 bbrun64 --console`). Пакетная команда `OdcTextU.Batch` читает
+  /tmp/odc-batch.txt (строки `I "in.txt" "out.odc"` / `E "in.odc" "out.txt"`).
+  ВАЖНО: из bbcp-версии убран импорт DevCommanders — иначе OdcTextU не грузится
+  в окне, когда Dev пересобирается.
+- Грабля, пойманная и вылеченная: ConsInterp САМ импортирует DevCommanders
+  (канал параметров команд) → build-dev64.sh компилирует DevCommanders ПЕРВЫМ,
+  до Batch-конвертации; иначе "code file for DevCommanders not found" диалог.
+- test64.sh порядок: sync-odc (до вайпа) → wipe → CompileSubs → Kernel64 →
+  OdcTextU → Fig → build-dev64 → link-sym. mkworld64.sh — скелет мира с нуля.
+- Полный цикл с нуля проверен: exit=0, 229/230 (ObxCompileLog добирается
+  в build-dev64), probes 22/22. bbcb2 остаётся только как эталон Hr.
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18)
 
 ### Точечные фиксы из аудита IntPtr (KB/IntPtrAudit-64.md)

@@ -957,3 +957,8 @@ untracked, без -f не попадут в коммит. Подтвержден
     даёт "multiply defined identifier"; стоковый 32-битный DevCompiler тот же
     код принимает (проверено на ObxTestFwd). Всплыло на Paket/Mod/Http.odc
     (Widget.d: Downloading). Искать в DevCPT обработку forward-типов.
+73. Ревизия закоммиченных бинарей: выкинуты ранние эксперименты из c9db8909
+    (bbrun64_clean/gui/test.c форки, sizes64, check_packed, testmain,
+    test64.c/.img, bb64.img). Оставлены осознанно: Dev/Code/*.ocf (seed),
+    dev0* (бутстрапы всех платформ), bbrun64/exeLinux64.img (свежие),
+    exe*BSD.img (плейсхолдеры под будущие порты).

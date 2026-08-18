@@ -1,0 +1,27 @@
+MODULE ObxProbe49;
+(** Регрессия KB/EntierStackBug.md: LoadLong не освобождал Stk-слот узкой
+	формы (movsxd [rsp] без add $8,rsp) -> сирота-слот сдвигал аргументы
+	вызова. P(a, SHORT(ENTIER(r)), b): при баге b читается из сироты (=x=2),
+	при фиксе b=333. Падал Paket: IntToString(SHORT(ENTIER(..)), buf) -> s=NIL. *)
+
+	IMPORT Console;
+
+	VAR r: REAL;
+
+	PROCEDURE P (a: INTEGER; x: LONGINT; b: INTEGER): BOOLEAN;
+	BEGIN
+		RETURN (a = 111) & (x = 2) & (b = 333)
+	END P;
+
+	PROCEDURE Go*;
+	BEGIN
+		r := 2.7;
+		IF P(111, SHORT(ENTIER(r)), 333) THEN
+			Console.WriteStr("Probe49 OK")
+		ELSE
+			Console.WriteStr("Probe49 FAIL")
+		END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe49.

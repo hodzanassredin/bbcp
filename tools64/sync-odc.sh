@@ -9,6 +9,10 @@ rm -f "$BATCH"
 n=0
 for txt in "$BB"/Mod64/*.odc.txt "$BB"/*/Mod/*.odc.txt; do
 	[ -e "$txt" ] || continue
+	# Cons/Mod/Compiler64.odc целенаправленно удалён (test64.sh: ConsCompiler64
+	# собирает build-dev64, иначе err 249) — не считать его «ждущим синка»,
+	# иначе после wipe мира (нет TextU.ocf) sync падает и тащит за собой go64.
+	[ "$txt" = "$BB/Cons/Mod/Compiler64.odc.txt" ] && continue
 	odc="${txt%.txt}"
 	if [ ! -e "$odc" ] || [ "$txt" -nt "$odc" ]; then
 		printf 'I "%s" "%s"\n' "$txt" "$odc" >> "$BATCH"

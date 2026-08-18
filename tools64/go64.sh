@@ -10,7 +10,7 @@ MARK=$(mktemp)
 for m in "$@"; do
 	case "$m" in
 		Dev*) echo "go64.sh: для Dev* используйте build-dev64.sh" >&2; exit 1;;
-		System*|Std*|Text*|Form*|Lin*|Cons*|Obx*|Odc*|Sql*|Xhtml*|Crypto*|Keep*|Lists*|Async*|Http*|Json*|Mcp*|Llm*|Hr*|Fjson*|Hyper*|Eds*|Fig*|Babel*|Coco*|Comm*|Cpc*|Aos*|Co_*|Kernel64) ;;
+		System*|Std*|Text*|Form*|Lin*|Cons*|Obx*|Odc*|Sql*|Xhtml*|Crypto*|Keep*|Lists*|Async*|Http*|Json*|Mcp*|Llm*|Hr*|Fjson*|Hyper*|Eds*|Fig*|Babel*|Coco*|Comm*|Cpc*|Aos*|Co_*|Paket*|Cuda*|Kernel64) ;;
 		*) # голое имя допустимо только для модулей System/Mod/<name>.odc*
 			if [ ! -e "$BB/System/Mod/$m.odc" ] && [ ! -e "$BB/System/Mod/$m.odc.txt" ]; then
 				echo "go64.sh: '$m' — имя должно быть ПОЛНЫМ (LinFiles, не Files)" >&2; exit 1
@@ -19,9 +19,23 @@ for m in "$@"; do
 done
 "$BB/tools64/sync-odc.sh" || { echo "go64: sync-odc FAILED — консоль мира мертва? Импортируйте через bbcb2 OdcTextU.Import (KB/RecordAlign64.md)" >&2; exit 1; }
 touch "$MARK"
+# 32-битные .osf в bbcp ПРЯЧЕМ (как в test64.sh): иначе компилятор подхватывает
+# их через fallback и получается PVFP mismatch (err 249) у модулей, чьи импорты
+# содержат приватные поля-указатели (PaketFiles/PaketDocTools над TextModels).
+for d in "$BB"/*/Sym; do
+	[ -d "$d" ] && mv "$d" "${d}32stash"
+done
+restore_sym() {
+	for d in "$BB"/*/Sym32stash; do
+		[ -d "$d" ] && mv "$d" "${d%32stash}"
+	done
+}
+# Прячем ТОЛЬКО Dev/Code (64-битные DevCP*.ocf ломают dev0 "corrupted code file").
+# Dev/Sym оставляем: без них импорты DevCommanders/DevCompiler дают err 152
+# (PaketFiles/PaketDocTools/PaketController).
 STASH="$USE/.dev-stash-go64"
-[ -d "$USE/Dev" ] && mv "$USE/Dev" "$STASH"
-cleanup() { [ -d "$STASH" ] && mv "$STASH" "$USE/Dev"; rm -f "$MARK"; }
+[ -d "$USE/Dev/Code" ] && { mkdir -p "$STASH"; mv "$USE/Dev/Code" "$STASH/Code"; }
+cleanup() { [ -d "$STASH/Code" ] && mv "$STASH/Code" "$USE/Dev/Code"; rmdir "$STASH" 2>/dev/null; restore_sym; rm -f "$MARK"; }
 trap cleanup EXIT
 trap 'exit 1' INT TERM PIPE	# иначе при смерти по сигналу мир остаётся без Dev
 cd "$USE"

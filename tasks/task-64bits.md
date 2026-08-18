@@ -1010,3 +1010,32 @@ untracked, без -f не попадут в коммит. Подтвержден
     ENTIER-пути). Заодно: трап-репорт теперь печатается в stdout и в GUI,
     имена процедур в стеке чинятся refs-фиксом (п.80).
 83. Отчёт для пересказа "зачем меняли выравнивание": KB/WhyAlignment.md.
+84. ИСПРАВЛЕН корневой кодген-баг из п.81/82 (KB/EntierStackBug.md). Корень
+    НЕ в эмиттере ENTIER, а в DevCPCamd64.LoadLong: ветка узких форм
+    (Int32/Set/Int16/...) читала x.mode=Stk через movsxd [rsp] БЕЗ снятия
+    слота (в отличие от Load/LoadW/LoadL — там Stk идёт через Pop). Цепочка:
+    SHORT(ENTIER(expr)) -> ConvMove кладёт Int32 на Stk (DecStack+fistpl,
+    by design) -> конверсия к формалу Int64 (LONGINT-параметр) -> LoadLong
+    movsxd + последующий push -> сирота-слот сдвигает ВСЕ ранее пушнутые
+    аргументы (IntToString получала s=NIL -> NIL deref в Paket). Фикс:
+    `IF x.mode = Stk THEN IncStack(x.form) END` после movsxd/movsx.
+    Аудит остальных читателей Stk (Load/LoadR/LoadW/LoadL/Entier/Copy/Param)
+    — чисто, все снимают слот. Инвариант: любой путь, читающий x.mode=Stk,
+    обязан освободить слот (Pop или IncStack ПОСЛЕ чтения).
+    Проверка: Probe49 (P(111, SHORT(ENTIER(r)), 333); при баге b=2 вместо
+    333), дизасм PaketHttp: movslq;add $8,%rsp;push — слот снимается.
+    probes 27/27, Probe41 (HTTP GET 26КБ с blackbox.oberon.org) OK.
+85. Воркфлоу-фиксы по итогам пересборки:
+    - sync-odc.sh: Cons/Mod/Compiler64.odc.txt исключён (test64 целенаправленно
+      удаляет его .odc — иначе "вечный pending" ронял sync на мёртвой консоли
+      и тянул за собой go64 Kernel64 после wipe).
+    - go64.sh: прячет 32-битные */Sym bbcp на время компиляции (как test64) —
+      иначе PVFP mismatch err 249 (PaketFiles/PaketDocTools над TextModels);
+      прячет только Dev/Code, а НЕ весь Dev — Dev/Sym нужен для импортов
+      DevCommanders/DevCompiler (иначе err 152); whitelist + Paket*, Cuda*.
+    - Paket с нуля в мире: нужен Comm (CommStreams, CommTCP, CommTCP__Lin) —
+      PaketHttp импортирует CommStreams; порядок: Comm*, затем PaketHttp,
+      PaketModel, PaketFeed, PaketFiles, PaketReader, PaketView,
+      PaketController, PaketDocTools, PaketObxHttp.
+    - Грабля: Grep по каталогу молча пропускает *.odc.txt (.gitignore) —
+      include_ignored=true.

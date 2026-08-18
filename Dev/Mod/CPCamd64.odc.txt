@@ -457,6 +457,7 @@ MODULE DevCPCamd64;
 			ELSE
 				DevCPLamd64.GenExtMove(x, r)	(* movsx/movzx r64 (REX.W внутри) *)
 			END;
+			IF x.mode = Stk THEN IncStack(x.form) END;	(* Stk-слот прочитан — освободить, иначе сирота-слот сдвигает аргументы вызова (ENTIER->SHORT->LONGINT пар) *)
 			x.mode := Reg; x.reg := r.reg; x.index := 0; x.scale := 0
 		END;
 		x.form := Int64

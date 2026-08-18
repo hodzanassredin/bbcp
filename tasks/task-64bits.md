@@ -52,11 +52,12 @@
   TLS — осознанный fail-fast err 271 вместо redesign (KB/TLS-guarded-failfast.md,
   CPCamd64:2586 не актуален). Остались minor: g_object_unref на выходе GUI
   (не воспроизводится), ld.so _dl_fini (низкий приоритет).
-- Аудит/перенос расширений — отдельный этап. В bbcp есть только: Check, Com,
-  Comm, Ctl, Fbsd, Fig(готова), Hr(эталон), Mdi, Nbsd, Obsd, Ole, Paket, Sql,
-  Win, Xhtml. Подсистемы из bbcb2 (Aos, Crypto, _Http, Json, Mcp, Fjson, Async,
-  Co_, Lists, Keep, Hyper, Eds, Coco, Babel, Cpc, Llm, Sdl2, Ogl, W3c) ещё
-  НЕ перенесены в bbcp.
+- Расширения (Aos, Crypto, _Http, Json, Mcp, Fjson, Async, Co_ и т.д.) —
+  НЕ переносим в bbcp: это отдельные пакеты, ставятся через Paket, порт каждого
+  — работа в его собственном репо.
+- В bbcp остаются платформенные мёртвые подсистемы (Win, Ole, Com, Ctl, Mdi,
+  Fbsd, Nbsd, Obsd) — на amd64-Linux не нужны, кандидаты на выброс (отдельно).
+- Paket оставить: это пакетный менеджер, нужен для установки расширений.
 
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-17)
 

@@ -1,0 +1,18 @@
+MODULE ObxProbe46;
+(** bootInfo: argc/argv доходят до CP (bbrun64 пишет смещения руками:
+	Kernel.BootInfo = modList@0, argv@8, argc@16 — rule-инвариантно). *)
+
+	IMPORT Console, Strings, HK := LinKernel;
+
+	PROCEDURE Go*;
+		VAR s: ARRAY 16 OF CHAR;
+	BEGIN
+		Console.WriteStr("argc="); Strings.IntToString(HK.argc, s); Console.WriteStr(s);
+		IF (HK.argc >= 1) & (HK.argv # NIL) & (HK.argv[0] # NIL) & (HK.argv[0][0] # 0X) THEN
+			Console.WriteStr(" argv0[0]="); Strings.IntToString(ORD(HK.argv[0][0]), s); Console.WriteStr(s);
+			Console.WriteStr(" Probe46 OK")
+		ELSE Console.WriteStr(" Probe46 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe46.

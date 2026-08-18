@@ -1,0 +1,50 @@
+MODULE ObxProbe41;
+(** HTTP GET через CommStreams/CommTCP: getaddrinfo (hostname!) + connect +
+	send/recv против живого http://blackbox.oberon.org/list. *)
+
+	IMPORT SYSTEM, Console, Strings, CommStreams, CT := CommTCP__Lin;
+
+	PROCEDURE Fail (stage: ARRAY OF CHAR; res: INTEGER);
+		VAR s: ARRAY 16 OF CHAR;
+	BEGIN
+		Console.WriteStr("Probe41 FAIL "); Console.WriteStr(stage);
+		Strings.IntToString(res, s); Console.WriteStr(s); Console.WriteLn
+	END Fail;
+
+	PROCEDURE Go*;
+		VAR s: CommStreams.Stream; res, i, n, total, idle, reqlen: INTEGER;
+			req: ARRAY 80 OF CHAR; reqB: ARRAY 80 OF BYTE;
+			buf: ARRAY 64 OF BYTE; first: ARRAY 12 OF CHAR;
+			num: ARRAY 16 OF CHAR;
+	BEGIN
+		CT.debug := TRUE;
+		req := "GET /list HTTP/1.0" + 0DX + 0AX + "Host: blackbox.oberon.org" + 0DX + 0AX + 0DX + 0AX;
+		i := 0; WHILE req[i] # 0X DO reqB[i] := SYSTEM.VAL(BYTE, SHORT(ORD(req[i]))); INC(i) END;
+		reqlen := i;
+		CommStreams.NewStream("CommTCP", "", "blackbox.oberon.org:80", s, res);
+		IF (res # CommStreams.done) OR (s = NIL) THEN Fail("connect ", res); RETURN END;
+		Console.WriteStr("remote="); Console.WriteStr(s.RemoteAdr()^); Console.WriteLn;
+		i := 0; n := 0;	(* non-blocking connect: EAGAIN до завершения — крутим write *)
+		WHILE (n = 0) & (i < 5000000) DO s.WriteBytes(reqB, 0, reqlen, n); INC(i) END;
+		IF n # reqlen THEN Fail("write ", n); s.Close; RETURN END;
+		total := 0; idle := 0; first := "";
+		WHILE idle < 3000000 DO
+			s.ReadBytes(buf, 0, 64, n);
+			IF n > 0 THEN
+				IF total = 0 THEN	(* первые байты ответа: "HTTP/1.x 2" *)
+					i := 0; WHILE (i < 10) & (i < n) DO first[i] := CHR(buf[i]); INC(i) END;
+					first[i] := 0X
+				END;
+				total := total + n; idle := 0
+			ELSE INC(idle)
+			END
+		END;
+		s.Close;
+		Console.WriteStr("bytes="); Strings.IntToString(total, num); Console.WriteStr(num);
+		Console.WriteStr(" head="); Console.WriteStr(first);
+		IF (total > 100) & (first = "HTTP/1.1 2") THEN Console.WriteStr(" Probe41 OK")
+		ELSE Console.WriteStr(" Probe41 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe41.

@@ -68,10 +68,10 @@ MODULE LinDialog;
 		   Печатаем, если BB_NODIALOG=1 (run-bb64) ИЛИ BB_CONSOLE=1 (любой
 		   консольный запуск — билд-скрипты иначе висят на невидимом диалоге).
 		   Форсировать диалоги: BB_GUI_DIALOGS=1. *)
-		HostEnv.GetPar("BB_GUI_DIALOGS", sb, res);
+		HostEnv.GetPar("BB_GUI_DIALOGS", nd, res);
 		IF res # 0 THEN
-			HostEnv.GetPar("BB_NODIALOG", sb, res);
-			IF res # 0 THEN HostEnv.GetPar("BB_CONSOLE", sb, res) END
+			HostEnv.GetPar("BB_NODIALOG", nd, res);
+			IF res # 0 THEN HostEnv.GetPar("BB_CONSOLE", nd, res) END
 		END;
 		IF res = 0 THEN
 			i := 0; WHILE (i < LEN(sb) - 2) & (st[i] # 0X) DO sb[i] := SHORT(st[i]); INC(i) END;

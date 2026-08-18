@@ -1,0 +1,52 @@
+MODULE ObxProbe40;
+(** TCP loopback через CommStreams/CommTCP: listener + connect + accept,
+	запись 8 байт клиентом, чтение сервером, сверка данных и адресов. *)
+
+	IMPORT SYSTEM, Console, Strings, CommStreams;
+
+	PROCEDURE Fail (stage: ARRAY OF CHAR; res: INTEGER);
+		VAR s: ARRAY 16 OF CHAR;
+	BEGIN
+		Console.WriteStr("Probe40 FAIL "); Console.WriteStr(stage);
+		Strings.IntToString(res, s); Console.WriteStr(s); Console.WriteLn
+	END Fail;
+
+	PROCEDURE Go*;
+		CONST port = "127.0.0.1:19040";
+		VAR l: CommStreams.Listener; c, s: CommStreams.Stream;
+			res, i, written, read: INTEGER;
+			out, buf: ARRAY 8 OF BYTE;
+			pa: ARRAY 11 OF CHAR;
+			adr: CommStreams.Adr;
+	BEGIN
+		i := 0; WHILE i < 8 DO out[i] := SYSTEM.VAL(BYTE, 41H + i); buf[i] := 0; INC(i) END;
+		CommStreams.NewListener("CommTCP", port, l, res);
+		IF (res # CommStreams.done) OR (l = NIL) THEN Fail("listener ", res); RETURN END;
+		CommStreams.NewStream("CommTCP", "", port, c, res);
+		IF (res # CommStreams.done) OR (c = NIL) THEN Fail("connect ", res); l.Close; RETURN END;
+		s := NIL; i := 0;
+		WHILE (s = NIL) & (i < 10000000) DO l.Accept(s); INC(i) END;
+		IF s = NIL THEN Fail("accept ", 0); c.Close; l.Close; RETURN END;
+		c.WriteBytes(out, 0, 8, written);
+		IF written # 8 THEN Fail("write ", written); s.Close; c.Close; l.Close; RETURN END;
+		read := 0; i := 0;
+		WHILE (read # 8) & (i < 10000000) DO s.ReadBytes(buf, 0, 8, read); INC(i) END;
+		IF read # 8 THEN Fail("read ", read); s.Close; c.Close; l.Close; RETURN END;
+		i := 0;
+		WHILE (i < 8) & (buf[i] = out[i]) DO INC(i) END;
+		IF i # 8 THEN Fail("data ", i); s.Close; c.Close; l.Close; RETURN END;
+		adr := s.RemoteAdr();	(* адрес клиента: 127.0.0.1:<эфемерный порт> *)
+		IF (adr = NIL) OR (LEN(adr) < 10) THEN Fail("remoteAdr ", 0)
+		ELSE i := 0; WHILE i < 10 DO pa[i] := adr[i]; INC(i) END; pa[10] := 0X;
+			IF pa # "127.0.0.1:" THEN Fail("remoteAdr ", 1)
+			ELSE adr := l.LocalAdr();
+				IF (adr = NIL) OR (adr^ # port) THEN Fail("localAdr ", 0)
+				ELSE Console.WriteStr("Probe40 OK "); Console.WriteStr("tcp loopback 8 bytes ")
+				END
+			END
+		END;
+		s.Close; c.Close; l.Close;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe40.

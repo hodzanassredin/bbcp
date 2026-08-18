@@ -1,0 +1,39 @@
+MODULE ObxProbe43;
+(** Изоляция SEGV из Probe41: прямой вызов LinNet.getaddrinfo("localhost").
+	Проверяет раскладку addrinfo (64-битные указатели после 5 INTEGER + pad). *)
+
+	IMPORT SYSTEM, Console, Strings, Net := LinNet;
+
+	PROCEDURE Go*;
+		VAR hints: Net.addrinfo; result: Net.Ptraddrinfo; res: Net.int;
+			name: ARRAY 64 OF SHORTCHAR; wide: ARRAY 64 OF CHAR; s: ARRAY 16 OF CHAR;
+			sa: Net.Ptrsockaddr_in; ip: LONGINT;
+	BEGIN
+		wide := "localhost";
+		name := SHORT(wide$);	(* сужающее копирование CHAR -> SHORTCHAR *)
+		hints.ai_flags := {};
+		hints.ai_family := Net.PF_INET;
+		hints.ai_socktype := Net.SOCK_STREAM;
+		hints.ai_protocol := Net.IPPROTO_TCP;
+		hints.ai_addrlen := 0;
+		hints.ai_addr := NIL;
+		hints.ai_canonname := NIL;
+		hints.ai_next := NIL;
+		res := Net.getaddrinfo(name, NIL, hints, result);
+		Console.WriteStr("res="); Strings.IntToString(res, s); Console.WriteStr(s);
+		IF (res = 0) & (result # NIL) THEN
+			Console.WriteStr(" family="); Strings.IntToString(result.ai_family, s); Console.WriteStr(s);
+			Console.WriteStr(" addrlen="); Strings.IntToString(result.ai_addrlen, s); Console.WriteStr(s);
+			res := result.ai_family;
+			sa := SYSTEM.VAL(Net.Ptrsockaddr_in, result.ai_addr);	(* deref как в NameToAdr *)
+			ip := sa.sin_addr.S_un.S_addr;
+			Console.WriteStr(" ip="); Strings.IntToString(SHORT(ip MOD 256), s); Console.WriteStr(s);
+			Console.WriteStr("."); Strings.IntToString(SHORT(SYSTEM.LSH(ip, -8) MOD 256), s); Console.WriteStr(s);
+			Net.freeaddrinfo(result);
+			IF res = Net.PF_INET THEN Console.WriteStr(" Probe43 OK")
+			ELSE Console.WriteStr(" Probe43 FAIL family") END
+		ELSE Console.WriteStr(" Probe43 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe43.

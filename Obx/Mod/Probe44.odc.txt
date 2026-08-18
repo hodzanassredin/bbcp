@@ -1,0 +1,19 @@
+MODULE ObxProbe44;
+(** Бисект Probe43: только сужающее копирование SHORT(wide$). *)
+
+	IMPORT Console, Strings;
+
+	PROCEDURE Go*;
+		VAR name: ARRAY 64 OF SHORTCHAR; wide: ARRAY 64 OF CHAR;
+			i: INTEGER; s: ARRAY 16 OF CHAR;
+	BEGIN
+		wide := "localhost";
+		name := SHORT(wide$);
+		i := 0; WHILE name[i] # 0X DO INC(i) END;
+		Console.WriteStr("len="); Strings.IntToString(i, s); Console.WriteStr(s);
+		IF (i = 9) & (name[0] = "l") & (name[8] = "t") THEN Console.WriteStr(" Probe44 OK")
+		ELSE Console.WriteStr(" Probe44 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe44.

@@ -1,0 +1,31 @@
+MODULE ObxProbe45;
+(** Probe40, но клиент коннектится по имени "localhost" (getaddrinfo путь). *)
+
+	IMPORT SYSTEM, Console, Strings, CommStreams;
+
+	PROCEDURE Go*;
+		CONST port = "localhost:19045";
+		VAR l: CommStreams.Listener; c, s: CommStreams.Stream;
+			res, i, written, read: INTEGER;
+			out, buf: ARRAY 8 OF BYTE;
+	BEGIN
+		i := 0; WHILE i < 8 DO out[i] := SYSTEM.VAL(BYTE, 51H + i); buf[i] := 0; INC(i) END;
+		CommStreams.NewListener("CommTCP", "127.0.0.1:19045", l, res);
+		IF (res # CommStreams.done) OR (l = NIL) THEN Console.WriteStr("Probe45 FAIL listener"); Console.WriteLn; RETURN END;
+		CommStreams.NewStream("CommTCP", "", port, c, res);
+		IF (res # CommStreams.done) OR (c = NIL) THEN Console.WriteStr("Probe45 FAIL connect"); Console.WriteLn; l.Close; RETURN END;
+		s := NIL; i := 0;
+		WHILE (s = NIL) & (i < 10000000) DO l.Accept(s); INC(i) END;
+		IF s = NIL THEN Console.WriteStr("Probe45 FAIL accept"); Console.WriteLn; c.Close; l.Close; RETURN END;
+		written := 0; i := 0;
+		WHILE (written = 0) & (i < 10000000) DO c.WriteBytes(out, 0, 8, written); INC(i) END;
+		read := 0; i := 0;
+		WHILE (read # 8) & (i < 10000000) DO s.ReadBytes(buf, 0, 8, read); INC(i) END;
+		i := 0; WHILE (i < 8) & (buf[i] = out[i]) DO INC(i) END;
+		IF (written = 8) & (read = 8) & (i = 8) THEN Console.WriteStr("Probe45 OK localhost by name")
+		ELSE Console.WriteStr("Probe45 FAIL data") END;
+		s.Close; c.Close; l.Close;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe45.

@@ -1,0 +1,28 @@
+MODULE ObxProbe42;
+(** Длинная цепочка кластеров кучи: 320 блоков по 8 МБ = ~320 кластеров.
+	Регрессия: старый fail-fast HALT(77) "chain overflow" с порогом 300 бил
+	легитимные большие кучи (CheckMaxMemory у dia). Guard заменён на
+	cycle-detection + порог 100000 (KB/HangTut2-GC-clusters.md). *)
+
+	IMPORT Console, Strings, Kernel;
+
+	PROCEDURE Go*;
+		CONST n = 320;
+		TYPE Arr = POINTER TO ARRAY 1024 * 1024 OF REAL;	(* 8 МБ *)
+		VAR p: ARRAY n OF Arr; i: INTEGER; s: ARRAY 16 OF CHAR;
+	BEGIN
+		i := 0;
+		WHILE i < n DO
+			NEW(p[i]);
+			IF p[i] = NIL THEN
+				Console.WriteStr("Probe42 FAIL alloc i="); Strings.IntToString(i, s);
+				Console.WriteStr(s); Console.WriteLn; RETURN
+			END;
+			INC(i)
+		END;
+		i := 0; WHILE i < n DO p[i] := NIL; INC(i) END;
+		Kernel.Collect;
+		Console.WriteStr("Probe42 OK 320 clusters x 8MB, collected"); Console.WriteLn
+	END Go;
+
+END ObxProbe42.

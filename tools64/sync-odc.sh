@@ -7,7 +7,7 @@
 BATCH=/tmp/odc-batch.txt
 rm -f "$BATCH"
 n=0
-for txt in "$BB"/Dev/Mod/*.odc.txt "$BB"/Mod64/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Lin/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.txt "$BB"/Text/Mod/*.odc.txt "$BB"/Form/Mod/*.odc.txt "$BB"/Cons/Mod/*.odc.txt "$BB"/Obx/Mod/*.odc.txt "$BB"/Odc/Mod/*.odc.txt "$BB"/Cuda/Mod/*.odc.txt; do
+for txt in "$BB"/Dev/Mod/*.odc.txt "$BB"/Mod64/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Lin/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.txt "$BB"/Text/Mod/*.odc.txt "$BB"/Form/Mod/*.odc.txt "$BB"/Cons/Mod/*.odc.txt "$BB"/Obx/Mod/*.odc.txt "$BB"/Odc/Mod/*.odc.txt; do
 	[ -e "$txt" ] || continue
 	odc="${txt%.txt}"
 	if [ ! -e "$odc" ] || [ "$txt" -nt "$odc" ]; then

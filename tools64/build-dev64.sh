@@ -54,7 +54,7 @@ done
 if [ -f "$BATCH" ]; then
   out=$(cd "$USE" && echo 'OdcTextU.Batch' | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" \
     timeout -k 5 600 "$BB/Dev/Rsrc/bbrun64" --console 2>&1)
-  done_n=$(printf '%s\n' "$out" | grep -c '^Done! res:  0$')
+  done_n=$(printf '%s\n' "$out" | grep -c '^Done! res:  0$' || true)
   # Ошибки НЕ глушим — иначе сборка идёт по протухшим .odc.
   printf '%s\n' "$out" | grep -v '^Done! res:  0$' | grep -i 'fail\|not found\|bad \|error\|TRAP\|HALT' | head -5
   rm -f "$BATCH"
@@ -90,6 +90,24 @@ DevDependencies
 DevInspector
 DevLinkChk
 DevCmds
+DevAlienTool
+DevSubTool
+DevDecoder386
+DevPacker
+DevLnkBase
+DevLnkLoad
+DevLnkWriteElf
+DevLnkWriteElfStatic
+DevLnkWritePe
+DevLinker
+DevLinker1
+DevBootLinker
+DevChmod
+DevBrowser
+DevDebug
+DevHeapSpy
+DevMsgSpy
+DevProfiler
 LIST
 # фасад DevCompiler: источник Mod64/DevCompiler.odc -> мир как Dev/Mod/Compiler.odc
 cp "$BB/Mod64/DevCompiler.odc" "$USE/Dev/Mod/Compiler.odc"

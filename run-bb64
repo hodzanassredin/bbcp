@@ -1,0 +1,13 @@
+#!/bin/sh
+# Запуск 64-битного BlackBox из мира bbcp64use.
+#   GUI:     ./run-bb64
+#   Консоль: echo 'ObxTestBig.Go' | ./run-bb64 --console
+BB="$HOME/sources/bbcp"
+USE="$HOME/sources/bbcp64use"
+cd "$USE" || { echo "мир не создан: tools64/mkworld64.sh && tools64/test64.sh ..." >&2; exit 1; }
+if [ "$1" = "--console" ]; then
+	shift
+	exec env BB_CONSOLE=1 BB_STANDARD_DIR="$USE" timeout -k 5 "${BB64_TIMEOUT:-300}" "$BB/Dev/Rsrc/bbrun64" --console "$@"
+else
+	exec env BB_STANDARD_DIR="$USE" "$BB/Dev/Rsrc/bbrun64" "$@"
+fi

@@ -934,3 +934,16 @@ untracked, без -f не попадут в коммит. Подтвержден
     командер ObxTestBig.Go. TestBig v2: alloc accounting точный
     (allocated == expected до байта), GC на 5 ГБ, слабина 1-2 кластера на
     консервативный MarkLocals (KB/HeapAbove4GB.md).
+
+== 2026-08-18 (вечер): порт Comm ==
+66. Comm в 64-битном мире: CommStreams/CommTCP/CommV24 + __Lin варианты +
+    ObxStreams*. Главная находка — LinNet был НЕ портирован (32-битные
+    PtrVoid/time_t/size_t; timeval 8 байт вместо 16 = stack smash в select).
+    Порт по образцу LinLibc (LONGINT). Детали: KB/Comm64.md.
+67. test64.sh: CompileSubs @Lin (фильтр __вариантов); sync-odc.sh: общий glob
+    */Mod (Comm и новые подсистемы больше не теряются); mkworld64.sh: +Comm.
+68. Hr удалён из bbcp (сверка завершена; копия остаётся в bbcb2).
+69. ObxProbe40.Go: TCP loopback (listener/connect/accept/send/recv/адреса) OK.
+    probes 23/23. Cuda пересобрана после wipe.
+70. Побочно: починен mojibake в Mod64/DevCompiler.odc (8-битный импорт
+    вместо OdcTextU) + детектор двойного кодирования в KB/OdcTextUtf8.md.

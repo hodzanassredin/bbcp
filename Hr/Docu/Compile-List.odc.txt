@@ -1,3 +1,0 @@
-DevCompiler.CompileThis
-	HrLib HrM HrCPT HrVars HrT HrSyn HrE HrL HrC HrB HrV HrS HrP HrAlpha HrMarkers HrOcf HrDecoder HrOcfTargets HrOcfExplorer HrBinder HrCompiler HrPeFmt HrElfFmt
-	

@@ -1,3 +1,0 @@
-MENU "x86-64"
-	"#Dev:&Compile"	"*K"	"HrCompiler.Compile"	"TextCmds.FocusGuard"
-END

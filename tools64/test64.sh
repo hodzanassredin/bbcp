@@ -43,13 +43,13 @@ case " $subs " in
 	*" Cons "*)
 		main=$(echo "$subs" | sed 's/\bCons\b//')
 		printf 'DevCommanders\n' > /tmp/compile1.txt
-		{ echo "DevCompiler64.CompileSubs $main"; echo 'DevOnce.Go64'; echo 'DevCompiler64.CompileSubs Cons'; } | "$BB/run-dev0"
+		{ echo "DevCompiler64.CompileSubs @Lin $main"; echo 'DevOnce.Go64'; echo 'DevCompiler64.CompileSubs @Lin Cons'; } | "$BB/run-dev0"
 		# LinIntInit импортирует Cons* — компилируем ПОСЛЕ Cons (иначе err 152)
 		printf 'LinIntInit\n' > /tmp/compile1.txt
 		echo 'DevOnce.Go64' | "$BB/run-dev0" 2>&1 | grep -E 'LinIntInit|err =' | head -3
 		;;
 	*)
-		echo "DevCompiler64.CompileSubs $subs" | "$BB/run-dev0"
+		echo "DevCompiler64.CompileSubs @Lin $subs" | "$BB/run-dev0"
 		;;
 esac
 

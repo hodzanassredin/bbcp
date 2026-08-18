@@ -4,8 +4,7 @@
 # Адреса между запусками плавают (ASLR) — опорные данные = смещения в модуле.
 # env: BB_CONSOLE=1 BB_STANDARD_DIR выставляются автоматически (консоль по умолчанию).
 set -e
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 MODE="--console"
 if [ "$1" = "--gui" ]; then MODE=""; shift; fi
 cd "$USE"

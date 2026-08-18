@@ -3,8 +3,7 @@
 # Требует рабочего бута (MAIN OK) и собранного Dev-пайплайна (build-dev64.sh).
 # Использование: tools64/smoke-console.sh
 set -e
-USE="$HOME/sources/bbcp64use"
-BB="$HOME/sources/bbcp"
+. "$(dirname "$0")/env64.sh"
 
 # 1. HelloWorld как текст для ConsCompiler64.Compile (компилирует внутри BB64)
 cat > "$USE/Hello.cp" <<'SRC'

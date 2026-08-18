@@ -2,8 +2,8 @@
 # Запуск 64-битного BlackBox из мира bbcp64use.
 #   GUI:     ./run-bb64
 #   Консоль: echo 'ObxTestBig.Go' | ./run-bb64 --console
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+BB="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+USE="${BBCP64USE:-$(dirname "$BB")/bbcp64use}"
 cd "$USE" || { echo "мир не создан: tools64/mkworld64.sh && tools64/test64.sh ..." >&2; exit 1; }
 if [ "$1" = "--console" ]; then
 	shift

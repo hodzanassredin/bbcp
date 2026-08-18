@@ -4,8 +4,7 @@
 # поэтому 32-битные .osf годятся для 64-битной компиляции.
 # test64.sh делает rm */Sym/*.osf — поэтому вызывать после каждой пересборки.
 set -e
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 n=0
 for d in "$USE"/*/Sym; do
 	sub=$(basename "$(dirname "$d")")

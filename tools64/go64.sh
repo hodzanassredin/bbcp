@@ -5,8 +5,7 @@
 # ("corrupted code file"). Для модулей Dev* использовать build-dev64.sh!
 # Делает sync-odc (.odc.txt -> .odc) и проверяет, что ocf реально обновился.
 set -e
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 MARK=$(mktemp)
 for m in "$@"; do
 	case "$m" in

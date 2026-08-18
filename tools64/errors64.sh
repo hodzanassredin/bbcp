@@ -5,8 +5,7 @@
 # Запускать ПОСЛЕ test64.sh (нужны свежие osf зависимостей).
 # Перевод позиций в строки: tools64/errpos.sh Sub Mod POS
 set -e
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 STASH="$USE/.dev-stash-err64"
 [ -d "$USE/Dev" ] && mv "$USE/Dev" "$STASH"
 trap '[ -d "$STASH" ] && mv "$STASH" "$USE/Dev"' EXIT

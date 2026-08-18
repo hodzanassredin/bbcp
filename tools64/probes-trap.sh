@@ -3,8 +3,7 @@
 # PASS: в выводе есть "~TRAP" и нет "BAD". Сейчас: Probe30 (integer overflow,
 # allchecks — компилируется ConsCompiler64.CompileOpt ... "+", INTO->JNO+trap138).
 set -u
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 cd "$USE"
 
 pass=0; fail=0

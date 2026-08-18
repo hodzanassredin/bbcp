@@ -3,8 +3,8 @@
 # With offset: disassemble CodeBlk at offset (ocf.py) after compiling.
 # Usage: c64.sh SystemTestT1 [0x979 [0x120]]
 set -e
-BBCP="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
+BBCP="$BB"
 mod="$1"
 cd "$BBCP"
 tools64/sync-odc.sh >/dev/null 2>&1

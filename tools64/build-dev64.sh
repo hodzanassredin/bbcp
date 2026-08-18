@@ -4,8 +4,7 @@
 # bbcp64use/Dev удаляем перед компиляцией: 64-битные DevCP*.ocf ломают dev0
 # ("corrupted code file"), а всё нужное (DevCommanders тоже) пересобирается ниже.
 set -e
-USE="$HOME/sources/bbcp64use"
-BB="$HOME/sources/bbcp"
+. "$(dirname "$0")/env64.sh"
 rm -rf "$USE/Dev"
 mkdir -p "$USE/Dev/Code" "$USE/Dev/Sym" "$USE/Dev/Mod"
 ln -sf "$BB/Dev/Mod/Commanders.odc" "$USE/Dev/Mod/Commanders.odc"
@@ -79,4 +78,4 @@ ObxCompileLog
 LIST
 # фасад DevCompiler: источник Mod64/DevCompiler.odc -> мир как Dev/Mod/Compiler.odc
 cp "$BB/Mod64/DevCompiler.odc" "$USE/Dev/Mod/Compiler.odc"
-echo 'DevOnce.Go64' | "$HOME/sources/bbcp/run-dev0"
+echo 'DevOnce.Go64' | "$BB/run-dev0"

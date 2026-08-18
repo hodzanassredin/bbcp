@@ -5,8 +5,7 @@
 # (S.GET по адресу 0 -> SEGV) — при надобности гонять вручную.
 # Usage: probes.sh [Probe21 Probe23 ...]   (по умолчанию все из списка)
 set -u
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 cd "$USE"
 
 ALL="Probe8.T Probe9.Go Probe10.T Probe11.T Probe12.T Probe13.T Probe14.T Probe15.T Probe16.T Probe17.T Probe18.T Probe19.T Probe20.Go Probe21.Go Probe22.Go Probe23.Go Probe24.Go Probe27.Go Probe28.Go Probe29.Go Probe34.Go Probe36.Go"

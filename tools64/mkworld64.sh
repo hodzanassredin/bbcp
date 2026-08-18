@@ -3,8 +3,7 @@
 # <Sub>/{Code,Sym} — настоящие каталоги, Mod/Docu/Rsrc — симлинки в bbcp.
 # Dev не создаём: его структуру строит build-dev64.sh (rm -rf + пересоздание).
 # После mkworld64.sh: test64.sh System Lin Std Text Form Cons Obx
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 mkdir -p "$USE"
 ln -sfn "$BB/Docu" "$USE/Docu"
 for sub in Cons Fig Form Lin Obx Odc Std System Text; do

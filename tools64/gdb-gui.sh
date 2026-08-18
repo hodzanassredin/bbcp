@@ -2,13 +2,14 @@
 # gdb-gui.sh — запуск bbrun64 GUI под gdb с управлением через FIFO /tmp/gdbin.
 # Команды gdb:  echo 'bt' > /tmp/gdbin
 # Прерывание inferior: kill -INT $(cat /tmp/inferior.pid)
+. "$(dirname "$0")/env64.sh"
 rm -f /tmp/gdbin /tmp/gdbout /tmp/bb64gui_gdb.log /tmp/inferior.pid
 mkfifo /tmp/gdbin
 # вечный писатель, чтобы gdb не видел EOF
 (while true; do sleep 3600; done > /tmp/gdbin &)
 echo $! > /tmp/fifo_holder.pid
-cd "$HOME/sources/bbcp64use"
-(BB_ARENA_BASE=0x40000000 BB_STANDARD_DIR=$PWD gdb -q "$HOME/sources/bbcp/Dev/Rsrc/bbrun64" < /tmp/gdbin > /tmp/gdbout 2>&1 &)
+cd "$USE"
+(BB_ARENA_BASE=0x40000000 BB_STANDARD_DIR=$PWD gdb -q "$BB/Dev/Rsrc/bbrun64" < /tmp/gdbin > /tmp/gdbout 2>&1 &)
 sleep 2
 printf 'set pagination off\n' > /tmp/gdbin
 printf 'run > /tmp/bb64gui_gdb.log 2>&1\n' > /tmp/gdbin

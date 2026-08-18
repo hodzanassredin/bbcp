@@ -3,8 +3,7 @@
 # back into .odc via OdcTextU.Batch, running in the 64-bit world itself
 # (console mode). Хост bbcb2 больше не нужен. Все .odc.txt — UTF-8
 # (KB/OdcTextUtf8.md). Формат batch-файла: строки I "in.txt" "out.odc".
-BB="$HOME/sources/bbcp"
-USE="$HOME/sources/bbcp64use"
+. "$(dirname "$0")/env64.sh"
 BATCH=/tmp/odc-batch.txt
 rm -f "$BATCH"
 n=0

@@ -3,10 +3,11 @@
 # Maps compiler error positions to source lines in the .odc.txt
 # (compiler counts <odc-view .../> tags as 1 char; ODC line end = один 0DX,
 # поэтому CRLF в файле считаем за ОДИН символ).
-import re, sys
+import os, re, sys
 
 sub, mod = sys.argv[1], sys.argv[2]
-path = '/home/hodza/sources/bbcp/%s/Mod/%s.odc.txt' % (sub, mod)
+ROOT = os.environ.get('BBCP64ROOT') or os.path.dirname(os.path.dirname(os.path.realpath(sys.argv[0])))
+path = os.path.join(ROOT, sub, 'Mod', mod + '.odc.txt')
 raw = open(path, 'rb').read()
 try:
     txt = raw.decode('utf-8')

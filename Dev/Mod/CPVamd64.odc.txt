@@ -208,7 +208,7 @@ MODULE DevCPVamd64;
 				ELSIF typ.sysflag = align2 THEN alignLimit := 2
 				ELSIF typ.sysflag = align8 THEN alignLimit := 8
 				ELSIF typ.sysflag = align16 THEN alignLimit := 16
-				ELSE alignLimit := 4
+				ELSE alignLimit := 4	(* pack-4 — конвенция OCF/метаданных; C-ABI записи с 8-байтными полями после не-8-кратных смещений помечать [align8] (KB/RecordAlign64.md) *)
 				END;
 				fld := typ.link;
 				WHILE (fld # NIL) & (fld.mode = Fld) DO

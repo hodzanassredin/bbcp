@@ -17,7 +17,7 @@ for m in "$@"; do
 			fi;;
 	esac
 done
-"$BB/tools64/sync-odc.sh" >/dev/null 2>&1 || true
+"$BB/tools64/sync-odc.sh" || { echo "go64: sync-odc FAILED — консоль мира мертва? Импортируйте через bbcb2 OdcTextU.Import (KB/RecordAlign64.md)" >&2; exit 1; }
 touch "$MARK"
 STASH="$USE/.dev-stash-go64"
 [ -d "$USE/Dev" ] && mv "$USE/Dev" "$STASH"

@@ -50,8 +50,8 @@ for p in $ALL; do
 	*) cmd="$p"; disp="$p";; esac
 	out=$(echo "$cmd" | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" timeout -k 5 30 "$BB/Dev/Rsrc/bbrun64" --console 2>&1)
 	rc=$?
-	if echo "$out" | grep -qE '~TRAP|SIGILL|SIGSEGV|CommandError|Assertion|BAD |FAILURES|errors detected'; then
-		echo "FAIL $disp (trap/error):"; echo "$out" | grep -E '~TRAP|SIGILL|CommandError|Assertion|BAD |FAILURES|err =|errors detected' | head -3
+	if echo "$out" | grep -qE '~TRAP|SIGILL|SIGSEGV|CommandError|Assertion|BAD |FAILURES|errors detected|installation failed|Could not load|not found in'; then
+		echo "FAIL $disp (trap/error):"; echo "$out" | grep -E '~TRAP|SIGILL|CommandError|Assertion|BAD |FAILURES|err =|errors detected|installation failed|Could not load|not found in' | head -3
 		fail=$((fail+1))
 	elif [ $rc -eq 124 ]; then
 		echo "FAIL $disp (timeout)"; fail=$((fail+1))

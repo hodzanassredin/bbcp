@@ -774,14 +774,15 @@ out:
             Object* ml = ThisObject(sk, "modList");
             if (ml != NULL) *(intptr_t*)(sk->varBase + ml->offs) = (intptr_t)modlist;
             /* bootInfo для LinKernel.argc/argv (gtk_init_check, GetCmdLineArg).
-               Раскладка по правилу компилятора (выравнивание ≤ 4):
-               modList@0, argc@8, argv@12 */
+               Порядок полей в Kernel.BootInfo подобран так, чтобы раскладка
+               не зависела от правила выравнивания компилятора:
+               modList@0, argv@8, argc@16 (и при 4-, и при 8-выравнивании). */
             Object* bi = ThisObject(sk, "bootInfo");
             if (bi != NULL) {
                 static char bootInfoBuf[24];
                 *(intptr_t*)(bootInfoBuf + 0) = (intptr_t)modlist;
-                *(int*)(bootInfoBuf + 8) = argc;
-                *(intptr_t*)(bootInfoBuf + 12) = (intptr_t)argv;	/* CP: argv@+12, C struct дал бы +16! */
+                *(intptr_t*)(bootInfoBuf + 8) = (intptr_t)argv;
+                *(int*)(bootInfoBuf + 16) = argc;
                 *(intptr_t*)(sk->varBase + bi->offs) = (intptr_t)bootInfoBuf;
             }
         }

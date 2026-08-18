@@ -979,3 +979,18 @@ untracked, без -f не попадут в коммит. Подтвержден
 77. Убран DbgTyp("W ") из OutStr (CPT) — отладочный дамп записей в лог при
     каждой компиляции (остаток июльской охоты на PVFP; в 32-битном CPT его
     нет). Ветка OLD/NEW при реальном PVFP mismatch оставлена.
+78. КОРНЕВОЙ фикс FFI: DevCPVamd64.GTypeSize alignLimit 4->8 (i386-наследие) —
+    untagged-записи получали 4-выравнивание указателей; glibc addrinfo пишет
+    ai_addr по @24, CP читал по @20 -> SEGV в getaddrinfo-пути (Paket HTTP).
+    Детали+методика: KB/RecordAlign64.md. Побочно: bbrun64 bootInfo писал
+    argv по старому смещению @12 -> BootInfo переставлен (modList/argv/argc)
+    в инвариантную к правилу раскладку. Probe41 (HTTP GET 26 КБ OK),
+    Probe43 (getaddrinfo), Probe44 (SHORT-узкое копирование), Probe45
+    (localhost по имени). Seed пересобран (go32 CPVamd64+CPT), мир целиком.
+79. П.78 переигран: дефолт alignLimit ОСТАВЛЕН 4 (pack-4 — конвенция OCF v2;
+    дефолт 8 сломал все метаданные: Directory.obj после INTEGER невыразим
+    инвариантно, атрибуты не комбинируются; симптомы — "command Install not
+    found" + вис консоли). C-ABI записи помечаются [align8]: LinNet.addrinfo,
+    sockaddr_storage. LinLibc уже был на явных pads (sigaction_t.pad0 и т.п.) —
+    они rule-инвариантны. BootInfo переставлен rule-инвариантно (bbrun64.c
+    обновлён). Конвенция FFI: KB/RecordAlign64.md.

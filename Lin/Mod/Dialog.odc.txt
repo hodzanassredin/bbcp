@@ -59,14 +59,20 @@ MODULE LinDialog;
 			dlg: Gtk.GtkMessageDialog;
 			st: ARRAY 512 OF CHAR;
 			us: GLib.PString;
-			nd: ARRAY 8 OF CHAR; sb: ARRAY 512 OF SHORTCHAR;
+			nd: ARRAY 12 OF CHAR; sb: ARRAY 512 OF SHORTCHAR;
 	BEGIN
 		ASSERT(str # "", 20);
 		(*Dialog.appName ?*);
 		Dialog.MapParamString(str, p0, p1, p2, st);
-		(* скриптовые запуски (run-bb64 выставляет BB_NODIALOG=1): в stdout, без
-		   модального диалога, чтобы не ждать OK. Релизный GUI — без переменной. *)
-		HostEnv.GetPar("BB_NODIALOG", nd, res);
+		(* скриптовые запуски: в stdout, без модального диалога, чтобы не ждать OK.
+		   Печатаем, если BB_NODIALOG=1 (run-bb64) ИЛИ BB_CONSOLE=1 (любой
+		   консольный запуск — билд-скрипты иначе висят на невидимом диалоге).
+		   Форсировать диалоги: BB_GUI_DIALOGS=1. *)
+		HostEnv.GetPar("BB_GUI_DIALOGS", sb, res);
+		IF res # 0 THEN
+			HostEnv.GetPar("BB_NODIALOG", sb, res);
+			IF res # 0 THEN HostEnv.GetPar("BB_CONSOLE", sb, res) END
+		END;
 		IF res = 0 THEN
 			i := 0; WHILE (i < LEN(sb) - 2) & (st[i] # 0X) DO sb[i] := SHORT(st[i]); INC(i) END;
 			sb[i] := SHORT(CHR(10)); sb[i + 1] := 0X;

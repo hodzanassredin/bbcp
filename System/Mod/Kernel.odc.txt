@@ -314,9 +314,12 @@ MODULE Kernel;
 		END;
 
 		BootInfo* = POINTER TO RECORD [untagged]
+		(* порядок полей подобран так, чтобы раскладка не зависела от правила
+		   выравнивания компилятора: modList@0, argv@8, argc@16 при любом
+		   alignLimit 4..8. bbrun64.c пишет эти смещения руками! *)
 			modList: Module;
-			argc-: INTEGER;
-			argv-: POINTER TO ARRAY [untagged] OF StrPtr
+			argv-: POINTER TO ARRAY [untagged] OF StrPtr;
+			argc-: INTEGER
 		END;
 
 	VAR

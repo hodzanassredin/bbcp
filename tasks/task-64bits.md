@@ -47,10 +47,16 @@
 - TODO64-маркеры РАЗОБРАНЫ (2026-08-18, коммит 350892c3): все 5 были сделанной
   работой с ярлыком; Kernel.AllocateCluster chain-guard оставлен как инвариант.
   Дополнительно StdDebug.ShowPointer: проба IsReadable от -8 (коммит d504e444).
-- Открытые known-issues из секции 2026-08-17: INTO→JO (ovflchk, allchecks);
-  CPCamd64:2586 TLS redesign; g_object_unref на выходе GUI; ld.so _dl_fini.
-- Аудит расширений (Aos, Crypto, _Http, Comm, Json, Mcp...) — отдельный этап
-  после финиша ядра. Hr — только сверка, не чинить.
+- Known-issues ПРОВЕРЕНЫ 2026-08-18 — всё закрыто ранее:
+  INTO→JO сделан (KB/Ovflchk-JO.md, 6 мест GenAssert(ccNO, ovflTrap));
+  TLS — осознанный fail-fast err 271 вместо redesign (KB/TLS-guarded-failfast.md,
+  CPCamd64:2586 не актуален). Остались minor: g_object_unref на выходе GUI
+  (не воспроизводится), ld.so _dl_fini (низкий приоритет).
+- Аудит/перенос расширений — отдельный этап. В bbcp есть только: Check, Com,
+  Comm, Ctl, Fbsd, Fig(готова), Hr(эталон), Mdi, Nbsd, Obsd, Ole, Paket, Sql,
+  Win, Xhtml. Подсистемы из bbcb2 (Aos, Crypto, _Http, Json, Mcp, Fjson, Async,
+  Co_, Lists, Keep, Hyper, Eds, Coco, Babel, Cpc, Llm, Sdl2, Ogl, W3c) ещё
+  НЕ перенесены в bbcp.
 
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-17)
 

@@ -24,6 +24,14 @@ for f in "$BB"/Dev/Mod/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.
   mkdir -p "$(dirname "$dest")"
   cp "$f" "$dest"
 done
+# binary-only Dev-модули (нет .odc.txt — не редактируем): копируем .odc как есть
+for f in "$BB"/Dev/Mod/*.odc; do
+  b=$(basename "$f" .odc)
+  [ -e "$BB/Dev/Mod/$b.odc.txt" ] && continue	# у txt-модулей .odc пересоздаст Batch
+  case "$b" in *__*|Compiler) continue;; esac	# платформенные варианты и 32-бит Compiler
+  [ "$f" -ef "$USE/Dev/Mod/$b.odc" ] && continue	# уже симлинкнуто (Commanders)
+  cp "$f" "$USE/Dev/Mod/$b.odc"
+done
 # DevCommanders компилируем ПЕРВЫМ: консольный хост (ConsInterp), на котором
 # крутится OdcTextU.Batch, сам импортирует DevCommanders — без его ocf консоль
 # не грузится ("code file for DevCommanders not found"). Dev/Code сейчас пуст,
@@ -75,6 +83,13 @@ DevCompiler64
 DevCompiler
 ConsCompiler64
 ObxCompileLog
+DevSearch
+DevReferences
+DevRBrowser
+DevDependencies
+DevInspector
+DevLinkChk
+DevCmds
 LIST
 # фасад DevCompiler: источник Mod64/DevCompiler.odc -> мир как Dev/Mod/Compiler.odc
 cp "$BB/Mod64/DevCompiler.odc" "$USE/Dev/Mod/Compiler.odc"

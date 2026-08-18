@@ -4,6 +4,25 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, ночь 2)
+
+### Dev-инструменты в 64-битном мире (build-dev64.sh)
+- Добавлены и работают: DevSearch, DevReferences, DevRBrowser, DevDependencies,
+  DevInspector, DevLinkChk, DevCmds. Binary-only .odc (без .odc.txt) копируются
+  в мир как есть и компилируются — источник появится только когда модуль
+  потребует правок.
+- ОТЛОЖЕНЫ (падают/не собираются, отдельная работа):
+  - DevAnalyzer — ТЕЛО модуля трапится (SIGILL через битый указатель →
+    Views+0x4c07); лоадер грузит ВСЕ модули мира при буте, поэтому один
+    падающий init кладёт весь мир (probes 0/22). Порт: завести
+    Analyzer.odc.txt и чинить (ResetOptions/LoadOptions → Dialog.Update?).
+  - DevBrowser, DevHeapSpy, DevMsgSpy — err 249 inconsistent import
+    (PVFP mismatch) — тянут 32-битный sym-rot DevCPM (KB/Bootstrap32-symrot.md).
+  - DevDebug, DevProfiler — err 113/123, нужен порт исходников (INTEGER/
+    LONGINT), .odc.txt пока нет.
+- Урок: добавление модуля в мир = он попадает в boot-init ВСЕГДА; тело
+  модуля обязано быть безопасным. Проверка после доборки: probes + бут.
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, ночь)
 
 ### Подсистема Cuda — биндинги внешних .so (KB/SoBindings.md)

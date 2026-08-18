@@ -8,8 +8,38 @@ set -u
 . "$(dirname "$0")/env64.sh"
 cd "$USE"
 
-ALL="Probe8.T Probe9.Go Probe10.T Probe11.T Probe12.T Probe13.T Probe14.T Probe15.T Probe16.T Probe17.T Probe18.T Probe19.T Probe20.Go Probe21.Go Probe22.Go Probe23.Go Probe24.Go Probe27.Go Probe28.Go Probe29.Go Probe34.Go Probe36.Go Probe40.Go Compile:ObxTestFwd2"
+ALL="Probe8.T Probe9.Go Probe10.T Probe11.T Probe12.T Probe13.T Probe14.T Probe15.T Probe16.T Probe17.T Probe18.T Probe19.T Probe20.Go Probe21.Go Probe22.Go Probe23.Go Probe24.Go Probe27.Go Probe28.Go Probe29.Go Probe34.Go Probe36.Go Probe40.Go Probe42.Go Compile:ObxTestFwd2"
 [ $# -gt 0 ] && ALL="$@"
+
+# без модальных GTK-диалогов: в скриптах они висят до клика (BB_NODIALOG=1
+# печатает сообщение в stdout вместо диалога — см. run-bb64)
+export BB_NODIALOG=1
+
+# Probe18 привязан к /tmp/libtprobe.so — собираем тестовую либу, если её нет
+need_tprobe=0
+for p in $ALL; do [ "$p" = "Probe18.T" ] && need_tprobe=1; done
+if [ $need_tprobe -eq 1 ] && [ ! -f /tmp/libtprobe.so ]; then
+	if command -v cc >/dev/null 2>&1; then
+		cc -shared -fPIC -O2 -o /tmp/libtprobe.so "$BB/tools64/tprobe.c" \
+			&& echo "built /tmp/libtprobe.so"
+	else
+		echo "probes: нет cc — Probe18.T будет FAIL (code file /tmp/libtprobe.so not found)" >&2
+	fi
+fi
+
+# недостающие ocf проб (мир собран до git pull и т.п.) — дособираем разом
+missing=""
+for p in $ALL; do
+	case "$p" in
+	Probe*)
+		b=$(echo "$p" | cut -d. -f1)	# Probe18.T -> Probe18
+		[ -f "$USE/Obx/Code/$b.ocf" ] || missing="$missing Obx$b";;
+	esac
+done
+if [ -n "$missing" ]; then
+	echo "probes: дособираю$missing"
+	"$BB/tools64/go64.sh" $missing || echo "probes: сборка проб не удалась" >&2
+fi
 
 pass=0; fail=0
 for p in $ALL; do

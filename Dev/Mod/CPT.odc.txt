@@ -1399,7 +1399,6 @@ MODULE DevCPT;
 					IF typ.BaseTyp = NIL THEN OutStr(notyp) ELSE OutStr(typ.BaseTyp) END ;
 					(* BaseTyp should be Notyp, too late to change *)
 					DevCPM.SymWInt(typ.size); DevCPM.SymWInt(typ.align); DevCPM.SymWInt(typ.n);
-					DbgTyp("W ", typ);
 					nofhdfld := 0; OutFlds(typ.link, 0, TRUE);
 (*
 					IF nofhdfld > DevCPM.MaxHdFld THEN DevCPM.Mark(223, typ.txtpos) END ;	(* !!! *)

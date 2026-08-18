@@ -771,7 +771,7 @@ MODULE Kernel;
 
 	PROCEDURE AllocateCluster (size: INTEGER; VAR c: Cluster);
 	(** Allocate cluster c of at least size bytes in either mono- or multi-cluster heap layout *)
-		VAR a, base, capacity, sz: ADDRESS; x: Cluster; n: INTEGER;
+		VAR a, base, capacity, sz: ADDRESS; x, slow, fast: Cluster; n: INTEGER;
 
 		(* diag: неаллоцирующий лог (BString/BInt растят blog.buf → NewBlock → рекурсия!) *)
 		PROCEDURE LStr (IN s: ARRAY OF CHAR);
@@ -825,12 +825,23 @@ MODULE Kernel;
 			END;
 			INC(used, sz);
 		END;
-		(* invariant: fail-fast на бесконтрольный рост цепочки кластеров
-		   (поймано зависание Tut-2 — sliver-shadowing в GetOldFreeBlock). Лог через
-		   LStr/LInt/LLn/LDump — НЕ через BString/BInt: те растят blog.buf → NewBlock → рекурсия *)
+		(* invariant: fail-fast на порчу цепочки кластеров (поймано зависание Tut-2 —
+		   sliver-shadowing в GetOldFreeBlock). Два вида порчи: ЦИКЛ в цепочке
+		   (черепаха-заяц) и бесконтрольный рост (порог 100000 — легитимные кучи
+		   с сотнями кластеров нормальны: большие блоки = отдельные кластеры).
+		   Лог через LStr/LInt/LLn/LDump — НЕ через BString/BInt: те растят
+		   blog.buf → NewBlock → рекурсия *)
+		slow := root; fast := root;
+		WHILE (fast # NIL) & (fast.next # NIL) DO
+			slow := slow.next; fast := fast.next.next;
+			IF slow = fast THEN
+				LStr("AllocateCluster: cluster chain CYCLE"); LLn; LDump;
+				HALT(77)
+			END
+		END;
 		n := 0; x := root;
-		WHILE (x # NIL) & (n <= 300) DO INC(n); x := x.next END;
-		IF n > 300 THEN
+		WHILE (x # NIL) & (n < 100000) DO INC(n); x := x.next END;
+		IF x # NIL THEN
 			LStr("AllocateCluster: chain overflow n="); LInt(n);
 			LStr(" reqsize="); LInt(size); LStr(" used="); LInt(used); LLn;
 			LDump;

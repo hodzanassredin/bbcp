@@ -968,3 +968,14 @@ untracked, без -f не попадут в коммит. Подтвержден
     мусора со стека (32-бит везло на NIL). Фикс: old := NIL. Детали и уроки:
     KB/CompilerFwdRef64.md. probes.sh: компиляционные пробы Compile:<Модуль>,
     добавлена Compile:ObxTestFwd2. probes 24/24.
+75. HALT(77) ложно срабатывал на легитимных кучах >300 кластеров (CheckMaxMemory
+    у dia: 301 кластер на 2.4 ГБ 8-МБ блоков). Guard в Kernel.AllocateCluster
+    заменён: cycle-detection (черепаха-заяц) + порог 100000 как backstop
+    против sliver-шторма. ObxProbe42 (320x8МБ) — регрессия. probes 25/25.
+76. probes.sh: BB_NODIALOG=1 (модальные диалоги блокировали скрипт на машине
+    dia), автосборка недостающих ocf проб через go64 (Probe40 not found на
+    свежем клоне), libtprobe.so для Probe18 теперь собирается из
+    tools64/tprobe.c (источника в репо не было — жил только в моём /tmp).
+77. Убран DbgTyp("W ") из OutStr (CPT) — отладочный дамп записей в лог при
+    каждой компиляции (остаток июльской охоты на PVFP; в 32-битном CPT его
+    нет). Ветка OLD/NEW при реальном PVFP mismatch оставлена.

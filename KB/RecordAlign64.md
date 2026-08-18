@@ -47,3 +47,22 @@ bbrun64.c писал Kernel.BootInfo по смещениям pack-4 (argv@12). �
 2. Проверять чтение ПОСЛЕДНИХ полей, не только первых (Probe43 v1 читал
    ai_family@4 и был "зелёный" при битом ai_addr@24).
 3. Non-blocking connect: первые write/read = EAGAIN — ретраить.
+
+## PS: refs-ридеры (10X слоты) — отдельный баг того же класса
+
+В refs-потоке записи переменных с указательными/рекордными типами (маркер
+10X) несут слот дескриптора: на amd64 он 8 байт (4 мета + 4 sentinel,
+перезаписывается лоадером), а ридеры Kernel.GetRefProc/GetRefVar/
+CheckRefVarReadable/SourcePos и DevDecoder386 скипали 4. Рассинхрон ->
+"Module.???" в трап-окнах вместо имён процедур. Фикс: скип 8. Probe47
+(обход refs Kernel, ищет Quit/AllocateCluster/ThisMod).
+
+ОТКРЫТО: консольный трап-репорт при HALT-трапах спамит ~IsReadable и падает
+(reentrant SEGV в frame-walker'е вне защищённого контекста). GUI-путь (трап-
+окно) работает. Отдельная задача: hardened frame walker.
+
+## PS2: репорт трапа в stdout
+
+Kernel.HandleTrap теперь печатает накопленный blog.buf (SigRepHeader +
+LogThisStack + SigRepFooter) через platform.String и при GUI trapViewer'е —
+раньше в GUI репорт был виден только в трап-окне, в терминале ничего.

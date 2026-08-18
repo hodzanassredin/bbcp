@@ -994,3 +994,11 @@ untracked, без -f не попадут в коммит. Подтвержден
     sockaddr_storage. LinLibc уже был на явных pads (sigaction_t.pad0 и т.п.) —
     они rule-инвариантны. BootInfo переставлен rule-инвариантно (bbrun64.c
     обновлён). Конвенция FFI: KB/RecordAlign64.md.
+80. Refs-ридеры 10X: скип 4->8 байт (слот дескриптора amd64). Ломало
+    PC->proc в трапах ("Module.???"). Probe47. Kernel.HandleTrap: репорт
+    трапа теперь печатается в stdout и в GUI-режиме (раньше — только окно).
+    ОТКРЫТО: консольный frame-walker спамит ~IsReadable и падает на HALT-
+    трапах (reentrant SEGV вне isReadable-контекста) — GUI не затронут.
+81. ОТКРЫТО: PaketHttp TRAP 23 (precondition, Strings) при chunked-загрузке
+    списка пакетов. Ответ сервера Transfer-Encoding: chunked. В консоли не
+    воспроизводится (Services actions не качаются между командами).

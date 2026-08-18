@@ -1530,7 +1530,7 @@ MODULE Kernel;
 		S.GET(ref, ch);
 		WHILE ch >= 0FDX DO	(* skip variables *)
 			INC(ref); RefCh(ref, ch);
-			IF ch = 10X THEN INC(ref, 4) END;
+			IF ch = 10X THEN INC(ref, 8) END;	(* amd64: слот дескриптора 8 байт (4 мета + 4 sentinel) *)
 			RefNum(ref, adr); RefName(ref, name); S.GET(ref, ch)
 		END;
 		WHILE (ch > 0X) & (ch < 0FCX) DO	(* skip source refs *)
@@ -1571,8 +1571,8 @@ MODULE Kernel;
 		IF ok & (ch >= 0FDX) THEN
 			Get; (* form *)
 			IF ok & (ch = 10X) THEN
-				IF IsReadable(ref, ref + 4) THEN (* desc *)
-					S.GET(ref, p); INC(ref, 4);
+				IF IsReadable(ref, ref + 8) THEN (* desc: amd64 — слот 8 байт; читаем младшую половину (арена < 4 ГБ) *)
+					S.GET(ref, p); INC(ref, 8);
 					ok := IsReadable(p + 2 * 4, p + 3 * 4) (* desc.id *)
 				ELSE ok := FALSE
 				END
@@ -1591,7 +1591,7 @@ MODULE Kernel;
 				mode := SHORT(CHR(ORD(mode) - 0FCH));
 				INC(ref); RefCh(ref, form);
 				IF form = 10X THEN
-					S.GET(ref, desc); INC(ref, 4); form := SHORT(CHR(16 + desc.id MOD 4))
+					S.GET(ref, desc); INC(ref, 8); form := SHORT(CHR(16 + desc.id MOD 4))	(* слот 8 байт, amd64 *)
 				END;
 				RefNum(ref, adr); RefName(ref, name)
 			ELSE
@@ -1620,7 +1620,7 @@ MODULE Kernel;
 				END;
 				WHILE ch >= 0FDX DO	(* skip variables: Mode, Form, adr, Name *)
 					INC(ref); RefCh(ref, ch);
-					IF ch = 10X THEN INC(ref, 4) END;
+					IF ch = 10X THEN INC(ref, 8) END;	(* amd64: слот 8 байт *)
 					RefNum(ref, d); RefName(ref, name); S.GET(ref, ch)
 				END
 			END;
@@ -2498,7 +2498,9 @@ MODULE Kernel;
 				SigRepHeader(pc, fp, sp, err, recursive);
 				IF ~(defLogger IN dirty) THEN <odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAGQEAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAACTAAAAAAAAAAAAUQAAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAAAAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAA4AAAA@0RlZmF1bHRUcmFwVmlld2VyKHRyYXAuZGVwdGggPiAxLCBzaWcsIHRyYXBWaWV3ZXIgPSBOSUwp"/>LogThisStack(pc, fp)<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/> END;
 				SigRepFooter();
-				
+				(* репорт в stdout и при GUI trapViewer'е тоже (иначе виден только в окне) *)
+				IF (trapViewer # NIL) & (blog.buf # NIL) THEN platform.String(blog.buf^) END;
+
 				IF (err # silentTrap) & (trapViewer = NIL) THEN
 					platform.FatalError(trapMessage, blog.buf)
 				END;

@@ -1939,7 +1939,7 @@ MODULE DevDecoder386;
 					END;
 					WHILE ch >= 0FDX DO	(* skip variables: Mode, Form, adr, Name *)
 						INC(ref); RefCh(ref, ch);
-						IF ch = 10X THEN INC(ref, 4) END;
+						IF ch = 10X THEN INC(ref, 8) END;	(* amd64: слот 8 байт *)
 						RefNum(ref, d); RefName(ref, name); SYSTEM.GET(ref, ch)
 					END
 				END;
@@ -1969,7 +1969,7 @@ MODULE DevDecoder386;
 				END;
 				WHILE ch >= 0FDX DO	(* skip variables: Mode, Form, adr, Name *)
 					INC(ref); RefCh(ref, ch);
-					IF ch = 10X THEN INC(ref, 4) END;
+					IF ch = 10X THEN INC(ref, 8) END;	(* amd64: слот 8 байт *)
 					RefNum(ref, d); RefName(ref, name); SYSTEM.GET(ref, ch)
 				END
 			END

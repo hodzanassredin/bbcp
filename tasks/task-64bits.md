@@ -962,3 +962,9 @@ untracked, без -f не попадут в коммит. Подтвержден
     test64.c/.img, bb64.img). Оставлены осознанно: Dev/Code/*.ocf (seed),
     dev0* (бутстрапы всех платформ), bbrun64/exeLinux64.img (свежие),
     exe*BSD.img (плейсхолдеры под будущие порты).
+74. ИСПРАВЛЕНА регрессия фронтенда (п.72): ложный err 1 "multiply defined
+    identifier" на полях записей при компиляции 64-битным бинарём. Корень:
+    DevCPT.InsertThisField не инициализировала OUT-параметр old — чтение
+    мусора со стека (32-бит везло на NIL). Фикс: old := NIL. Детали и уроки:
+    KB/CompilerFwdRef64.md. probes.sh: компиляционные пробы Compile:<Модуль>,
+    добавлена Compile:ObxTestFwd2. probes 24/24.

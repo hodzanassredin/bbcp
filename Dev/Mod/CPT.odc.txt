@@ -504,6 +504,7 @@ MODULE DevCPT;
 	PROCEDURE InsertThisField (obj: Object; typ: Struct; VAR old: Object);
 		VAR ob0, ob1: Object; left: BOOLEAN; name: String;
 	BEGIN
+		old := NIL;	(* 64-бит: иначе InsertField читает мусорный old -> ложный err 1 *)
 		IF typ.link = NIL THEN typ.link := obj
 		ELSE
 			ob1 := typ.link; name := obj.name;

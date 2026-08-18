@@ -50,3 +50,25 @@ find . -name '*.odc.txt' -not -path './.git/*' | while read f; do
   iconv -f utf-8 -t utf-8 "$f" >/dev/null 2>&1 || echo "BAD: $f"
 done
 ```
+
+## Детектор двойного кодирования (mojibake в .odc)
+
+Симптом: в GUI модуль показывает `Ð±Ð¸Ñ‚` вместо «бит». Причина: txt
+конвертировали 8-битным `OdcText.Import` (bbcb2, без U) — каждый байт UTF-8
+стал отдельным CHAR (U+00D0, U+00B1...). В дампе `odcey text` это видно как
+`c3 90 c2 b1` (двойное кодирование) вместо нормального `d0 b1`.
+
+Поиск всех битых .odc:
+
+```bash
+cd ~/sources/bbcb2-2.0~a1.build332
+for f in $(find ~/sources/bbcp ~/sources/bbcp64use -name '*.odc' -not -path '*/.git/*'); do
+  odcey text "$f" 2>/dev/null | grep -qP '\xc3\x90[\xc2\xc5]|\xc3\x91\xe2' && echo "CORRUPT: $f"
+done
+```
+
+Лечение: переимпорт из .odc.txt строго через `OdcTextU.Import` (bbcb2) или
+`OdcTextU.Batch` (BB64), затем пересобрать модуль.
+
+Случай 2026-08-18: Mod64/DevCompiler.odc был создан через 8-битный импорт —
+единственный битый файл, переимпортирован, скан чистый.

@@ -947,3 +947,13 @@ untracked, без -f не попадут в коммит. Подтвержден
     probes 23/23. Cuda пересобрана после wipe.
 70. Побочно: починен mojibake в Mod64/DevCompiler.odc (8-битный импорт
     вместо OdcTextU) + детектор двойного кодирования в KB/OdcTextUtf8.md.
+71. bbrun64 требовал GLIBC_2.38 (__isoc23_strtoull — редирект хедеров
+    glibc>=2.38 при -D_GNU_SOURCE; -std=c99 не спасает). strtoull заменён
+    своим parse_ull -> бинарь теперь требует только <=2.34. Ниже 2.34 —
+    локальная пересборка (QUICKSTART64.md п.2, KB/GlibcCompat.md).
+    Из git выкинуты протухшие отладочные бинарники bbrun64_*.
+72. ОТКРЫТАЯ ЗАДАЧА: регрессия фронтенда DevCompiler64 — forward reference
+    типа в поле записи (A = POINTER TO RECORD d: B END; B объявлен позже)
+    даёт "multiply defined identifier"; стоковый 32-битный DevCompiler тот же
+    код принимает (проверено на ObxTestFwd). Всплыло на Paket/Mod/Http.odc
+    (Widget.d: Downloading). Искать в DevCPT обработку forward-типов.

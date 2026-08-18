@@ -127,12 +127,30 @@ intptr_t newRecAdr, newArrAdr;
 static char* arena;
 static size_t arenaPos;
 
+/* strtoull не используем: на glibc >= 2.38 с -D_GNU_SOURCE хедеры
+   перенаправляют его на __isoc23_strtoull@GLIBC_2.38, и бинарь перестаёт
+   запускаться на старых системах. Свой разбор hex/decimal. */
+static unsigned long long parse_ull (const char* s) {
+    unsigned long long v = 0; int base = 10;
+    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { base = 16; s += 2; }
+    for (; *s; s++) {
+        int d;
+        if (*s >= '0' && *s <= '9') d = *s - '0';
+        else if (*s >= 'a' && *s <= 'f') d = *s - 'a' + 10;
+        else if (*s >= 'A' && *s <= 'F') d = *s - 'A' + 10;
+        else break;
+        if (d >= base) break;
+        v = v * base + (unsigned)d;
+    }
+    return v;
+}
+
 static void ArenaInit() {
     /* MAP_32BIT: refs-курсоры и ModSpec в CP-коде INTEGER-капнуты (<4 ГБ),
        GC Mark читает теги 32-битно — вся арена должна быть < 4 ГБ */
     void* hint = NULL;
     const char* ab = getenv("BB_ARENA_BASE");	/* hex — фикс. база для детерминизма под gdb */
-    if (ab != NULL) hint = (void*)strtoull(ab, NULL, 0);
+    if (ab != NULL) hint = (void*)parse_ull(ab);
     arena = mmap(hint, ARENA_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC,
                  MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT | (hint ? MAP_FIXED_NOREPLACE : 0), -1, 0);
     if (arena == MAP_FAILED) { perror("arena mmap"); exit(1); }

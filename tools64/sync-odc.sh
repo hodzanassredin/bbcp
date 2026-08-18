@@ -26,7 +26,7 @@ if [ "$n" -gt 0 ]; then
 	fi
 	out=$(cd "$USE" && echo 'OdcTextU.Batch' | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" \
 		timeout -k 5 300 "$BB/Dev/Rsrc/bbrun64" --console 2>&1)
-	done_n=$(printf '%s\n' "$out" | grep -c '^Done! res:  0$')
+	done_n=$(printf '%s\n' "$out" | grep -c '^Done! res:  0$' || true)
 	printf '%s\n' "$out" | grep -iv '^Done! res:  0$' | grep -i 'fail\|not found\|bad \|error\|TRAP\|HALT' | head -5
 	rm -f "$BATCH"
 	if [ "$done_n" != "$n" ]; then

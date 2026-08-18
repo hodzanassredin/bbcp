@@ -66,7 +66,7 @@ MODULE Controls;
 			font-: Fonts.Font; bgColor-: INTEGER;
 			label-: Dialog.String;
 			prop-: Prop;
-			adr: ARRAY maxAdr OF INTEGER;
+			adr: ARRAY maxAdr OF LONGINT;	(* 64-бит: адреса контролов *)
 			num: INTEGER;
 			stamp: INTEGER;
 			shortcut: CHAR;
@@ -357,7 +357,7 @@ MODULE Controls;
 		IF ~c.readOnly & ~ c.disabled THEN
 			CallNotifier(c, op, from, to);
 			IF op >= Dialog.changed THEN
-				msg.id0 := SHORT(c.item.adr); msg.id1 := msg.id0 + c.item.Size(); msg.frame := f;	(* SHORT: контролы в арене <4ГБ *)
+				msg.id0 := c.item.adr; msg.id1 := msg.id0 + c.item.Size(); msg.frame := f;	(* 64-бит: адрес полный *)
 				msg.op := op; msg.from := from; msg.to := to;
 				msg.opts := {update, guardCheck};
 				Views.Omnicast(msg)
@@ -385,7 +385,7 @@ MODULE Controls;
 	END GetName;
 
 	PROCEDURE LookupPath (path: ARRAY OF CHAR; VAR i: Meta.Item;
-												VAR adr: ARRAY OF INTEGER; VAR num: INTEGER);
+												VAR adr: ARRAY OF LONGINT; VAR num: INTEGER);
 		VAR j, n: INTEGER; name: Meta.Name; ch: CHAR;
 	BEGIN
 		path[LEN(path) - 1] := 0X; j := 0; num := 0;
@@ -394,7 +394,7 @@ MODULE Controls;
 			INC(j); GetName(path, name, j);
 			i.Lookup(name, i); ch := path[j]; INC(j);
 			WHILE i.obj = Meta.varObj DO
-				adr[num] := SHORT(i.adr);
+				adr[num] := i.adr;
 				IF num < LEN(adr) - 1 THEN INC(num) END;
 				IF ch = 0X THEN RETURN 
 				ELSIF i.typ IN {Meta.ptrTyp, Meta.anyPtrTyp, Meta.sysPtrTyp} THEN
@@ -420,14 +420,14 @@ MODULE Controls;
 			END
 		ELSE
 			Meta.LookupPath(path, i); num := 0;
-			IF i.obj = Meta.varObj THEN adr[0] := SHORT(i.adr); num := 1
+			IF i.obj = Meta.varObj THEN adr[0] := i.adr; num := 1
 			ELSIF i.obj # Meta.procObj THEN Meta.Lookup("", i)
 			END
 		END
 	END LookupPath;
 
-	PROCEDURE Sort (VAR adr: ARRAY OF INTEGER; num: INTEGER);
-		VAR i, j, p: INTEGER;
+	PROCEDURE Sort (VAR adr: ARRAY OF LONGINT; num: INTEGER);
+		VAR i, j: INTEGER; p: LONGINT;
 	BEGIN
 		i := 1;
 		WHILE i < num DO

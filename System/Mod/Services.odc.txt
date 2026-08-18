@@ -270,9 +270,9 @@ MODULE Services;
 		END
 	END TypeLevel;
 
-	PROCEDURE AdrOf* (IN rec: ANYREC): INTEGER;
+	PROCEDURE AdrOf* (IN rec: ANYREC): LONGINT;	(* 64-бит: адрес полный *)
 	BEGIN
-		RETURN SHORT(SYSTEM.ADR(rec))
+		RETURN SYSTEM.ADR(rec)
 	END AdrOf;
 
 	PROCEDURE Collect*;

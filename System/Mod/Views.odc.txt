@@ -96,7 +96,7 @@ MODULE Views;
 		END;
 
 		NotifyMsg* = EXTENSIBLE RECORD (Message)
-			id0*, id1*: INTEGER;
+			id0*, id1*: LONGINT;	(* 64-бит: диапазоны адресов *)
 			opts*: SET
 		END;
 		
@@ -1502,12 +1502,13 @@ MODULE Views;
 		ASSERT(HandleCtrlMsg = NIL, 20); HandleCtrlMsg := p
 	END InitCtrl;
 
-	PROCEDURE (h: NotifyHook) Notify (id0, id1: INTEGER; opts: SET);
+	PROCEDURE (h: NotifyHook) Notify (id0, id1: LONGINT; opts: SET);
 		VAR msg: NotifyMsg;
 	BEGIN
-		ASSERT(msgHook # NIL, 100);
-		msg.id0 := id0; msg.id1 := id1; msg.opts := opts;
-		msgHook.Omnicast(msg)
+		IF msgHook # NIL THEN	(* headless (ConsWindows не ставит msgHook): рассылать некому *)
+			msg.id0 := id0; msg.id1 := id1; msg.opts := opts;
+			msgHook.Omnicast(msg)
+		END
 	END Notify;
 	
 	PROCEDURE Omnicast* (VAR msg: ANYREC);

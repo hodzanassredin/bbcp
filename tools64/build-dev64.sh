@@ -85,6 +85,7 @@ ConsCompiler64
 ObxCompileLog
 DevSearch
 DevReferences
+DevAnalyzer
 DevRBrowser
 DevDependencies
 DevInspector
@@ -102,7 +103,7 @@ DevLnkWritePe
 DevLinker
 DevLinker1
 DevBootLinker
-DevChmod
+DevChmod__Lin
 DevBrowser
 DevDebug
 DevHeapSpy

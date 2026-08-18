@@ -9,5 +9,8 @@ if [ "$1" = "--console" ]; then
 	shift
 	exec env BB_CONSOLE=1 BB_STANDARD_DIR="$USE" timeout -k 5 "${BB64_TIMEOUT:-300}" "$BB/Dev/Rsrc/bbrun64" --console "$@"
 else
+	# dev-запуски GUI из скриптов: ошибки печатаем, а не ждём OK в модальном диалоге.
+	# Для релизного поведения (диалоги): BB_GUI_DIALOGS=1 ./run-bb64
+	if [ -z "$BB_GUI_DIALOGS" ]; then BB_NODIALOG=1; export BB_NODIALOG; fi
 	exec env BB_STANDARD_DIR="$USE" "$BB/Dev/Rsrc/bbrun64" "$@"
 fi

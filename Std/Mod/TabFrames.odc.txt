@@ -1,0 +1,730 @@
+MODULE StdTabFrames;
+
+	(**
+	project	= "ypk Host"
+	subproject	= "Control Frames"
+	organization	= "https://bitbucket.org/oberoncore/ypk/src/default/Mod/HostTabFrames.odc"
+	contributors	= "Peter Kushnir"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "Docu/BB-License"
+	purpose	= ""
+	changes	= ""
+	issues	= ""
+	**)
+
+	IMPORT Controllers, TV := StdTabViews, Dialog, Fonts, Kernel, Models, Ports, Services, Stores, Views;
+
+	CONST
+		pixel = SHORT(ENTIER((3 / 4)*Ports.point)); (* ???????????? ?????? *)
+		scrollStep = 40*pixel;
+		none = -1;
+
+	TYPE
+		IteratorItem = POINTER TO ABSTRACT RECORD
+			root: Iterator;
+			prev, next: IteratorItem
+		END;
+		
+		Iterator = POINTER TO LIMITED RECORD(IteratorItem)
+			first, last, this: IteratorItem;
+			length: INTEGER
+		END;
+		
+		IntMap = POINTER TO LIMITED RECORD
+			list: Iterator
+		END;
+		
+		IntItem = POINTER TO RECORD(IteratorItem)
+			id: LONGINT;	(* 64-бит: адрес view *)
+			data: ANYPTR
+		END;
+
+		
+		UpdateAction = POINTER TO RECORD(Services.Action)
+			v: Views.View;
+			l, t, r, b: INTEGER
+		END;
+
+		Directory = POINTER TO RECORD (TV.FrameDirectory)
+			list: IntMap
+		END;
+
+		Scroll = POINTER TO RECORD (Views.View) END;
+
+		ScrollContext = POINTER TO RECORD (Models.Context)
+			base: Views.View;
+			v: Scroll;
+			l, t, r, b: INTEGER
+		END;
+
+		Tab = POINTER TO RECORD (Views.View)
+			i: INTEGER;
+			title: ARRAY 256 OF CHAR;
+		END;
+
+		TabContext = POINTER TO RECORD (Models.Context)
+			base: Views.View;
+			v: Tab;
+			l, t, r, b: INTEGER
+		END;
+
+		Bar = POINTER TO RECORD (Views.View) END;
+
+		BarContext = POINTER TO RECORD (Models.Context)
+			base: Views.View;
+			v: Bar;
+			l, t, r, b, dx: INTEGER
+		END;
+
+		Frame = POINTER TO RECORD (TV.Frame)
+			tabs: RECORD
+				h: INTEGER;
+				c: BarContext;
+				s: ScrollContext
+			END
+		END;
+
+		Prop = POINTER TO RECORD
+			dx, bw, w, hl: INTEGER;
+			upd: INTEGER
+		END;
+		
+		
+	VAR
+		dir: Directory;
+	
+	
+	PROCEDURE NewIterator (): Iterator;
+		VAR it: Iterator;
+	BEGIN
+		NEW(it); it.length := 0;
+		RETURN(it)
+	END NewIterator;
+
+
+	PROCEDURE (i: Iterator) First (), NEW;
+	BEGIN
+		i.this := i.first
+	END First;
+	
+	PROCEDURE (i: Iterator) Next (), NEW;
+	BEGIN
+		ASSERT(i.this # NIL, 20);
+		i.this := i.this.next
+	END Next;
+	
+	PROCEDURE (i: Iterator) Add (item: IteratorItem), NEW;
+	BEGIN
+		ASSERT(item # NIL, 20);
+		item.root := i;
+		IF (i.last # NIL) & (i.first # NIL) THEN
+			i.last.next := item;
+			item.prev := i.last;
+			item.next := NIL;
+			i.last := item
+		ELSE
+			i.first := item;
+			i.last := item;
+			item.next := NIL;
+			item.prev := NIL
+		END;
+		INC(i.length)
+	END Add;
+	
+
+	PROCEDURE (m: IntMap) Item2 (id: LONGINT): IntItem, NEW;
+		VAR x: IntItem;
+	BEGIN
+		x := NIL;
+		m.list.First;
+		WHILE (m.list.this # NIL) & (m.list.this IS IntItem) & (x = NIL) DO
+			IF m.list.this(IntItem).id = id THEN x := m.list.this(IntItem) END;
+			m.list.Next
+		END;
+		RETURN x
+	END Item2;
+		
+	PROCEDURE (m: IntMap) Item (id: LONGINT): ANYPTR, NEW;
+		VAR x: IntItem;
+	BEGIN
+		x := m.Item2(id);
+		IF x # NIL THEN RETURN x.data ELSE RETURN NIL END
+	END Item;
+
+	PROCEDURE (m: IntMap) Add (id: LONGINT; item: ANYPTR), NEW;
+		VAR i: IntItem;
+	BEGIN
+		ASSERT(item # NIL, 20);
+		i := m.Item2(id);
+		IF i # NIL THEN i.data := item ELSE NEW(i); i.id := id; i.data := item; m.list.Add(i) END
+	END Add;
+	
+	PROCEDURE NewIntMap (): IntMap;
+		VAR i: IntMap;
+	BEGIN
+		NEW(i);
+		i.list := NewIterator();
+		RETURN i
+	END NewIntMap;
+	
+		
+	PROCEDURE (a: UpdateAction) Do;
+	BEGIN
+		Views.UpdateIn(a.v, a.l, a.t, a.r, a.b, TRUE)
+	END Do;
+
+	PROCEDURE (d: Directory) This (v: Views.View): Prop, NEW;
+		VAR x: ANYPTR; p: Prop;
+	BEGIN
+		(* Kernel.Collect; *)
+		x := d.list.Item(Services.AdrOf(v));
+		IF x # NIL THEN p := x(Prop) END;
+		RETURN p
+	END This;
+
+	PROCEDURE (d: Directory) Add (v: Views.View; p: Prop), NEW;
+	BEGIN
+		d.list.Add(Services.AdrOf(v), p)
+	END Add;
+
+	PROCEDURE (d: Directory) NewFrame (v: Views.View), NEW;
+		VAR p: Prop;
+	BEGIN
+		p := dir.This(v);
+		IF p # NIL THEN
+			p.upd := 0
+		END
+	END NewFrame;
+
+	PROCEDURE (d: Directory) UpdateView (v: Views.View), NEW;
+		VAR p: Prop;
+	BEGIN
+		p := d.This(v);
+		IF (p # NIL) & (p.upd = 0) THEN
+			(* Kernel.Collect; *)
+			Views.Update(v, TRUE);
+			p.upd := 1
+		ELSE Views.Update(v, TRUE) END
+	END UpdateView;
+
+	PROCEDURE (d: Directory) UpdateFrame (f: Frame), NEW;
+		VAR p: Prop; a: UpdateAction;
+	BEGIN
+		p := d.This(f.view);
+		IF (p # NIL) THEN
+			(* Kernel.Collect; *)
+			NEW(a);
+			a.v := f.view; a.l := f.tabs.c.l; a.t := f.tabs.c.t; a.r := f.tabs.c.r; a.b := f.tabs.c.b;
+			Services.DoLater(a, Services.immediately);
+			p.upd := 1
+		END
+	END UpdateFrame;
+
+	PROCEDURE (d: Directory) Close (f: Frame), NEW;
+		VAR p: Prop;
+	BEGIN
+		p := d.This(f.view);
+		IF (p # NIL) THEN
+			(* Kernel.Collect; *)
+			p.upd := 0
+		END
+	END Close; 	
+	
+	PROCEDURE NewTabContext (v, base: Views.View): TabContext;
+		VAR c: TabContext;
+	BEGIN
+		NEW(c);
+		c.v := v(Tab); c.base := base;
+		v.InitContext(c); Stores.Join(v, base);
+		RETURN c
+	END NewTabContext;
+
+	PROCEDURE (c: TabContext) ThisModel (): Models.Model;
+	BEGIN
+		RETURN NIL	(* don't give the embedded views information about the dummy twin model *)
+	END ThisModel;
+
+	PROCEDURE (c: TabContext) GetSize (OUT w, h: INTEGER);
+	BEGIN
+		w := c.r - c.l;
+		h := c.b - c.t
+	END GetSize;
+
+	PROCEDURE (c: TabContext) MakeVisible (l, t, r, b: INTEGER);
+		VAR w, h, sep: INTEGER;
+	BEGIN
+		c.base.context.MakeVisible(l, t, r, b)
+	END MakeVisible;
+
+	PROCEDURE (c: TabContext) Consider (VAR p: Models.Proposal);
+	BEGIN
+		c.base.context.Consider(p)
+	END Consider;
+
+	PROCEDURE (c: TabContext) Normalize (): BOOLEAN;
+	BEGIN
+		RETURN c.base.context.Normalize()
+	END Normalize; 	
+	
+	
+	PROCEDURE NewBarContext (v, base: Views.View): BarContext;
+		VAR c: BarContext; p: Prop;
+	BEGIN
+		NEW(c);
+		c.v := v(Bar); c.base := base;
+		v.InitContext(c); Stores.Join(v, base);
+		p := dir.This(base);
+		IF p = NIL THEN
+			NEW(p); p.dx := 0; p.hl := none; p.upd := 0;
+			dir.Add(c.base, p)
+		END;
+		p.bw := 0; p.w := 0;
+		RETURN c
+	END NewBarContext;
+
+	PROCEDURE (c: BarContext) ThisModel (): Models.Model;
+	BEGIN
+		RETURN NIL	(* don't give the embedded views information about the dummy twin model *)
+	END ThisModel;
+
+	PROCEDURE (c: BarContext) GetSize (OUT w, h: INTEGER);
+	BEGIN
+		w := c.r - c.l;
+		h := c.b - c.t
+	END GetSize;
+
+	PROCEDURE (c: BarContext) MakeVisible (l, t, r, b: INTEGER);
+		VAR w, h, sep: INTEGER;
+	BEGIN
+		c.base.context.MakeVisible(l, t, r, b)
+	END MakeVisible;
+
+	PROCEDURE (c: BarContext) Consider (VAR p: Models.Proposal);
+	BEGIN
+		c.base.context.Consider(p)
+	END Consider;
+
+	PROCEDURE (c: BarContext) Normalize (): BOOLEAN;
+	BEGIN
+		RETURN c.base.context.Normalize()
+	END Normalize;
+
+	PROCEDURE (c: BarContext) SetWidth (bw: INTEGER), NEW;
+		VAR p: Prop;
+	BEGIN
+		p := dir.This(c.base);
+		IF p # NIL THEN p.bw := bw; p.w := c.r - c.l END
+	END SetWidth;
+
+	PROCEDURE (c: BarContext) SetHover (idx: INTEGER), NEW;
+		VAR p: Prop;
+	BEGIN
+		p := dir.This(c.base);
+		IF (p # NIL) & (p.hl # idx) THEN
+			(* p.hl := idx ?? ????? *) 
+		END
+	END SetHover;
+
+	PROCEDURE (c: BarContext) GetHover (): INTEGER, NEW;
+		VAR p: Prop; res: INTEGER;
+	BEGIN
+		res := none;
+		p := dir.This(c.base);
+		IF p # NIL THEN res := p.hl END;
+		RETURN res
+	END GetHover; 	
+	
+	PROCEDURE NewScrollContext (v, base: Views.View): ScrollContext;
+		VAR c: ScrollContext;
+	BEGIN
+		NEW(c);
+		c.v := v(Scroll); c.base := base;
+		v.InitContext(c); Stores.Join(v, base);
+		RETURN c
+	END NewScrollContext;
+
+	PROCEDURE (c: ScrollContext) ThisModel (): Models.Model;
+	BEGIN
+		RETURN NIL	(* don't give the embedded views information about the dummy twin model *)
+	END ThisModel;
+
+	PROCEDURE (c: ScrollContext) GetSize (OUT w, h: INTEGER);
+	BEGIN
+		w := c.r - c.l;
+		h := c.b - c.t
+	END GetSize;
+
+	PROCEDURE (c: ScrollContext) MakeVisible (l, t, r, b: INTEGER);
+		VAR w, h, sep: INTEGER;
+	BEGIN
+		c.base.context.MakeVisible(l, t, r, b)
+	END MakeVisible;
+
+	PROCEDURE (c: ScrollContext) Consider (VAR p: Models.Proposal);
+	BEGIN
+		c.base.context.Consider(p)
+	END Consider;
+
+	PROCEDURE (c: ScrollContext) Normalize (): BOOLEAN;
+	BEGIN
+		RETURN c.base.context.Normalize()
+	END Normalize;
+
+	PROCEDURE (c: ScrollContext) SetPos (x: INTEGER), NEW;
+		VAR p: Prop; n: INTEGER;
+	BEGIN
+		p := dir.This(c.base);
+		n := p.bw DIV scrollStep;
+		p.dx := MAX(0, MIN(p.dx + x, n - 2))
+	END SetPos;
+
+	PROCEDURE (c: ScrollContext) GetPos (OUT x: INTEGER), NEW;
+		VAR p: Prop;
+	BEGIN
+		p := dir.This(c.base);
+		x := p.dx
+	END GetPos;	
+	
+	PROCEDURE DrawRect3d (f: Views.Frame; l, t, r, b: INTEGER; dir: BYTE);
+		VAR x1, y1, h: INTEGER;
+	BEGIN
+		h := 7 * f.dot;
+		x1 := (r - l) DIV 2; y1 := ((b - t) DIV 2) - (h DIV 2);
+		CASE dir OF
+		| 2: (* ????? *)
+			f.DrawRect(l + 5 * f.dot, t + 7 * f.dot + y1, l + 6 * f.dot, t + 8 * f.dot + y1, Ports.fill, Ports.black); (* ??? - 1 *)
+			f.DrawRect(l + 6 * f.dot, t + 6 * f.dot + y1, l + 7 * f.dot, t + 9 * f.dot + y1, Ports.fill, Ports.black); (* 2 *)
+			f.DrawRect(l + 7 * f.dot, t + 5 * f.dot + y1, l + 8 * f.dot, t + 10 * f.dot + y1, Ports.fill, Ports.black); (* 3 *)
+			f.DrawRect(l + 8 * f.dot, t + 4 * f.dot + y1, l + 9 * f.dot, t + 11 * f.dot + y1, Ports.fill, Ports.black); (* 4 *)
+		| 3: (* ?????? *)
+			f.DrawRect(r - 7 * f.dot, t + 7 * f.dot + y1, r - 6 * f.dot, t + 8 * f.dot + y1, Ports.fill, Ports.black); (* ???? - 1 *)
+			f.DrawRect(r - 8 * f.dot, t + 6 * f.dot + y1, r - 7 * f.dot, t + 9 * f.dot + y1, Ports.fill, Ports.black); (* ???? - 1 *)
+			f.DrawRect(r - 9 * f.dot, t + 5 * f.dot + y1, r - 8 * f.dot, t + 10 * f.dot + y1, Ports.fill, Ports.black); (* ???? - 1 *)
+			f.DrawRect(r - 10 * f.dot, t + 4 * f.dot + y1, r - 9 * f.dot, t + 11 * f.dot + y1, Ports.fill, Ports.black); (* ???? - 1 *)
+		ELSE END
+	END DrawRect3d;
+
+	PROCEDURE (v: Scroll) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR w, h: INTEGER; p: Prop;
+	BEGIN
+		v.context.GetSize(w, h);
+		p := dir.This(v.context(ScrollContext).base);
+		IF (p # NIL) & (p.w < p.bw) THEN
+			f.DrawRect(0, 3 * pixel, (w - pixel) DIV 2, h, Ports.fill, Ports.grey12);
+			f.DrawRect((w - pixel) DIV 2, 3 * pixel, w - pixel, h, Ports.fill, Ports.grey12);
+			f.DrawRect(0, 3 * pixel, w - pixel, h, pixel, Ports.black);
+
+			f.DrawLine((w DIV 2) - pixel, 3 * pixel, (w DIV 2) - pixel, h - 2 * pixel, 2 * pixel, Ports.black);
+
+			DrawRect3d(f, 0, 0, (w DIV 2) - 2 * pixel, h - 2 * pixel, 2);
+			DrawRect3d(f, (w DIV 2) + 2 * pixel, 0, w - pixel, h - 2 * pixel, 3)
+
+		ELSE
+			f.DrawLine(0, h - pixel, w - pixel, h - pixel, pixel, Ports.black);
+			p.dx:=0;
+		END
+	END Restore;
+
+	PROCEDURE (v: Scroll) HandleCtrlMsg (f: Views.Frame; VAR msg: Views.CtrlMessage; VAR focus: Views.View);
+		VAR w, h, x, y, res: INTEGER; mods: SET; isDown: BOOLEAN; p: Prop;
+	BEGIN
+		v.context.GetSize(w, h);
+		WITH
+		|msg: Controllers.TrackMsg DO
+			f.Input(x, y, mods, isDown);
+			IF isDown THEN
+				p := dir.This(v.context(ScrollContext).base);
+				IF (p # NIL) & (p.w < p.bw) THEN
+					IF ((w DIV 2) >= x) THEN res := - 1 ELSE res := 1 END;
+					v.context(ScrollContext).SetPos(res);
+					dir.UpdateView(v.context(ScrollContext).base)
+				END
+			END
+		ELSE END;
+		focus := v
+	END HandleCtrlMsg;
+
+	PROCEDURE NewScroll (): Scroll;
+		VAR s: Scroll;
+	BEGIN
+		NEW(s);
+		RETURN s
+	END NewScroll;
+
+	(* processing '&' and "&&"; return amp position and width *)
+	PROCEDURE CleanAmp (VAR s: ARRAY OF CHAR; font: Fonts.Font; OUT awdt: INTEGER): INTEGER;
+	VAR
+		tmp: ARRAY 2 OF CHAR;
+		i, j: INTEGER;
+		apos: INTEGER;
+	BEGIN
+		apos := -1; awdt := -1; i := 0; j := 0;
+		WHILE s[i] # 0X DO
+			IF (s[i] = '&') & (s[i + 1] # 0X) THEN
+				INC(i);
+				IF (apos < 0) & (s[i] # '&') THEN apos := j END
+			END;
+			s[j] := s[i]; INC(i); INC(j)
+		END;
+		s[j] := 0X;
+		IF apos >= 0 THEN
+			ASSERT(apos < LEN(s$));
+			i := apos;
+			tmp[0] := s[i]; tmp[1] := 0X;
+			s[apos] := 0X; apos := font.StringWidth(s); s[i] := tmp[0];
+			awdt := font.StringWidth(tmp)
+		END;
+		awdt := MAX(0, awdt);
+		RETURN apos
+	END CleanAmp;
+
+	PROCEDURE (v: Tab) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR w, h, dh: INTEGER; v0: Views.View; tv: TV.View; len, i: INTEGER; font: Fonts.Font; sw, tt, tl, tr, tb, col, mcol: INTEGER; asc, desc, weight, apos, awdt, x, y: INTEGER; hov, this: BOOLEAN;
+			s: ARRAY 256 OF CHAR;
+	BEGIN
+		
+		v.context.GetSize(w, h);
+		font := Fonts.dir.Default();
+		font.GetBounds(asc, desc, weight);
+		tv := v.context(TabContext).base(Bar).context(BarContext).base(TV.View);
+		hov := (v.i = v.context(TabContext).base.context(BarContext).GetHover()); this := (v.i = tv.Index());
+		IF hov & this THEN
+			col := Ports.grey6
+		ELSIF hov OR this THEN
+			col := Ports.white; mcol:=Ports.black;
+		ELSE col := Ports.grey12; mcol:=Ports.grey50 END;
+		sw := font.StringWidth(v.title$);
+		tl := v.context(TabContext).l; tr := v.context(TabContext).r; tt := v.context(TabContext).t; tb := v.context(TabContext).b;
+		f.DrawRect(0, 0, w, h, pixel, mcol);
+		f.DrawRect(pixel, pixel, w - pixel, h, Ports.fill, col);
+		IF this THEN dh:=3*pixel ELSE dh:=1*pixel END;
+		s := v.title$;
+		apos := CleanAmp(s, font, awdt);
+		x := (w DIV 2) - (sw DIV 2);
+		y := (h DIV 2) + (asc DIV 2) - dh;
+		f.DrawString(x, y, Ports.black, s, font);
+		IF awdt > f.dot THEN
+			INC(y, 1 * f.dot);
+			f.DrawRect(x + apos, y, x + apos + awdt, y + f.dot, Ports.fill,  Ports.black)
+		END
+	END Restore;
+
+	PROCEDURE (v: Tab) HandleCtrlMsg (f: Views.Frame; VAR msg: Views.CtrlMessage; VAR focus: Views.View);
+		VAR w, h, x, y: INTEGER; mods: SET; isDown: BOOLEAN; tv: TV.View; g: Views.Frame; dw: INTEGER;
+	BEGIN
+		v.context.GetSize(w, h);
+		WITH
+		|msg: Controllers.TrackMsg DO
+			f.Input(x, y, mods, isDown);
+			IF isDown THEN
+				g:=f;
+				REPEAT g:=Views.HostOf(g) UNTIL (g=NIL) OR (g IS Frame);
+				v.context(TabContext).base.context(BarContext).SetHover(v.i);
+				IF g#NIL THEN 
+					dw:=v.context(TabContext).base.context(BarContext).r - v.context(TabContext).r;
+					IF dw<10*pixel THEN
+						g(Frame).tabs.s.SetPos(MAX(2, w DIV scrollStep));
+					ELSE
+						dw:=v.context(TabContext).l - v.context(TabContext).base.context(BarContext).l;
+						IF dw<10*pixel THEN
+							g(Frame).tabs.s.SetPos(- MAX(2,w DIV scrollStep));
+						END;
+					END;
+				END;
+				g(Frame).SetIndex(v.i); (* ??????? ?? ????? ?????? *)
+			END
+		|msg: Controllers.PollCursorMsg DO
+			IF (msg.x > v.context(TabContext).l) & (msg.y > v.context(TabContext).t) & (msg.x < v.context(TabContext).r) & (msg.y < v.context(TabContext).b) THEN
+				(* v.context(TabContext).base.context(BarContext).SetHover(v.i) *)
+			ELSE END
+		ELSE END;
+		focus := NIL
+	END HandleCtrlMsg;
+
+	PROCEDURE NewTab (idx: INTEGER; title: ARRAY OF CHAR): Tab;
+		VAR t0: Tab;
+	BEGIN
+		NEW(t0);
+		t0.i := idx;
+		t0.title:=title$;
+		RETURN t0
+	END NewTab;
+	
+	PROCEDURE (v: Bar) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		VAR dw, w, h: INTEGER; s: Dialog.String; v0: Views.View; tv: TV.View; len, i: INTEGER; font: Fonts.Font; sw, tt, tl, tr, tb, il, ir, col: INTEGER; asc, desc, weight: INTEGER; tab: Tab; tc: TabContext; bw, tw, th: INTEGER;
+	BEGIN
+		v.context.GetSize(w, h);
+		font := Fonts.dir.Default(); font.GetBounds(asc, desc, weight);
+		tv := v.context(BarContext).base(TV.View); i := 0; len := tv.NofTabs();
+		dw := - (scrollStep * v.context(BarContext).dx);
+		tl := dw + 5 * pixel; tb := h - pixel; tr := dw; tt := 0; il := 0; ir := 0; bw := 0;
+		WHILE i < len DO
+			tv.GetItem(i, s, v0); Dialog.MapString(s$, s);
+			
+			(* s := v.vitle$; *)
+			
+			sw := font.StringWidth(s$);
+			(* sw := MAX(sw + MAX(5*pixel, sw DIV 5), 20 * pixel); *) 
+			sw:=sw+4*Ports.mm; tr := tr + sw;
+			
+			tab := NewTab(i, s$);
+			tc := NewTabContext(tab, v);
+			IF i = tv.Index() THEN tt := 2 * pixel; il := tl; ir := tr ELSE tt := 4 * pixel END;
+			tc.l := tl - pixel; tc.r := tr; tc.t := tt; tc.b := tb;
+			IF i = tv.Index() THEN 
+				Views.InstallFrame(f, tab, tl - pixel, tt, 1, TRUE);
+			ELSE
+				Views.InstallFrame(f, tab, tl - pixel, tt, 0, TRUE);
+			END;	
+			tc.GetSize(tw, th); INC(bw, tw);
+			tl := tr;
+			INC(i)
+		END;
+		v.context(BarContext).SetWidth(bw);
+		f.DrawLine(0, h - pixel, il, h - pixel, pixel, Ports.black);
+		f.DrawLine(ir, h - pixel, w, h - pixel, pixel, Ports.black)
+	END Restore;
+
+	PROCEDURE (v: Bar) HandleCtrlMsg (f: Views.Frame; VAR msg: Views.CtrlMessage; VAR focus: Views.View);
+		VAR g: Views.Frame; hl: INTEGER;
+	BEGIN
+		WITH
+		|msg: Controllers.TrackMsg DO
+			g := Views.FrameAt(f, msg.x, msg.y);
+			IF g # NIL THEN
+				Views.ForwardCtrlMsg(g, msg);
+			END
+		|msg: Controllers.PollCursorMsg DO
+			g := Views.FrameAt(f, msg.x, msg.y);
+			(* hl := v.context(BarContext).GetHover();
+			IF g # NIL THEN
+				Views.ForwardCtrlMsg(g, msg)
+			ELSE v.context(BarContext).SetHover(none) END;
+			IF (hl # v.context(BarContext).GetHover()) THEN
+				dir.UpdateFrame(Views.HostOf(f)(Frame))
+			END *)
+		|msg: Controllers.PollOpsMsg DO
+		ELSE END;
+		focus := NIL
+	END HandleCtrlMsg;
+	
+
+	PROCEDURE (f: Frame) GetDispSize (OUT x, y, w, h: INTEGER);
+	BEGIN
+		f.view.context.GetSize(w, h);
+		x := 2 * pixel; y := f.tabs.h + 2 * pixel;
+		w := w - 4 * pixel;
+		h := h - y - 2 * pixel
+	END GetDispSize;
+
+	PROCEDURE (f: Frame) InDispArea (x, y: INTEGER): BOOLEAN;
+		VAR ok: BOOLEAN; w, h: INTEGER;
+
+		PROCEDURE ResetHover;
+			VAR p: Prop;
+		BEGIN
+			p := dir.This(f.view);
+			IF p # NIL THEN
+				IF p.hl >= 0 THEN
+					p.hl := none;
+					dir.UpdateFrame(f)
+				END
+			END
+		END ResetHover;
+
+	BEGIN
+		f.view.context.GetSize(w, h);
+		ok := (ABS(w - x) > 2 * pixel) & (y > (f.tabs.h + 2 * pixel)) & (y < h);
+		IF ok THEN
+			(* ResetHover *)
+		END;
+		RETURN ok
+	END InDispArea;
+
+	PROCEDURE (f: Frame) DrawTabs, NEW;
+		VAR w, h, col: INTEGER;
+	BEGIN
+		f.view.context.GetSize(w, h);
+		f.tabs.c.l := 0; f.tabs.c.t := 0; f.tabs.c.r := w - f.tabs.h; f.tabs.c.b := f.tabs.h + pixel;
+		f.tabs.s.GetPos(f.tabs.c.dx);
+		Views.InstallFrame(f, f.tabs.c.v, 0, 0, 0, TRUE);
+		f.tabs.s.l := f.tabs.c.r; f.tabs.s.t := 0; f.tabs.s.r := w; f.tabs.s.b := f.tabs.h + pixel;
+		Views.InstallFrame(f, f.tabs.s.v, f.tabs.c.r, 0, 0, TRUE);
+	END DrawTabs;
+
+	PROCEDURE (f: Frame) UpdateList;
+		VAR v: Bar; s: Scroll; res: INTEGER;
+	BEGIN
+		IF f.tabs.c = NIL THEN
+			dir.NewFrame(f.view);
+			NEW(v); f.tabs.c := NewBarContext(v, f.view);
+			NEW(s); f.tabs.s := NewScrollContext(s, f.view);
+			Dialog.Call('Kernel.FastCollect', '', res);
+		END
+	END UpdateList;
+
+	PROCEDURE (f: Frame) Restore (l, t, r, b: INTEGER);
+		VAR w, h: INTEGER;
+	BEGIN
+		f.view.context.GetSize(w, h);
+		f.DrawTabs;
+		f.DrawLine(0, f.tabs.h, 0, h - pixel, pixel, Ports.black);
+		f.DrawLine(w - pixel, f.tabs.h, w - pixel, h - pixel, pixel, Ports.black);
+		f.DrawLine(0, h - pixel, w - pixel, h - pixel, pixel, Ports.black)
+	END Restore;
+
+	PROCEDURE (f: Frame) MouseDown (x, y: INTEGER; buttons: SET);
+		VAR g: Views.Frame; tm: Controllers.TrackMsg;
+	BEGIN
+		ASSERT(~f.disabled, 100);
+		IF f.rider # NIL THEN
+			g := Views.FrameAt(f, x, y);
+			IF g # NIL THEN
+				tm.x := x; tm.y := y; tm.modifiers := {};
+				Views.ForwardCtrlMsg(g, tm);
+			END
+		END;
+	END MouseDown;
+
+	PROCEDURE (f: Frame) GetCursor (x, y: INTEGER; mods: SET; VAR c: INTEGER);
+		VAR g: Views.Frame; cm: Controllers.PollCursorMsg;
+	BEGIN
+		ASSERT(~f.disabled, 100);
+		IF f.rider # NIL THEN
+			IF mods = {} THEN
+				g := Views.FrameAt(f, x, y);
+				IF g # NIL THEN
+					cm.x := x; cm.y := y; cm.modifiers := {};
+					Views.ForwardCtrlMsg(g, cm)
+				END
+			END
+		END
+	END GetCursor;
+
+	PROCEDURE (f: Frame) Close;
+	BEGIN
+		dir.Close(f);
+	END Close;
+
+	PROCEDURE (d: Directory) GetTabSize (VAR w, h: INTEGER);
+	BEGIN
+		IF w = Views.undefined THEN w := 150 * pixel END;
+		IF h = Views.undefined THEN h := 100 * pixel END
+	END GetTabSize;
+
+	PROCEDURE (d: Directory) New (): Frame;
+		VAR f: Frame;
+	BEGIN
+		NEW(f);
+		f.tabs.h := 25 * pixel;
+		RETURN f
+	END New;
+
+	PROCEDURE Init*;
+	BEGIN
+		NEW(dir); dir.list := NewIntMap();
+		TV.SetFrameDir(dir)
+	END Init;
+	
+END StdTabFrames.

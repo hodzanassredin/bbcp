@@ -64,7 +64,7 @@ MODULE DevDecoder386;
 										VAR out: TextMappers.Formatter);
 		VAR pc, op, column, prefix, w: INTEGER;
 			adrPrefix, opPrefix: BOOLEAN;
-			procRef, procAdr, res: INTEGER; procName: Kernel.Utf8Name;
+			procRef: LONGINT; procAdr, res: INTEGER; procName: Kernel.Utf8Name;	(* 64-бит: procRef — сырой адрес *)
 			jmpTabEnd: INTEGER; meta: POINTER TO ARRAY OF BYTE;
 			srcRd: TextModels.Reader; from, to, lastFrom: INTEGER;
 
@@ -1875,14 +1875,14 @@ MODULE DevDecoder386;
 		END OpenSourceReader;
 
 		PROCEDURE WriteSrc;
-			VAR ref, pos, ad, d: INTEGER; ch: SHORTCHAR; name: Kernel.Utf8Name;
+			VAR ref: LONGINT; pos, ad, d: INTEGER; ch: SHORTCHAR; name: Kernel.Utf8Name;	(* 64-бит: ref — сырой адрес *)
 			
-			PROCEDURE RefCh (VAR ref: INTEGER; OUT ch: SHORTCHAR);
+			PROCEDURE RefCh (VAR ref: LONGINT; OUT ch: SHORTCHAR);
 			BEGIN
 				SYSTEM.GET(ref, ch); INC(ref)
 			END RefCh;
 
-			PROCEDURE RefNum (VAR ref: INTEGER; OUT x: INTEGER);
+			PROCEDURE RefNum (VAR ref: LONGINT; OUT x: INTEGER);
 				VAR s, n: INTEGER; ch: SHORTCHAR;
 			BEGIN
 				s := 0; n := 0; RefCh(ref, ch);
@@ -1890,7 +1890,7 @@ MODULE DevDecoder386;
 				x := n + ASH(ORD(ch) MOD 64 - ORD(ch) DIV 64 * 64, s)
 			END RefNum;
 			
-			PROCEDURE RefName (VAR ref: INTEGER; OUT n: Kernel.Utf8Name);
+			PROCEDURE RefName (VAR ref: LONGINT; OUT n: Kernel.Utf8Name);
 				VAR i: INTEGER; ch: SHORTCHAR;
 			BEGIN
 				i := 0; RefCh(ref, ch);

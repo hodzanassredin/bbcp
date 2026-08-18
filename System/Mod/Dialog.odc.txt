@@ -94,7 +94,7 @@ MODULE Dialog;
 			parent, next, prev, firstChild: TreeNode;
 			viewAsFolder, expanded: BOOLEAN;
 			data: ANYPTR;
-			tree: INTEGER
+			tree: LONGINT	(* 64-бит: адрес дерева рекордов *)
 		END;
 
 		Tree* = RECORD
@@ -273,7 +273,7 @@ MODULE Dialog;
 		callHook := h
 	END SetCallHook;
 
-	PROCEDURE (h: NotifyHook) Notify* (id0, id1: INTEGER; opts: SET), NEW, ABSTRACT;
+	PROCEDURE (h: NotifyHook) Notify* (id0, id1: LONGINT; opts: SET), NEW, ABSTRACT;	(* 64-бит: диапазоны адресов *)
 
 	PROCEDURE SetNotifyHook* (h: NotifyHook);
 	BEGIN
@@ -942,19 +942,19 @@ MODULE Dialog;
 
 	PROCEDURE (IN t: Tree) Parent* (node: TreeNode): TreeNode, NEW;
 	BEGIN
-		ASSERT(node # NIL, 20); ASSERT(node.tree = SHORT(SYSTEM.ADR(t)), 21);
+		ASSERT(node # NIL, 20); ASSERT(node.tree = SYSTEM.ADR(t), 21);
 		RETURN node.parent
 	END Parent;
 
 	PROCEDURE (IN t: Tree) Next* (node: TreeNode): TreeNode, NEW;
 	BEGIN
-		ASSERT(node # NIL, 20); ASSERT(node.tree = SHORT(SYSTEM.ADR(t)), 21);
+		ASSERT(node # NIL, 20); ASSERT(node.tree = SYSTEM.ADR(t), 21);
 		RETURN node.next
 	END Next;
 
 	PROCEDURE (IN t: Tree) Prev* (node: TreeNode): TreeNode, NEW;
 	BEGIN
-		ASSERT(node # NIL, 20); ASSERT(node.tree = SHORT(SYSTEM.ADR(t)), 21);
+		ASSERT(node # NIL, 20); ASSERT(node.tree = SYSTEM.ADR(t), 21);
 		RETURN node.prev
 	END Prev;
 
@@ -962,7 +962,7 @@ MODULE Dialog;
 		VAR cur: TreeNode;
 	BEGIN
 		ASSERT(pos >= lastPos, 20);
-		ASSERT((node = NIL) OR (node.tree = SHORT(SYSTEM.ADR(t))), 21);
+		ASSERT((node = NIL) OR (node.tree = SYSTEM.ADR(t)), 21);
 		IF node = NIL THEN cur := t.firstRoot
 		ELSE cur := node.firstChild END;
 		IF pos = lastPos THEN
@@ -980,7 +980,7 @@ MODULE Dialog;
 
 	PROCEDURE (VAR t: Tree) Select* (node: TreeNode), NEW;
 	BEGIN
-		ASSERT((node = NIL) OR (node.tree = SHORT(SYSTEM.ADR(t))), 20);
+		ASSERT((node = NIL) OR (node.tree = SYSTEM.ADR(t)), 20);
 		IF (node # NIL) OR (t.nofRoots = 0) THEN
 			t.selected := node
 		ELSE
@@ -992,7 +992,7 @@ MODULE Dialog;
 		VAR c: TreeNode;
 	BEGIN
 		ASSERT(node # NIL, 20); ASSERT(node.tree = 0, 100);
-		node.tree := SHORT(SYSTEM.ADR(t));
+		node.tree := SYSTEM.ADR(t);
 		c := node.firstChild;
 		WHILE c # NIL DO Include(t, c); c := c.next END
 	END Include;
@@ -1003,7 +1003,7 @@ MODULE Dialog;
 	BEGIN
 		ASSERT(node # NIL, 20);
 		ASSERT(pos >= lastPos, 21);
-		ASSERT((parent = NIL) OR (parent.tree = SHORT(SYSTEM.ADR(t))), 22);
+		ASSERT((parent = NIL) OR (parent.tree = SYSTEM.ADR(t)), 22);
 		ASSERT(node.tree = 0, 23);
 		Include(t, node);
 		IF parent = NIL THEN	(* Add new root *)
@@ -1073,7 +1073,7 @@ MODULE Dialog;
 	PROCEDURE Exclude (VAR t: Tree; node: TreeNode);
 		VAR c: TreeNode;
 	BEGIN
-		ASSERT(node # NIL, 20); ASSERT(node.tree = SHORT(SYSTEM.ADR(t)), 100);
+		ASSERT(node # NIL, 20); ASSERT(node.tree = SYSTEM.ADR(t), 100);
 		IF t.Selected() = node THEN t.Select(NIL) END;
 		node.tree := 0;
 		c := node.firstChild;
@@ -1084,7 +1084,7 @@ MODULE Dialog;
 		VAR
 			ndel: INTEGER;
 	BEGIN
-		ASSERT(node # NIL, 20); ASSERT(node.tree = SHORT(SYSTEM.ADR(t)), 21);
+		ASSERT(node # NIL, 20); ASSERT(node.tree = SYSTEM.ADR(t), 21);
 		ndel := t.CountChildren(node);
 		IF node.parent = NIL THEN	(* root node *)
 			IF node.prev = NIL THEN
@@ -1124,7 +1124,7 @@ MODULE Dialog;
 		VAR ndel, nofn: INTEGER; s: TreeNode;
 	BEGIN
 		ASSERT(node # NIL, 20);  ASSERT(pos >= lastPos, 21);
-		ASSERT(node.tree = SHORT(SYSTEM.ADR(t)), 22);
+		ASSERT(node.tree = SYSTEM.ADR(t), 22);
 		nofn := t.NofNodes();
 		s := t.Selected();
 		ndel := t.Delete(node); t.InsertAt(parent, pos, node);
@@ -1139,16 +1139,16 @@ MODULE Dialog;
 	END DeleteAll;
 
 
-	PROCEDURE Notify* (id0, id1: INTEGER; opts: SET);
+	PROCEDURE Notify* (id0, id1: LONGINT; opts: SET);
 	BEGIN
 		ASSERT(notifyHook # NIL, 100);
 		notifyHook.Notify(id0, id1, opts)
 	END Notify;
 
 	PROCEDURE Update* (IN x: ANYREC);
-		VAR type: Kernel.Type; adr, size: INTEGER;
+		VAR type: Kernel.Type; adr: LONGINT; size: INTEGER;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		type := Kernel.TypeOf(x);
 		size := type.size;
 		IF size = 0 THEN size := 1 END;
@@ -1156,93 +1156,93 @@ MODULE Dialog;
 	END Update;
 
 	PROCEDURE UpdateBool* (VAR x: BOOLEAN);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(BOOLEAN), {update, guardCheck})
 	END UpdateBool;
 
 	PROCEDURE UpdateSChar* (VAR x: SHORTCHAR);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(SHORTCHAR), {update, guardCheck})
 	END UpdateSChar;
 
 	PROCEDURE UpdateChar* (VAR x: CHAR);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(CHAR), {update, guardCheck})
 	END UpdateChar;
 
 	PROCEDURE UpdateByte* (VAR x: BYTE);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(BYTE), {update, guardCheck})
 	END UpdateByte;
 
 	PROCEDURE UpdateSInt* (VAR x: SHORTINT);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(SHORTINT), {update, guardCheck})
 	END UpdateSInt;
 
 	PROCEDURE UpdateInt* (VAR x: INTEGER);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(INTEGER), {update, guardCheck})
 	END UpdateInt;
 
 	PROCEDURE UpdateLInt* (VAR x: LONGINT);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(LONGINT), {update, guardCheck})
 	END UpdateLInt;
 
 	PROCEDURE UpdateSReal* (VAR x: SHORTREAL);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(SHORTREAL), {update, guardCheck})
 	END UpdateSReal;
 
 	PROCEDURE UpdateReal* (VAR x: REAL);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(REAL), {update, guardCheck})
 	END UpdateReal;
 
 	PROCEDURE UpdateSet* (VAR x: SET);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + SIZE(SET), {update, guardCheck})
 	END UpdateSet;
 
 	PROCEDURE UpdateSString* (IN x: ARRAY OF SHORTCHAR);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + LEN(x) * SIZE(SHORTCHAR), {update, guardCheck})
 	END UpdateSString;
 
 	PROCEDURE UpdateString* (IN x: ARRAY OF CHAR);
-		VAR adr: INTEGER;
+		VAR adr: LONGINT;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		Notify(adr, adr + LEN(x) * SIZE(CHAR), {update, guardCheck})
 	END UpdateString;
 
 	PROCEDURE UpdateList* (IN x: ANYREC);
-		VAR type: Kernel.Type; adr, size: INTEGER;
+		VAR type: Kernel.Type; adr: LONGINT; size: INTEGER;
 	BEGIN
-		adr := SHORT(SYSTEM.ADR(x));
+		adr := SYSTEM.ADR(x);
 		type := Kernel.TypeOf(x);
 		size := type.size;
 		IF size = 0 THEN size := 1 END;

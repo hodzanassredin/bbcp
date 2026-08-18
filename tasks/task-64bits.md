@@ -4,6 +4,34 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, поздняя ночь)
+
+### Dev-подсистема портирована почти целиком + фикс Dialog.Update (KB/DialogNotify64.md)
+- КОРНЕВОЙ баг GUI: Dialog.Update*/Notify усекали адреса до INTEGER
+  (SHORT(SYSTEM.ADR)) — после снятия MAP_32BIT это ломало нотификации.
+  Портированы LONGINT: Dialog, Views (NotifyMsg), Controls, Services.AdrOf,
+  StdTables/StdLinks/StdFolds/StdTabFrames (fp/fingerprint/IntMap), DevInspector.
+- Headless ASSERT(100): Views.NotifyHook.Notify трапался без msgHook
+  (ConsWindows его не ставит) — guard. Это чинило бут-трапы тел
+  DevAnalyzer/DevBrowser (bbrun64 инитит ВСЕ модули мира).
+- Портированы и в мире: DevAnalyzer, DevBrowser, DevDebug (полный порт:
+  раскладки, фейк-дескрипторы Type, теги -8), DevHeapSpy (overlay Block/
+  Cluster 64-бит), DevMsgSpy, DevProfiler, DevDecoder386, DevInspector,
+  DevChmod__Lin (вариант __Lin — компилируется с суффиксом!), AlienTool,
+  SubTool, Packer, Linker/Linker1/BootLinker/Lnk*. Dev/Code = 41 ocf.
+- BB_NODIALOG: LinDialog.ShowParamMsg печатает в stdout вместо модального
+  GTK-диалога (run-bb64 выставляет по умолчанию; релиз — BB_GUI_DIALOGS=1).
+- Quickstart починен по-настоящему: seed = 32-битные Dev/Code/*.ocf
+  закоммичены (dev0 грузит компилятор оттуда); fresh-clone проверен
+  end-to-end (сборка + probes 22/22). LinIntInit — отдельным проходом
+  после Cons (err 152), ОбxCompileLog — через build-dev64.
+- Инцидент: OdcTextU.Batch в полумёртвой консоли записал битый Kernel.odc
+  → 171/231 модулей перестало собираться. Восстановление: git checkout
+  нетронутых .odc + реконвертация через bbcb2 OdcTextU.Import (UTF-8).
+- test64 ВАЙПИТ и внешние подсистемы (Cuda/Code) — после полной
+  пересборки внешние пересобирать их build.sh (~/sources/bbext/Cuda/build.sh).
+- probes 22/22, мир бутится с полным набором Dev-модулей.
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, ночь 2)
 
 ### Dev-инструменты в 64-битном мире (build-dev64.sh)

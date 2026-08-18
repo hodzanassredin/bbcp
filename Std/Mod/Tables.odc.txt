@@ -103,7 +103,7 @@ MODULE StdTables;
 		dlg*: RECORD
 			layoutEditable*, dataEditable*: BOOLEAN;
 			selectionStyle*: Dialog.List;
-			fingerprint: INTEGER;
+			fingerprint: LONGINT;	(* 64-бит: сумма адресов *)
 			known, valid: SET
 		END;
 		action: Action;
@@ -301,7 +301,7 @@ MODULE StdTables;
 	PROCEDURE SendNotifyMsg (c: Control);
 		VAR msg: Views.NotifyMsg;
 	BEGIN
-		msg.id0 := SHORT(c.item.adr); msg.id1 := msg.id0 + c.item.Size();	(* SHORT: указатели в куче <4ГБ *)
+		msg.id0 := c.item.adr; msg.id1 := msg.id0 + c.item.Size();	(* 64-бит: адрес полный *)
 		msg.opts := {2, 4}; (* update, guardcheck *)
 		Views.Omnicast(msg)
 	END SendNotifyMsg;
@@ -1258,7 +1258,7 @@ MODULE StdTables;
 	END SetPropFromDlg;
 
 	PROCEDURE (a: Action) Do;
-		VAR c: Containers.Controller; v: Views.View; fp: INTEGER;
+		VAR c: Containers.Controller; v: Views.View; fp: LONGINT;	(* 64-бит: сумма адресов *)
 	BEGIN
 		Controllers.SetCurrentPath(Controllers.targetPath);
 		c := Containers.Focus(); fp := 0;

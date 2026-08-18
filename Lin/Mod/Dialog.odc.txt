@@ -1,0 +1,593 @@
+MODULE LinDialog;
+	
+	IMPORT
+		SYSTEM, 
+		Dialog, Files, Stores, Views, Ports, Converters, Windows, Fonts, Strings, Utf, Services,
+		StdCmds, StdMenus, 
+		GLib := LinGtk2GLib, Gtk := LinGtk2Gtk,
+		Libc := LinLibc, HostGui := LinGui, HostEnv := LinEnv,
+		HostFiles := LinFiles, HostFonts := LinFonts;
+		
+	CONST
+		dirtyString = "#Std:SaveChanges";
+		
+		sepChar = GLib.G_DIR_SEPARATOR;
+	
+	TYPE
+	
+		ShowHook = POINTER TO RECORD (Dialog.ShowHook) END;
+		DialogGetHook = POINTER TO RECORD (Dialog.GetHook) END;
+		DialogGetParHook = POINTER TO RECORD (Dialog.GetParHook) END;
+		GetSpecHook = POINTER TO RECORD (Views.GetSpecHook) END;
+		ExtCallHook = POINTER TO RECORD (Dialog.ExtCallHook) END;
+		HostLocHook = POINTER TO RECORD (Dialog.HostLocHook) END;
+		BeepHook = POINTER TO RECORD (Dialog.BeepHook) END;
+		
+	VAR
+		hist:	HostFiles.FullName;
+
+		argv: ARRAY [untagged] 4 OF Libc.PtrSTR;
+		argv0, argv1: POINTER TO ARRAY OF SHORTCHAR;
+		(* these serve as anchors to prevent [untagged] elems of argv[] from being garbage collected *)
+		fs: Gtk.GtkFileChooserDialog;
+		
+		sTitle, p1, p2, sPath, sName: ARRAY [untagged] 1024 OF SHORTCHAR;
+		gw: Gtk.GtkWindow;
+		
+	TYPE
+		ChildCompleteAction = POINTER TO RECORD (Services.Action) 
+			pid: INTEGER;
+			callback: Services.Action
+		END;
+		OpenAction = RECORD (Services.SafeAction)
+			mode: INTEGER;
+		END;
+		
+
+	PROCEDURE RunDialog(dialog :Gtk.GtkDialog ):INTEGER;
+	VAR res: INTEGER; 
+	BEGIN
+		res := Gtk.gtk_dialog_run(dialog);
+		RETURN res;
+	END RunDialog;
+
+
+	(* Show Hook *)
+	
+	PROCEDURE (h: ShowHook) ShowParamMsg (IN str, p0, p1, p2: ARRAY OF CHAR);
+		VAR res, i: INTEGER;
+			dlg: Gtk.GtkMessageDialog;
+			st: ARRAY 512 OF CHAR;
+			us: GLib.PString;
+			nd: ARRAY 8 OF CHAR; sb: ARRAY 512 OF SHORTCHAR;
+	BEGIN
+		ASSERT(str # "", 20);
+		(*Dialog.appName ?*);
+		Dialog.MapParamString(str, p0, p1, p2, st);
+		(* скриптовые запуски (run-bb64 выставляет BB_NODIALOG=1): в stdout, без
+		   модального диалога, чтобы не ждать OK. Релизный GUI — без переменной. *)
+		HostEnv.GetPar("BB_NODIALOG", nd, res);
+		IF res = 0 THEN
+			i := 0; WHILE (i < LEN(sb) - 2) & (st[i] # 0X) DO sb[i] := SHORT(st[i]); INC(i) END;
+			sb[i] := SHORT(CHR(10)); sb[i + 1] := 0X;
+			res := Libc.printfs("%s", sb);
+			RETURN
+		END;
+		us := GLib.g_utf16_to_utf8(st, -1, NIL, NIL, NIL);
+		dlg := Gtk.gtk_message_dialog_new (NIL, (* TODO: NIL-> main_application_window*)
+			Gtk.GTK_DIALOG_MODAL + Gtk.GTK_DIALOG_DESTROY_WITH_PARENT,
+			Gtk.GTK_MESSAGE_INFO,
+			Gtk.GTK_BUTTONS_OK,
+			"%s", us);
+		GLib.g_free(SYSTEM.VAL(GLib.gpointer, us));
+		res := RunDialog(dlg);
+		Gtk.gtk_widget_destroy(dlg)
+	END ShowParamMsg;
+
+
+	PROCEDURE (h: ShowHook) ShowParamStatus (IN str, p0, p1, p2: ARRAY OF CHAR);
+		VAR mapped: ARRAY 256 OF CHAR; 
+	BEGIN
+		Dialog.MapParamString(str, p0, p1, p2, mapped);
+		StdMenus.SetStatus(mapped)
+	END ShowParamStatus;
+		
+	(* Dialog with external parameters *)
+	
+	PROCEDURE (hook: DialogGetParHook) GetPar (IN key: ARRAY OF CHAR;	
+		OUT val: ARRAY OF CHAR; OUT res: INTEGER);
+	BEGIN
+		HostEnv.GetPar(key, val, res)
+	END GetPar;
+	
+	(* Dialog interaction dialogs *)
+	
+	PROCEDURE (hook: DialogGetHook) GetOK (IN str, p0, p1, p2: ARRAY OF CHAR; form: SET; OUT res: INTEGER);
+		VAR r: INTEGER; 
+			dlg: Gtk.GtkMessageDialog; 
+			st: ARRAY 512 OF CHAR; 
+			us: GLib.PString;
+			type:Gtk.GtkMessageType;
+			buttons:Gtk.GtkButtonsType;
+	BEGIN
+		ASSERT(str # "", 20);
+		Dialog.MapParamString(str, p0, p1, p2, st);
+		IF Dialog.yes IN form THEN
+			type:=Gtk.GTK_MESSAGE_QUESTION;
+			buttons:= Gtk.GTK_BUTTONS_YES_NO;
+			(* IF Dialog.cancel IN form THEN YES_NO_CANCEL	END *)
+		ELSE (* ok *)
+			type:=Gtk.GTK_MESSAGE_WARNING;
+			IF Dialog.cancel IN form THEN buttons:= Gtk.GTK_BUTTONS_OK_CANCEL ELSE buttons := Gtk.GTK_BUTTONS_OK END;
+		END;
+		us := GLib.g_utf16_to_utf8(st, -1, NIL, NIL, NIL);
+		dlg := Gtk.gtk_message_dialog_new(NIL,
+			Gtk.GTK_DIALOG_MODAL + Gtk.GTK_DIALOG_DESTROY_WITH_PARENT,
+			type, buttons, "%s", us);
+		GLib.g_free(SYSTEM.VAL(GLib.gpointer, us));
+		r := RunDialog(dlg);
+		CASE r OF
+		| Gtk.GTK_RESPONSE_YES : res := Dialog.yes
+		| Gtk.GTK_RESPONSE_CANCEL: res := Dialog.cancel
+		| Gtk.GTK_RESPONSE_OK : res := Dialog.ok
+		| Gtk.GTK_RESPONSE_NO : res := Dialog.no
+		ELSE res := 0
+		END;
+		Gtk.gtk_widget_destroy(dlg); 
+	END GetOK;
+
+
+	PROCEDURE DirtyHook (w: Windows.Window; OUT action: INTEGER);
+		VAR r: INTEGER; 
+			dlg: Gtk.GtkMessageDialog; 
+			title: Views.Title; 
+			text: ARRAY 256 OF CHAR;
+			us: GLib.PString;
+	BEGIN
+		w.GetTitle(title);
+		Dialog.MapParamString(dirtyString, title, 0DX, 0DX, text);
+		us := GLib.g_utf16_to_utf8(text, -1, NIL, NIL, NIL);
+		dlg := Gtk.gtk_message_dialog_new(NIL,
+			Gtk.GTK_DIALOG_MODAL + Gtk.GTK_DIALOG_DESTROY_WITH_PARENT,
+			Gtk.GTK_MESSAGE_QUESTION,
+			Gtk.GTK_BUTTONS_YES_NO, "%s", us);
+		GLib.g_free(SYSTEM.VAL(GLib.gpointer, us));
+		r := RunDialog(dlg);
+		Gtk.gtk_widget_destroy(dlg); 
+
+		IF r = Gtk.GTK_RESPONSE_YES THEN action := StdCmds.save
+		ELSIF r = Gtk.GTK_RESPONSE_NO THEN action := StdCmds.close
+		ELSE action := StdCmds.cancel
+		END;
+	END DirtyHook;
+
+	PROCEDURE (hook: DialogGetHook) GetColor(in: Ports.Color; OUT out: Ports.Color; OUT set: BOOLEAN);
+		VAR colorDialog: Gtk.GtkColorSelectionDialog; 
+				color: Gtk.GtkColors;
+				res: INTEGER; 
+	BEGIN
+		set := FALSE;
+		colorDialog := Gtk.gtk_color_selection_dialog_new("Color");
+		color[0] := (in MOD 256) / 255.0;
+		color[1] := ((in DIV 256) MOD 256) / 255.0;
+		color[2] := ((in DIV 65536) MOD 256) / 255.0;
+		color[3] := 0; (* opacity *)
+		Gtk.gtk_color_selection_set_color(colorDialog.colorsel, color);
+		(* Gtk.gtk_widget_hide(colorDialog.help_button); *)
+		res := RunDialog(colorDialog);
+		CASE res OF
+		| Gtk.GTK_RESPONSE_OK:
+			Gtk.gtk_color_selection_get_color(colorDialog.colorsel, color);
+			out := Ports.RGBColor(
+										SHORT(ENTIER((color[0]*255))), 
+										SHORT(ENTIER((color[1]*255))),
+										SHORT(ENTIER((color[2]*255))));
+			set := TRUE;
+		| Gtk.GTK_RESPONSE_DELETE_EVENT:
+		ELSE	
+		END;
+		Gtk.gtk_widget_destroy(colorDialog)
+	END GetColor;
+
+	PROCEDURE (hook: DialogGetHook) GetFont (full: BOOLEAN; VAR typeface: Fonts.Typeface; VAR size, color, weight: INTEGER; VAR style: SET; VAR set: BOOLEAN; IN title: Dialog.String);
+	VAR 
+			res: INTEGER; 
+			fsDialog: Gtk.GtkFontSelectionDialog; 
+			fn: GLib.PString; 
+			s: ARRAY 256 OF SHORTCHAR;
+	BEGIN
+		set := FALSE;
+		Utf.StringToUtf8(title, s, res);
+		fsDialog := Gtk.gtk_font_selection_dialog_new(s);
+		HostFonts.MakePangoString(typeface$, size, style, weight, s);
+		res := Gtk.gtk_font_selection_dialog_set_font_name(fsDialog, s);
+		res := RunDialog(fsDialog);
+		CASE res OF
+		| Gtk.GTK_RESPONSE_OK:
+				fn := Gtk.gtk_font_selection_dialog_get_font_name(fsDialog);
+				HostFonts.ParsePangoString(fn$, typeface,  size, style, weight);
+				set := TRUE
+		| Gtk.GTK_RESPONSE_DELETE_EVENT:
+		ELSE	
+		END;
+		Gtk.gtk_widget_destroy(fsDialog) 
+	END GetFont;
+	
+
+	(* s -> [ locName sepChar ] name *)
+	PROCEDURE SplitFileName (IN s: ARRAY OF CHAR; OUT name: Files.Name; OUT locName: HostFiles.FullName);
+		VAR i, j, sepIdx, len: INTEGER;
+	BEGIN
+		len := LEN(s$);
+		i := len - 1; WHILE (i >= 0) & (s[i] # sepChar) DO DEC(i) END;
+		IF (i >= 0) & (s[i] = sepChar) THEN
+			sepIdx := i;
+			(* s(sepIdx;len) -> name *)
+				INC(i);
+				j := 0;
+				WHILE (i < len) & (j < LEN(name) - 1) DO name[j] := s[i]; INC(j); INC(i) END;
+				IF (i = len) & (j < LEN(name)) THEN name[j] := 0X
+				ELSE name[0] := 0X
+				END;
+			(* s[0;sepIdx) -> locName *)
+				i := 0;
+				WHILE (i < sepIdx) & (i < LEN(locName) - 1) DO locName[i] := s[i]; INC(i) END;
+				IF (i = sepIdx) & (i < LEN(locName)) THEN locName[i] := 0X
+				ELSE locName[0] := 0X
+				END
+		ELSIF len > 0 THEN
+			name := s$; locName[0] := 0X
+		ELSE
+			name[0] := 0X; locName[0] := 0X
+		END
+	END SplitFileName;
+
+	
+	PROCEDURE (VAR a: OpenAction) Do;
+	BEGIN
+		fs := Gtk.gtk_file_chooser_dialog_new(sTitle, gw, a.mode,
+                  p1, Gtk.GTK_RESPONSE_OK,
+                  p2, Gtk.GTK_RESPONSE_CANCEL,
+				  (* NIL, 0, *) 0)
+	END Do;
+	
+	PROCEDURE GtkSelfCheck*;
+	VAR a: OpenAction;
+	BEGIN
+		p1 := "gtk-open";
+		p2 := "gtk-cancel";
+		sTitle := "test";
+		a.mode := 0;
+		Services.Try(a);
+		IF a.trapped THEN
+			Dialog.ShowMsg("Fatal error in Gtk. Please, restart application.");
+		ELSE
+			Gtk.gtk_widget_destroy(fs)
+		END;
+	END GtkSelfCheck;
+
+	PROCEDURE GetFileSpec (mode:INTEGER; VAR loc: Files.Locator; VAR name: Files.Name);
+		VAR 
+				res: INTEGER;  
+				locName: HostFiles.FullName; 
+				ss: GLib.PString;
+				s: HostFiles.FullName; 
+				title: ARRAY 64 OF CHAR;
+				find: BOOLEAN; fsAdr: INTEGER;
+				a: OpenAction;
+	BEGIN
+		(* TODO: 
+		gtk_file_chooser_set_current_name
+		gtk_file_chooser_add_filter/remove
+		*)
+		
+		
+		CASE mode OF
+		| 0 :
+			p1 := "gtk-open";
+			p2 := "gtk-cancel";
+			Dialog.MapString("#System:OpenFile", title);
+			Utf.StringToUtf8(title, sTitle, res);
+			Strings.IntToString(SYSTEM.ADR(sTitle[0]), title);
+			a.mode := 0;
+			Services.Try(a);
+			IF a.trapped THEN
+				Dialog.ShowMsg("Fatal error in Gtk. Please, restart application.");
+				RETURN
+			END;
+		| 1 :
+			p1 := "gtk-save";
+			p2 := "gtk-cancel";
+		
+			Dialog.MapString("#System:SaveAs", title);
+			Utf.StringToUtf8(title, sTitle, res);
+			Strings.IntToString(SYSTEM.ADR(sTitle[0]), title);
+			a.mode := 1;
+			Services.Try(a);
+			IF a.trapped THEN
+				Dialog.ShowMsg("Fatal error in Gtk. Please, restart application.");
+				RETURN
+			END;
+		| 2 :
+			p1 := "gtk-ok";
+			p2 := "gtk-cancel";
+			
+			Dialog.MapString("#System:Choose folder", title);
+			Utf.StringToUtf8(title, sTitle, res);
+			Strings.IntToString(SYSTEM.ADR(sTitle[0]), title);
+			a.mode := 2;
+			Services.Try(a);
+			IF a.trapped THEN
+				Dialog.ShowMsg("Fatal error in Gtk. Please, restart application.");
+				RETURN
+			END;
+		END;
+		
+		Dialog.CheckHostLoc(loc);
+		IF (loc # NIL) & (loc.res = 0) THEN
+			Dialog.GetLocPath(loc, locName);
+		ELSIF hist$ # "" THEN
+			locName := hist
+		ELSE
+			Dialog.GetLocPath(Files.dir.This(""), locName)
+		END;
+		IF locName$ # "" THEN
+			IF name$ = "" THEN
+				Utf.StringToUtf8(locName+ sepChar + " ", sPath, res)
+			ELSE
+				Utf.StringToUtf8(locName + sepChar + name, sPath, res)
+			END;
+		ELSE
+			ASSERT(mode # 2, 61);
+			Utf.StringToUtf8(name, sPath, res)
+		END;
+		
+		IF res = 0 THEN
+			Gtk.gtk_file_chooser_set_filename(fs, sPath);
+			IF mode = 1 THEN
+				Utf.StringToUtf8(name, sName, res);
+				IF res = 0 THEN
+					Gtk.gtk_file_chooser_set_current_name(fs, sName);
+				END;
+			END;
+			res := RunDialog(fs);
+			CASE res OF
+			| Gtk.GTK_RESPONSE_OK:
+				ss := Gtk.gtk_file_chooser_get_filename(fs);
+				Utf.Utf8ToString(ss$, s, res);
+				IF res = 0 THEN
+					IF mode = 2 THEN
+						name := ""; locName := s;
+					ELSE
+						SplitFileName(s, name, locName);
+					END;
+					loc := HostFiles.NewLocator(locName);
+					Dialog.GetLocPath(loc, hist);
+				ELSE
+					Dialog.ShowParamMsg("path conversion error", "", "", "")
+				END
+			| Gtk.GTK_RESPONSE_DELETE_EVENT:
+				loc := NIL
+			ELSE END;
+		ELSE
+			Dialog.ShowParamMsg("path conversion error", "", "", "");
+			name := "";
+			loc := NIL
+		END;
+		
+		Gtk.gtk_widget_destroy(fs)
+		
+	END GetFileSpec;
+
+	PROCEDURE FindConverter (IN name: Files.Name; VAR conv: Converters.Converter);
+	VAR i, l: INTEGER; 
+			type: Files.Type;
+	BEGIN
+		l := LEN(name$); 
+		type:="";
+		i := l;	WHILE (i > 0) & (name[i] # ".") DO DEC(i) END;
+		IF i > 0 THEN
+			Strings.Extract(name,i+1,l-i,type);
+			conv := Converters.list; 
+			WHILE (conv # NIL) & (conv.fileType # type) DO conv := conv.next END;
+		ELSE 	
+			conv := NIL; 
+		END;
+	END FindConverter;
+	
+	PROCEDURE GetIntSpec* (VAR loc: Files.Locator; VAR name: Files.Name; VAR conv: Converters.Converter);
+	BEGIN
+		GetFileSpec(0, loc, name);
+		FindConverter(name,conv);
+	END GetIntSpec;
+	
+	PROCEDURE GetExtSpec* (s: Stores.Store; VAR loc: Files.Locator; VAR name: Files.Name; VAR conv: Converters.Converter);
+	BEGIN
+		GetFileSpec(1, loc, name);
+		FindConverter(name,conv);
+	END GetExtSpec;
+	
+	PROCEDURE (hook: DialogGetHook) GetIntSpec (IN defType: Files.Type; VAR loc: Files.Locator; OUT name: Files.Name);
+	BEGIN
+		(* defType *)
+		GetFileSpec(0, loc, name);
+	END GetIntSpec;
+	
+	PROCEDURE (hook: DialogGetHook) GetExtSpec (IN default: Files.Name; IN defType: Files.Type; VAR loc: Files.Locator; OUT name: Files.Name);
+	BEGIN
+		(* defType *)
+		name:=default;
+		GetFileSpec(1, loc, name);
+	END GetExtSpec;
+	
+	
+	PROCEDURE (h: GetSpecHook) GetIntSpec (VAR loc: Files.Locator; VAR name: Files.Name; VAR conv: Converters.Converter);
+	BEGIN
+		GetIntSpec( loc, name, conv);
+	END GetIntSpec;
+	
+	PROCEDURE (h: GetSpecHook) GetExtSpec (s: Stores.Store; VAR loc: Files.Locator; VAR name: Files.Name; VAR conv: Converters.Converter);
+	BEGIN
+		GetExtSpec( s, loc, name, conv);
+	END GetExtSpec;
+
+
+	PROCEDURE Msg (IN msg: ARRAY OF CHAR);
+		VAR str: POINTER TO ARRAY OF SHORTCHAR; res: INTEGER;
+	BEGIN
+		NEW(str, LEN(msg$) * 4 + 1);
+		Utf.StringToUtf8(msg, str, res);
+		res := Libc.printfs("%s" + 0AX, str^)
+	END Msg;
+	
+	PROCEDURE ForkOfChild (IN cmd: ARRAY OF CHAR);
+		CONST CR = 0DX; LF = 0AX;
+		VAR res, i: INTEGER;
+			ss: POINTER TO ARRAY OF SHORTCHAR;
+	BEGIN
+		Msg("/bin/sh -c " + cmd);
+		argv[0] := "/bin/sh"; (* interpreter *)
+		argv[1] := "-c"; (* options *)
+		NEW(ss, LEN(cmd) * 4 + 1);
+		Utf.StringToUtf8(cmd, ss, res);
+		i := -1; REPEAT INC(i); IF ss[i] = CR THEN ss[i] := LF END UNTIL cmd[i] = 0X;
+		argv[2] := ss^;
+		argv[3] := NIL;
+		res := Libc.execv(argv[0], argv);
+		IF res = -1 THEN
+			Msg("execv() returned - that's a fatal error. Calling Libc.exit(-13)");
+			Libc.exit(-13)
+		END
+	END ForkOfChild;
+	
+	PROCEDURE RunExternalAndCallback* (IN cmd: ARRAY OF CHAR; callback: Services.Action);
+		VAR buf1, buf2: ARRAY 64 OF CHAR; a: ChildCompleteAction;
+	BEGIN
+		NEW(a);
+		a.pid := Libc.fork();
+		(* Normally, after a fork() the parent has to call waitpid() to wait for the termination of the child process; if this is not done, Without a wait() call, the child process will become a zombie process after its termination because its parent process does not cleanup its process information in the system. However, with Kernel 1.7, 1.8, this does not happen, because the Kernel sets signal action to SIG_IGN for the SIGCHILD signal. Cf http://thinkiii.blogspot.com/2009/12/double-fork-to-avoid-zombie-process.html *)
+		IF a.pid = -1 THEN
+			Msg("fork() returned -1; external program not started")
+		ELSIF a.pid = 0 THEN
+			Msg("Inside child, preparing to fork()");
+			ForkOfChild(cmd)
+		ELSE
+			Strings.IntToString(a.pid, buf1);
+			buf2 := "fork() successful, pid = " + buf1; Msg(buf2);
+			a.callback := callback;
+			Services.DoLater(a, Services.now + 1000)
+		END
+	END RunExternalAndCallback;
+	
+	PROCEDURE RunExternal* (IN cmd: ARRAY OF CHAR);	
+	BEGIN RunExternalAndCallback(cmd, NIL)
+	END RunExternal;
+
+	PROCEDURE (a: ChildCompleteAction) Do;
+		VAR res, status: INTEGER;
+	BEGIN
+		Msg("waitpid()-ing");
+		res := Libc.waitpid(a.pid, status, Libc.WNOHANG);
+		IF res = 0 THEN
+			Services.DoLater(a, Services.now + 500);
+		ELSIF res = a.pid THEN
+			Msg("Child has exited");
+			IF a.callback # NIL THEN
+				Services.DoLater(a.callback, Services.now)
+			END
+		ELSE
+			Msg("waitpid() has returned an unexpected res, res # pid; res =")
+		END
+	END Do;
+
+	PROCEDURE (h: ExtCallHook) OpenExternal* (IN fileName: ARRAY OF CHAR);
+	VAR ss: POINTER TO ARRAY OF SHORTCHAR;
+		argv: ARRAY [untagged] 3 OF Libc.PtrSTR;
+		res: INTEGER;
+	BEGIN
+		IF Libc.fork() = 0 THEN
+			NEW(ss, LEN(fileName$) * 4 + 1);
+			Utf.StringToUtf8(fileName, ss, res);
+			Msg(ss$);
+			argv[0] := "xdg-open"; argv[1] := ss^; argv[2] := NIL;
+			res := Libc.execvp(argv[0], argv);
+			IF res = -1 THEN
+				Msg("execv() returned - that's a fatal error. Calling Libc.exit(-13)");
+				Libc.exit(-13)
+			END
+		END
+	END OpenExternal;
+	
+	PROCEDURE (h: ExtCallHook) RunExternal* (IN exeName: ARRAY OF CHAR);
+	BEGIN
+		RunExternal(exeName)
+	END RunExternal;
+
+	PROCEDURE (h: BeepHook) Beep;
+	BEGIN
+		HostGui.Beep
+	END Beep;
+	
+	PROCEDURE (h: HostLocHook) GetLocPath (loc: Files.Locator; OUT path: ARRAY OF CHAR);
+	BEGIN
+		IF loc # NIL THEN
+			WITH loc: HostFiles.Locator DO
+				path := loc.path$; loc.res := 0
+			ELSE
+				path := ""; loc.res := 1 (* ?? ??????? *)
+			END
+		ELSE
+			path := ""
+		END
+	END GetLocPath;
+
+	PROCEDURE (h: HostLocHook) CheckHostLoc (loc: Files.Locator);
+	BEGIN
+		IF loc # NIL THEN
+			IF loc IS HostFiles.Locator THEN loc.res := 0 ELSE loc.res := 1 END
+		END
+	END CheckHostLoc;
+	
+	PROCEDURE Init;
+		VAR n, res_: INTEGER;
+			showHook: ShowHook;
+			getSpecHook: GetSpecHook;
+			extCallHook: ExtCallHook;
+			beepHook: BeepHook;
+			hostLocHook: HostLocHook;
+			dialogGetHook: DialogGetHook;
+			dialogGetParHook: DialogGetParHook;
+	BEGIN
+		
+		Dialog.platform := Dialog.linux;
+		HostEnv.GetPar("PAR", Dialog.commandLinePars, res_);
+		
+		NEW(showHook); Dialog.SetShowHook(showHook);
+		NEW(dialogGetHook); Dialog.SetGetHook(dialogGetHook);
+		NEW(dialogGetParHook); Dialog.SetGetParHook(dialogGetParHook);
+		NEW(getSpecHook);
+		Views.SetGetSpecHook(getSpecHook); 
+		StdCmds.SetGetSpecHook(getSpecHook);
+		
+		StdCmds.stdDirtyHook := DirtyHook;
+		NEW(extCallHook); Dialog.SetExtCallHook(extCallHook);
+		
+		NEW(beepHook); Dialog.SetBeepHook(beepHook);
+		NEW(hostLocHook); Dialog.SetHostLocHook(hostLocHook);
+		HostFiles.MapParamString := Dialog.MapParamString;
+		
+		hist := "";
+		
+		FOR n:=0 TO LEN(sTitle) - 1 DO
+			sTitle[n] := 0X;
+			p1[n] := 0X;
+			p2[n] := 0X;
+			sPath[n] := 0X;
+			sName[n] := 0X;
+		END;
+		
+	END Init;
+
+BEGIN
+	Init
+END LinDialog.

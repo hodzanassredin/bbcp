@@ -619,14 +619,14 @@ MODULE LinBackends;
 	(* Command and aux procedures *)
 
 	PROCEDURE Dump (p: ANYPTR);
-		TYPE P = PROCEDURE(a: INTEGER; t: ARRAY OF CHAR);
+		TYPE P = PROCEDURE(a: LONGINT; t: ARRAY OF CHAR);	(* 64-бит: адрес *)
 			V = RECORD (Meta.Value) p: P END;
 		VAR i: Meta.Item; ok: BOOLEAN; v: V;
 	BEGIN
 		IF p # NIL THEN Meta.Lookup("DevDebug", i);
 			IF i.obj = Meta.modObj THEN i.Lookup("ShowHeapObject", i);
 				IF i.obj = Meta.procObj THEN i.GetVal(v, ok);
-					IF ok THEN v.p(SYSTEM.VAL(INTEGER, p), "") END
+					IF ok THEN v.p(SYSTEM.VAL(LONGINT, p), "") END
 				END
 			END
 		END

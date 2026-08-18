@@ -31,6 +31,8 @@ Packages available [here](https://blackbox.oberon.org/download)
 
 ## Build
 
+**64-bit (amd64 Linux) quick start: see [QUICKSTART64.md](QUICKSTART64.md).**
+
 ### Install dependencies
 
 #### Ubuntu 20/22 LTS, Mint 20/22 (amd64)

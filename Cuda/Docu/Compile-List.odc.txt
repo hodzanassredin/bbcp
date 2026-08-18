@@ -1,0 +1,2 @@
+DevCompiler64.CompileThis
+	CudaRt CudaUtil CudaTest

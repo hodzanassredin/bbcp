@@ -1,0 +1,112 @@
+MODULE CudaTest;
+(**
+	project	= "BlackBox"
+	organization	= "BlackBox Cross-Platform Team"
+	contributors	= "BlackBox Cross-Platform Team"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "The 2-Clause BSD License"
+	changes	= "2026-08-18, initial smoke test"
+	issues	= ""
+
+**)
+(** Smoke-тест биндингов CudaRt: версии, список устройств,
+	round-trip памяти host -> device -> host с проверкой данных.
+	Запуск из консоли:  echo 'CudaTest.Go' | ./run-bb64 --console *)
+
+	IMPORT SYSTEM, Console, Strings, CudaRt, CudaUtil;
+
+	CONST
+		chunk = 1024 * 1024;	(* 1 МБ *)
+
+	VAR bad: INTEGER;
+
+	PROCEDURE WriteInt (x: LONGINT);
+		VAR t: ARRAY 40 OF CHAR;
+	BEGIN
+		Strings.IntToString(x, t); Console.WriteStr(t)
+	END WriteInt;
+
+	PROCEDURE CHK (IN s: ARRAY OF CHAR; err: CudaRt.Error);
+		VAR t: ARRAY 128 OF CHAR;
+	BEGIN
+		IF err # CudaRt.success THEN
+			INC(bad); Console.WriteStr("BAD "); Console.WriteStr(s);
+			Console.WriteStr(" err="); WriteInt(err);
+			CudaUtil.ErrorText(err, t); Console.WriteStr(" ("); Console.WriteStr(t);
+			Console.WriteStr(")"); Console.WriteLn
+		END
+	END CHK;
+
+	PROCEDURE RoundTrip (size: INTEGER): INTEGER;
+		VAR dev: CudaRt.DevicePtr; adr: LONGINT; i, badN, firstBad: INTEGER;
+			host: POINTER TO ARRAY OF SHORTCHAR;
+	BEGIN
+		badN := 0;
+		CHK("malloc", CudaRt.cudaMalloc(dev, size));
+		IF dev # 0 THEN
+			NEW(host, size);
+			i := 0; WHILE i < size DO host[i] := SHORT(CHR(1 + i MOD 250)); INC(i) END;
+			adr := SYSTEM.ADR(host[0]);	(* ADR(elem0) = данные; VAL(LONGINT, host) указывает на хедер! *)
+			CHK("memset", CudaRt.cudaMemset(dev, 0, size));
+			CHK("memcpy H2D", CudaRt.cudaMemcpy(dev, adr, size, CudaRt.memcpyHostToDevice));
+			i := 0; WHILE i < size DO host[i] := 0X; INC(i) END;
+			CHK("memcpy D2H", CudaRt.cudaMemcpy(adr, dev, size, CudaRt.memcpyDeviceToHost));
+			CHK("sync", CudaRt.cudaDeviceSynchronize());
+			i := 0; firstBad := -1;
+			WHILE i < size DO
+				IF host[i] # SHORT(CHR(1 + i MOD 250)) THEN
+					INC(badN);
+					IF firstBad < 0 THEN firstBad := i END
+				END;
+				INC(i)
+			END;
+			IF badN > 0 THEN
+				Console.WriteStr("size="); WriteInt(size);
+				Console.WriteStr(" firstBad="); WriteInt(firstBad);
+				Console.WriteStr(" badN="); WriteInt(badN); Console.WriteLn
+			END;
+			CHK("free", CudaRt.cudaFree(dev))
+		ELSE
+			INC(badN); Console.WriteStr("BAD malloc returned 0"); Console.WriteLn
+		END;
+		RETURN badN
+	END RoundTrip;
+
+	PROCEDURE Go*;
+		VAR count, drv, rt: INTEGER;
+			free, total: LONGINT;
+			name: ARRAY 256 OF CHAR;
+	BEGIN
+		bad := 0;
+		CHK("runtimeVersion", CudaRt.cudaRuntimeGetVersion(rt));
+		CHK("driverVersion", CudaRt.cudaDriverGetVersion(drv));
+		Console.WriteStr("cuda runtime="); WriteInt(rt DIV 1000);
+		Console.WriteStr("."); WriteInt((rt MOD 1000) DIV 10);
+		Console.WriteStr(" driver="); WriteInt(drv DIV 1000);
+		Console.WriteStr("."); WriteInt((drv MOD 1000) DIV 10); Console.WriteLn;
+
+		CHK("getDeviceCount", CudaRt.cudaGetDeviceCount(count));
+		Console.WriteStr("devices="); WriteInt(count); Console.WriteLn;
+		IF count < 1 THEN
+			INC(bad); Console.WriteStr("BAD no CUDA devices"); Console.WriteLn
+		ELSE
+			CHK("setDevice", CudaRt.cudaSetDevice(0));
+			CHK("deviceName", CudaUtil.DeviceName(0, name));
+			Console.WriteStr("dev0: "); Console.WriteStr(name); Console.WriteLn;
+			CHK("memGetInfo", CudaRt.cudaMemGetInfo(free, total));
+			Console.WriteStr("mem free="); WriteInt(free DIV (1024 * 1024));
+			Console.WriteStr("MB total="); WriteInt(total DIV (1024 * 1024));
+			Console.WriteStr("MB"); Console.WriteLn;
+			IF total <= 0 THEN INC(bad); Console.WriteStr("BAD mem total=0"); Console.WriteLn END;
+
+			bad := bad + RoundTrip(4096);
+			bad := bad + RoundTrip(65536);
+			bad := bad + RoundTrip(chunk)
+		END;
+		IF bad = 0 THEN Console.WriteStr("CudaTest OK")
+		ELSE Console.WriteStr("CudaTest FAILURES") END;
+		Console.WriteLn
+	END Go;
+
+END CudaTest.

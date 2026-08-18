@@ -4,6 +4,21 @@
 64-битный (НЕ <4 ГБ). Эталон формата: Hr (`bbcb2/Hr/Mod/Ocf.odc.txt`).
 **Коммит c30315fc содержит всё ключевое. Читать также KB/ и AGENTS.md в bbcp.**
 
+## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, ночь)
+
+### Подсистема Cuda — биндинги внешних .so (KB/CudaSubsystem.md)
+- Новая подсистема `Cuda`: CudaRt ["libcudart.so.12"] (16 [ccall]-биндингов
+  cuda_runtime.h), CudaUtil (обёртки), CudaTest (smoke: GPU, память,
+  round-trip 4КБ/64КБ/1МБ). Проверено на 2×RTX: CudaTest OK, в probes.sh.
+- Правила биндингов (грабли): dll-модуль = только [ccall] без тел (обёртки
+  в соседнем модуле); адрес данных dyn-массива = SYSTEM.ADR(a[0]) — VAL даёт
+  хедер (+28!); untagged NEW запрещён (VAR untagged буфер); 0X вместо 0S.
+- Инфраструктура: скрипты tools64 вычисляют корень репо по своему пути
+  (env64.sh) — клон в любой каталог, мир переопределяется BBCP64USE.
+  probes.sh понимает полные имена (CudaTest.Go), не только Obx*.
+- Документы: QUICKSTART64.md (сборка из чистого клона), REPORT64.md,
+  KB/PortBrief.md, KB/PortHistory.md, KB/Bootstrap-seed.md.
+
 ## ТЕКУЩЕЕ СОСТОЯНИЕ (2026-08-18, вечер)
 
 ### bbcp самодостаточен (коммит 284ff345)

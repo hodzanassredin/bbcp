@@ -1,0 +1,31 @@
+Depends: System Lin Std
+
+QUICK START — подсистема Cuda
+
+Биндинги CUDA Runtime API (cuda_runtime.h, CUDA 12) для BlackBox amd64 Linux.
+Механизм: атрибут библиотеки в заголовке модуля + [ccall]-объявления
+(как LinDl/LinLibc). Загрузчик BB сам делает dlopen("libcudart.so.12").
+
+Требования: NVIDIA-драйвер + libcudart.so.12 в системе (CUDA Toolkit 12).
+Без библиотеки модуль CudaRt не загружается (остальная система не страдает).
+
+Модули:
+  CudaRt   — сырые [ccall]-биндинги (чистый интерфейсный модуль, без тел).
+  CudaUtil — CP-обёртки: ErrorText, DeviceName.
+  CudaTest — smoke-тест: версии, устройства, round-trip памяти H2D/D2H.
+
+Запуск теста (консоль):
+  echo 'CudaTest.Go' | ./run-bb64 --console
+
+Ожидаемый вывод (пример):
+  cuda runtime=12.0 driver=13.0
+  devices=2
+  dev0: NVIDIA GeForce RTX 5070 Ti
+  mem free=13435MB total=15817MB
+  CudaTest OK
+
+Грабли при написании своих биндингов — см. KB/CudaSubsystem.md:
+  - в dll-модуле ТОЛЬКО [ccall]-объявления, обёртки — в соседнем модуле;
+  - адрес данных динамического массива = SYSTEM.ADR(a[0]), НЕ VAL(LONGINT, a);
+  - буферы под C-структуры — VAR ARRAY [untagged] OF SHORTCHAR;
+  - нуль-литерал для SHORTCHAR — 0X (0S не существует).

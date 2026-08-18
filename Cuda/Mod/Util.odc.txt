@@ -1,0 +1,44 @@
+MODULE CudaUtil;
+(**
+	project	= "BlackBox"
+	organization	= "BlackBox Cross-Platform Team"
+	contributors	= "BlackBox Cross-Platform Team"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "The 2-Clause BSD License"
+	changes	= "2026-08-18, initial"
+	issues	= ""
+
+**)
+(** CP-обёртки над сырыми биндингами CudaRt. Отдельный модуль, т.к.
+	в модуле с атрибутом библиотеки разрешены только [ccall]-объявления
+	без тел (правило компилятора; см. LinGtk2Util vs LinGtk2Gtk). *)
+
+	IMPORT CudaRt;
+
+	PROCEDURE ErrorText* (err: CudaRt.Error; OUT s: ARRAY OF CHAR);
+		VAR p: CudaRt.PtrSTR; i: INTEGER;
+	BEGIN
+		p := CudaRt.cudaGetErrorString(err); i := 0;
+		WHILE (i < LEN(s) - 1) & (p[i] # 0X) DO s[i] := CHR(ORD(p[i])); INC(i) END;
+		s[i] := 0X
+	END ErrorText;
+
+	PROCEDURE DeviceName* (device: INTEGER; OUT name: ARRAY OF CHAR): CudaRt.Error;
+		VAR prop: ARRAY CudaRt.propBufSize OF SHORTCHAR;
+			err: CudaRt.Error; i: INTEGER;
+	BEGIN
+		err := CudaRt.cudaGetDeviceProperties(prop, device);
+		IF err = CudaRt.success THEN
+			i := 0;
+			WHILE (i < CudaRt.propNameLen) & (i < LEN(name) - 1) & (prop[i] # 0X) DO
+				name[i] := CHR(ORD(prop[i])); INC(i)
+			END;
+			name[i] := 0X
+		ELSE
+			name := ""
+		END;
+		RETURN err
+	END DeviceName;
+
+END CudaUtil.

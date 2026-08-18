@@ -1,0 +1,55 @@
+MODULE CudaRt ["libcudart.so.12"];
+(**
+	project	= "BlackBox"
+	organization	= "BlackBox Cross-Platform Team"
+	contributors	= "BlackBox Cross-Platform Team"
+	version	= "System/Rsrc/About"
+	copyright	= "System/Rsrc/About"
+	license	= "The 2-Clause BSD License"
+	changes	= "2026-08-18, initial amd64 binding"
+	issues	= ""
+
+**)
+(** Биндинги CUDA Runtime API по cuda_runtime.h (CUDA 12), SysV amd64.
+	Модуль грузится только при наличии libcudart.so.12 в системе
+	(атрибут библиотеки в заголовке модуля; dlopen делает загрузчик BB).
+	Все указатели — LONGINT (64 бита), cudaError_t — INTEGER (enum int). *)
+
+	CONST
+		success* = 0;
+
+		(* cudaMemcpyKind (cuda_runtime_api.h) *)
+		memcpyHostToHost* = 0;
+		memcpyHostToDevice* = 1;
+		memcpyDeviceToHost* = 2;
+		memcpyDeviceToDevice* = 3;
+		memcpyDefault* = 4;
+
+		(* размер буфера под cudaDeviceProp; в CUDA 12 структура ~1.5 КБ,
+		   поле name[256] — всегда первое во всех версиях *)
+		propBufSize* = 4096;
+		propNameLen* = 256;
+
+	TYPE
+		Error* = INTEGER;
+		DevicePtr* = LONGINT;	(* void* в адресном пространстве GPU *)
+		Stream* = LONGINT;		(* cudaStream_t *)
+		PtrSTR* = POINTER TO ARRAY [untagged] OF SHORTCHAR;
+
+	PROCEDURE [ccall] cudaGetDeviceCount* (VAR count: INTEGER): Error;
+	PROCEDURE [ccall] cudaGetDevice* (VAR device: INTEGER): Error;
+	PROCEDURE [ccall] cudaSetDevice* (device: INTEGER): Error;
+	PROCEDURE [ccall] cudaDriverGetVersion* (VAR driverVersion: INTEGER): Error;
+	PROCEDURE [ccall] cudaRuntimeGetVersion* (VAR runtimeVersion: INTEGER): Error;
+	PROCEDURE [ccall] cudaGetDeviceProperties* (VAR prop: ARRAY [untagged] OF SHORTCHAR; device: INTEGER): Error;
+	PROCEDURE [ccall] cudaMalloc* (VAR devPtr: DevicePtr; size: LONGINT): Error;
+	PROCEDURE [ccall] cudaFree* (devPtr: DevicePtr): Error;
+	PROCEDURE [ccall] cudaMemcpy* (dst, src: LONGINT; count: LONGINT; kind: INTEGER): Error;
+	PROCEDURE [ccall] cudaMemset* (devPtr: DevicePtr; value: INTEGER; count: LONGINT): Error;
+	PROCEDURE [ccall] cudaMemGetInfo* (VAR free, total: LONGINT): Error;
+	PROCEDURE [ccall] cudaDeviceSynchronize* (): Error;
+	PROCEDURE [ccall] cudaGetLastError* (): Error;
+	PROCEDURE [ccall] cudaGetErrorString* (error: Error): PtrSTR;
+
+
+END CudaRt.

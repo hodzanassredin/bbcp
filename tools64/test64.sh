@@ -39,6 +39,11 @@ if [ -d "Fig/Mod" ]; then
 	"$BB/tools64/go64.sh" FigModels FigViews FigPoints FigBasic FigCmds 2>&1 | tail -1
 fi
 
+# Cuda — то же: добираем, если подсистема есть (биндинги libcudart, см. KB/CudaSubsystem.md)
+if [ -d "Cuda/Mod" ]; then
+	"$BB/tools64/go64.sh" CudaRt CudaUtil CudaTest 2>&1 | tail -1
+fi
+
 # Dev-пайплайн (для компиляции внутри BB64) — всегда добираем в конце
 "$BB/tools64/build-dev64.sh" 2>&1 | grep -E '== ConsCompiler64|== DevCompiler64' | tail -2
 

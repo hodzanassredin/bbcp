@@ -6,9 +6,10 @@
   Здесь правим код и собираем 32-битные .ocf для dev0.
 - `~/sources/bbcp64use` — изолированное дерево для 64-битных артефактов.
   `<Sub>/Mod` = симлинки на bbcp, `<Sub>/{Sym,Code}` = свои (64-битные).
-  Поддерева Dev там быть НЕ ДОЛЖНО (dev0 подхватит 64-битный DevCPT и умрёт).
-- `~/sources/bbcb2-2.0~a1.build332` — чужой рабочий BlackBox; используется только
-  как хост для OdcText.Import/Export (.odc <-> .odc.txt) и как источник эталона Hr.
+  Скелет с нуля: `tools64/mkworld64.sh`. Dev пересоздаётся build-dev64.sh.
+- `~/sources/bbcb2-2.0~a1.build332` — больше НЕ нужен для сборки; только
+  источник эталона Hr (и историческая справка). Round-trip .odc делает сама
+  BB64: модуль OdcTextU (Odc/Mod/TextU.odc.txt) в консольном режиме.
 - `bbcp/Mod64/` — amd64-only исходники (Kernel64, LinKernel64, Stores64),
   чтобы 32-битный CompileSubs по System/Lin не спотыкался.
 
@@ -23,7 +24,9 @@
 
 ## Правило источника истины
 
-- Редактируем ТОЛЬКО `*.odc.txt`. `.odc` — артефакт, генерируется `tools64/sync-odc.sh`.
+- Редактируем ТОЛЬКО `*.odc.txt` (все в UTF-8, KB/OdcTextUtf8.md). `.odc` —
+  артефакт, генерируется `tools64/sync-odc.sh` (OdcTextU.Batch в консоли BB64;
+  мир должен быть собран — на свежем клоне sync no-op, .odc закоммичены).
 - .odc.txt может не быть в git — после `git checkout` .odc в .txt остаются старые
   правки (ловушка: дубликаты процедур). Перед откатом чистить и .txt.
 
@@ -36,7 +39,17 @@ tools64/go32.sh DevX         # пересобрать модуль(и) 32-бит
 tools64/go64.sh Kernel64     # скомпилировать модуль(и) как amd64 (в bbcp64use)
 tools64/test64.sh System     # полная пересборка подсистем amd64 (wipe + CompileSubs)
 tools64/repack-dev0.sh       # ТОЛЬКО если изменились packed-модули (не компилятор)
+tools64/mkworld64.sh         # скелет bbcp64use с нуля (симлинки + Code/Sym)
 ```
+
+Полный bootstrap с нуля: `mkworld64.sh` → `test64.sh System Lin Std Text Form Cons Obx`
+→ готово (test64 сам дособирает Kernel64, OdcTextU, Fig, Dev-пайплайн, link-sym).
+Порядок внутри test64 важен: Kernel64 и OdcTextU собираются сразу после
+CompileSubs — sync-odc и build-dev64 гоняют OdcTextU.Batch на живой BB64.
+
+Грабля: go64.sh глушит exit-код sync-odc (`|| true`) — иначе set -e убивает
+go64 молча, когда мир в середине пересборки (sync невозможен и не нужен:
+CompileSubs читает закоммиченные .odc напрямую через dev0).
 
 go32/go64 читают имена модулей из аргументов или /tmp/compile1.txt (DevOnce).
 

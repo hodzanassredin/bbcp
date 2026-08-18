@@ -1,24 +1,40 @@
 #!/bin/sh
 # Import all *.odc.txt that are newer than their .odc (or missing .odc)
-# back into .odc via the bbcb2 OdcTextU round-trip host (UTF-8 variant of OdcText;
-# all *.odc.txt are UTF-8, see KB/OdcTextUtf8.md).
-BBCP="$HOME/sources/bbcp"
-BB2="$HOME/sources/bbcb2-2.0~a1.build332"
-cmds=""
-for txt in "$BBCP"/Dev/Mod/*.odc.txt "$BBCP"/Mod64/*.odc.txt "$BBCP"/System/Mod/*.odc.txt "$BBCP"/Lin/Mod/*.odc.txt "$BBCP"/Std/Mod/*.odc.txt "$BBCP"/Text/Mod/*.odc.txt "$BBCP"/Form/Mod/*.odc.txt "$BBCP"/Cons/Mod/*.odc.txt "$BBCP"/Obx/Mod/*.odc.txt; do
+# back into .odc via OdcTextU.Batch, running in the 64-bit world itself
+# (console mode). Хост bbcb2 больше не нужен. Все .odc.txt — UTF-8
+# (KB/OdcTextUtf8.md). Формат batch-файла: строки I "in.txt" "out.odc".
+BB="$HOME/sources/bbcp"
+USE="$HOME/sources/bbcp64use"
+BATCH=/tmp/odc-batch.txt
+rm -f "$BATCH"
+n=0
+for txt in "$BB"/Dev/Mod/*.odc.txt "$BB"/Mod64/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Lin/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.txt "$BB"/Text/Mod/*.odc.txt "$BB"/Form/Mod/*.odc.txt "$BB"/Cons/Mod/*.odc.txt "$BB"/Obx/Mod/*.odc.txt "$BB"/Odc/Mod/*.odc.txt; do
 	[ -e "$txt" ] || continue
 	odc="${txt%.txt}"
 	if [ ! -e "$odc" ] || [ "$txt" -nt "$odc" ]; then
-		cmds="$cmds
-OdcTextU.Import \"$txt\" \"$odc\""
+		printf 'I "%s" "%s"\n' "$txt" "$odc" >> "$BATCH"
 		echo "sync: $txt"
+		n=$((n + 1))
 	fi
 done
-if [ -n "$cmds" ]; then
-	# ВАЖНО: запускать ТОЛЬКО из каталога bbcb2. run-BlackBoxInterp ставит
-	# BB_USE_DIR=cwd; из bbcp хост подхватывает чужие Sym и падает с
-	# "illegal foot print", не записав .odc.
-	( cd "$BB2" && echo "$cmds" | ./run-BlackBoxInterp ) 2>&1 | tail -2
+if [ "$n" -gt 0 ]; then
+	if [ ! -f "$USE/Odc/Code/TextU.ocf" ]; then
+		echo "sync-odc: мир не собран (нет Odc/Code/TextU.ocf)." >&2
+		echo "  В git .odc всегда свежие: откатите .odc.txt (git checkout) или" >&2
+		echo "  соберите мир (test64.sh), затем повторите." >&2
+		rm -f "$BATCH"
+		exit 1
+	fi
+	out=$(cd "$USE" && echo 'OdcTextU.Batch' | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" \
+		timeout -k 5 300 "$BB/Dev/Rsrc/bbrun64" --console 2>&1)
+	done_n=$(printf '%s\n' "$out" | grep -c '^Done! res:  0$')
+	printf '%s\n' "$out" | grep -iv '^Done! res:  0$' | grep -i 'fail\|not found\|bad \|error\|TRAP\|HALT' | head -5
+	rm -f "$BATCH"
+	if [ "$done_n" != "$n" ]; then
+		echo "sync-odc: imported $done_n of $n — FAILED" >&2
+		exit 1
+	fi
+	echo "sync-odc: $n file(s) ok"
 else
 	echo "nothing to sync"
 fi

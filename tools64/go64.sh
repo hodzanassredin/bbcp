@@ -11,18 +11,20 @@ MARK=$(mktemp)
 for m in "$@"; do
 	case "$m" in
 		Dev*) echo "go64.sh: для Dev* используйте build-dev64.sh" >&2; exit 1;;
-		System*|Std*|Text*|Form*|Lin*|Cons*|Obx*|Sql*|Xhtml*|Crypto*|Keep*|Lists*|Async*|Http*|Json*|Mcp*|Llm*|Hr*|Fjson*|Hyper*|Eds*|Fig*|Babel*|Coco*|Comm*|Cpc*|Aos*|Co_*|Kernel64) ;;
+		System*|Std*|Text*|Form*|Lin*|Cons*|Obx*|Odc*|Sql*|Xhtml*|Crypto*|Keep*|Lists*|Async*|Http*|Json*|Mcp*|Llm*|Hr*|Fjson*|Hyper*|Eds*|Fig*|Babel*|Coco*|Comm*|Cpc*|Aos*|Co_*|Kernel64) ;;
 		*) # голое имя допустимо только для модулей System/Mod/<name>.odc*
 			if [ ! -e "$BB/System/Mod/$m.odc" ] && [ ! -e "$BB/System/Mod/$m.odc.txt" ]; then
 				echo "go64.sh: '$m' — имя должно быть ПОЛНЫМ (LinFiles, не Files)" >&2; exit 1
 			fi;;
 	esac
 done
-"$BB/tools64/sync-odc.sh" >/dev/null 2>&1
+"$BB/tools64/sync-odc.sh" >/dev/null 2>&1 || true
 touch "$MARK"
 STASH="$USE/.dev-stash-go64"
 [ -d "$USE/Dev" ] && mv "$USE/Dev" "$STASH"
-trap '[ -d "$STASH" ] && mv "$STASH" "$USE/Dev"; rm -f "$MARK"' EXIT
+cleanup() { [ -d "$STASH" ] && mv "$STASH" "$USE/Dev"; rm -f "$MARK"; }
+trap cleanup EXIT
+trap 'exit 1' INT TERM PIPE	# иначе при смерти по сигналу мир остаётся без Dev
 cd "$USE"
 [ $# -gt 0 ] && printf '%s\n' "$@" > /tmp/compile1.txt
 echo 'DevOnce.Go64' | "$BB/run-dev0"

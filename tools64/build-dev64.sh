@@ -6,7 +6,6 @@
 set -e
 USE="$HOME/sources/bbcp64use"
 BB="$HOME/sources/bbcp"
-BB2="$HOME/sources/bbcb2-2.0~a1.build332"
 rm -rf "$USE/Dev"
 mkdir -p "$USE/Dev/Code" "$USE/Dev/Sym" "$USE/Dev/Mod"
 ln -sf "$BB/Dev/Mod/Commanders.odc" "$USE/Dev/Mod/Commanders.odc"
@@ -26,17 +25,36 @@ for f in "$BB"/Dev/Mod/*.odc.txt "$BB"/System/Mod/*.odc.txt "$BB"/Std/Mod/*.odc.
   mkdir -p "$(dirname "$dest")"
   cp "$f" "$dest"
 done
-# convert .odc.txt to .odc via OdcTextU.Import (UTF-8; все .odc.txt в UTF-8)
+# DevCommanders компилируем ПЕРВЫМ: консольный хост (ConsInterp), на котором
+# крутится OdcTextU.Batch, сам импортирует DevCommanders — без его ocf консоль
+# не грузится ("code file for DevCommanders not found"). Dev/Code сейчас пуст,
+# поэтому dev0 не спотыкается о 64-битные ocf.
+cd "$USE"
+printf 'DevCommanders\n' > /tmp/compile1.txt
+echo 'DevOnce.Go64' | "$BB/run-dev0" | tail -1
+# convert .odc.txt to .odc via OdcTextU.Batch — консольный хост самой BB64
+# (UTF-8, KB/OdcTextUtf8.md). OdcTextU не зависит от Dev — работает и на
+# свежевайпнутом Dev.
+BATCH=/tmp/odc-batch.txt
+rm -f "$BATCH"
+nb=0
 for f in "$USE"/Dev/Mod/*.odc.txt "$USE"/System/Mod/*.odc.txt "$USE"/Std/Mod/*.odc.txt "$USE"/Text/Mod/*.odc.txt "$USE"/Form/Mod/*.odc.txt "$USE"/Cons/Mod/*.odc.txt "$USE"/Obx/Mod/*.odc.txt; do
   [ -e "$f" ] || continue
   odc="${f%.txt}"
-  echo "OdcTextU.Import \"$f\" \"$odc\"" >> /tmp/odc_cmds.txt
+  printf 'I "%s" "%s"\n' "$f" "$odc" >> "$BATCH"
+  nb=$((nb + 1))
 done
-if [ -f /tmp/odc_cmds.txt ]; then
-  # cwd=BB2 обязателен (BB_USE_DIR=cwd): иначе хост грузит чужие Sym и молча
-  # не пишет .odc. Ошибки НЕ глушим — иначе сборка идёт по протухшим .odc.
-  ( cd "$BB2" && cat /tmp/odc_cmds.txt | ./run-BlackBoxInterp ) 2>&1 | grep -v '^Done! res:  0$' || true
-  rm -f /tmp/odc_cmds.txt
+if [ -f "$BATCH" ]; then
+  out=$(cd "$USE" && echo 'OdcTextU.Batch' | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" \
+    timeout -k 5 600 "$BB/Dev/Rsrc/bbrun64" --console 2>&1)
+  done_n=$(printf '%s\n' "$out" | grep -c '^Done! res:  0$')
+  # Ошибки НЕ глушим — иначе сборка идёт по протухшим .odc.
+  printf '%s\n' "$out" | grep -v '^Done! res:  0$' | grep -i 'fail\|not found\|bad \|error\|TRAP\|HALT' | head -5
+  rm -f "$BATCH"
+  if [ "$done_n" != "$nb" ]; then
+    echo "build-dev64: odc import $done_n of $nb — FAILED" >&2
+    exit 1
+  fi
 fi
 "$BB/tools64/sync-odc.sh" || true
 cd "$USE"

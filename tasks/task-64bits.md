@@ -1069,3 +1069,14 @@ untracked, без -f не попадут в коммит. Подтвержден
     оптимизация над Con-итемом проверяет оба слова. Латентное: GenTest imm32
     без fits-проверки для Int64 Con. Диагностика: ObxProbe51 (offset→proc
     через GetRefProc).
+88. Crypto64 (2026-08-19): порт bbext/Crypto на amd64 завершён, все тесты
+    зелёные (хэши, HMAC, BigNumbers, шифры, DH, RSA, X25519). Репа
+    ~/sources/bbext/Crypto64 (коммит ed93f49; GitHub bbext/Crypto64 — создать
+    вручную). Ключевое: [code]-процедуры x86-32 молча компилируются, но на
+    amd64 это мусор — переписаны на чистый CP; `100000000L` в BigNumbers НЕ
+    трогать (L = hex в BB 2.0 = 2^32 = база A2); StdLog в консоли буферизован
+    (крах = потеря вывода, бисектить через Console); sig=15 = SIGTERM таймаута
+    (зависание); command error в консоли обрывает stdin. Подробности:
+    KB/Crypto64Port.md. ОТКРЫТО: TLSStream не прогнан против реального
+    сервера — ClickHouse#56681 (ECDHE-RSA-AES128-GCM-SHA256 + x25519,
+    play.clickhouse.com:443, upstream шлет sslv3 alert handshake failure).

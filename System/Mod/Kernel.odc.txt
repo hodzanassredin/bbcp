@@ -2635,6 +2635,8 @@ BEGIN
 		S.GETREG(SP, baseStack);
 		stack := baseStack	(* stack bottom, used by DevDebug and other possible trap analyzers *)
 	END;
+	sentry := "Initialized";	(* 64-бит: ВСЕГДА — при preset modList ветка выше пропускается,
+		без sentry walker принимал фрейм за неинициализированный и уходил в свои фреймы *)
 	debug := FALSE
 CLOSE
 	IF ~terminating THEN

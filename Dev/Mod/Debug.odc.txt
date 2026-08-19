@@ -14,7 +14,7 @@ MODULE DevDebug;
 	IMPORT SYSTEM,
 		Kernel, Strings, Dates, Files, Fonts, Services, Ports, Stores, Converters,
 		Models, Views, Controllers, Properties, Dialog, Containers, Controls,
-		Windows, StdDialog, StdFolds, StdLinks,
+		Windows, StdDialog, StdFolds, StdLinks, LinEnv,
 		TextModels, TextMappers, TextControllers, TextViews, TextRulers, StdLog,
 		DevReferences, DevCommanders, Utf, Librarian, DevCPS;
 	
@@ -1312,8 +1312,13 @@ MODULE DevDebug;
 
 	PROCEDURE Trap;
 		VAR a0: TextModels.Attributes; action: Action;
-		 	msg: ARRAY 512 OF CHAR;
+		 	msg: ARRAY 512 OF CHAR; cres: INTEGER; cbuf: ARRAY 16 OF CHAR;
 	BEGIN
+		(* 64-бит: в консольном режиме GUI-вьювер не запускаем — он падает
+		   (StdLog.buf/TextModels не инициализированы для консоли), а репорт
+		   уже напечатан ядром (Kernel.LogThisStack) *)
+		LinEnv.GetPar("BB_CONSOLE", cbuf, cres);
+		IF cres = 0 THEN RETURN END;
 		out.ConnectTo(TextModels.CloneOf(StdLog.buf));
 		a0 := out.rider.attr;
 		out.rider.SetAttr(TextModels.NewWeight(a0, Fonts.bold));

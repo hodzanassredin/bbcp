@@ -264,6 +264,9 @@ MODULE LinKernel;
 		VAR _: INTEGER;
 	BEGIN (* not sure this is correct.. *)
 		ASSERT(cmd # NIL, 20);
+		S.GETREG(4, baseStack);	(* SP=4; 64-бит: реальная база стека — на уровне главного цикла.
+			Значение из Setup (SP на момент SetPlatform) слишком глубокое: фреймы приложения
+			оказывались ВЫШЕ baseStack -> InActivationStack = FALSE -> walker резал стек *)
 		restart := cmd;
 		_ := Libc.sigsetjmp(loopContext, Libc.TRUE);
 		IF restart # cmd THEN log.String("LinKernel.Start: restart # cmd"); log.Ln END;

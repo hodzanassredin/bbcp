@@ -73,3 +73,11 @@
 Итог: консольный репорт = полная цепочка module.proc[@pos] от точки падения
 до StdInterpreter.CallProc, один ~TRAP, exit(1). Проверки: ObxProbe78
 (HALT в листе), ObxProbe80 (NIL через procvar), ObxProbe81 (HALT с локалами).
+
+## GUI-проверка (2026-08-20, пользователь)
+
+TrapTest (Obx/Docu/TrapTest.odc, командер ObxProbe81.Go) в GUI: Trap-окно
+показывает ПОЛНЫЙ стек с локалами (Level3..Go с значениями переменных,
+затем Kernel.Call, StdInterpreter, DevCommanders, Views, StdWindows,
+LinBackends mouse handler, Loop.Loop, Kernel.Start). Приложение живо.
+GUI-ветка walker'а подтверждена.

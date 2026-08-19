@@ -1048,8 +1048,13 @@ untracked, без -f не попадут в коммит. Подтвержден
     AssertTrap=0 по умолчанию в CPB). Прогрессия: NIL-guard в
     PaketFiles.SetDependencies (пропуск NIL-зависимостей) и
     PaketController.InstallPackage (deps.package # NIL), ASSERT получил
-    код 21. Источники Paket живут только в bbcp64use/Paket (не в git) —
-    при self-update Paket с сервера патчи перезапишутся! ОТКРЫТО: стек-
+    код 21. ЗАКРЫТО 2026-08-19: патчи ушли в upstream bbext/Paket,
+    коммит 00f477d (Mod/Files.odc, Mod/Controller.odc, комментарии на
+    английском); веб-хук раскатывает новую версию на сервер, после чего
+    self-update принесёт исправленный Paket. Локальные патчённые копии в
+    bbcp64use/Paket/Mod после этого можно удалить. Воркфлоу правки
+    Paket .odc (export->edit->import) — KB/PaketUpstreamNilGuards.md.
+    ОТКРЫТО: стек-
     ходилка в репорте этого трапа стартовала с битого FP (0x000061DE...)
     -> cycle guard, origin-фрейм не виден; разобрать раскладку фреймов на
     пути Services-action (см. также консольный frame-walker).

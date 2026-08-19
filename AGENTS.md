@@ -19,6 +19,11 @@ BB64 — UTF-8 вариант OdcText). Перед `git checkout` .odc — уч�
   System/Mod и Lin/Mod, чтобы 32-битный CompileSubs не падал.
 - `Dev/Rsrc/` — bbrun64.c (64-битный загрузчик), Makefile64, build_boot64.sh.
 - `tools64/` — скрипты цикла разработки (см. KB/Workflow64.md).
+- `Paket/`, `Crypto/` — batteries included: менеджер пакетов и криптография
+  (64-битный порт). Это VENDORED копии: upstream — github.com/bbext/Paket и
+  bbext/Crypto64 (там же живёт фид blackbox.oberon.org). Правки сначала в
+  bbext, в bbcp переносим rsync'ом Mod/Docu (+Rsrc у Paket) и коммитим.
+  Crypto/Mod/AllTests.odc — launcher-документ, не модуль (не компилируется).
 - `KB/` — база знаний: Workflow64, OcfFormat64, Findings64. Читать при старте работы.
 - `tasks/task-64bits.md` — журнал порта (решения, лог проб).
 

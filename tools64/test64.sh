@@ -72,5 +72,27 @@ fi
 # Dev-пайплайн (для компиляции внутри BB64) — всегда добираем в конце
 "$BB/tools64/build-dev64.sh" 2>&1 | grep -E '== ConsCompiler64|== DevCompiler64' | tail -2
 
+# Batteries included: Paket (нужны Comm* и Dev/Sym) и Crypto (порт, репа
+# bbext/Crypto64 — upstream; в bbcp vendored копия). Списки упорядочены по
+# зависимостям; Crypto/Mod/AllTests.odc — не модуль (launcher), в списке нет.
+if [ -d "$BB/Paket/Mod" ]; then
+	"$BB/tools64/go64.sh" CommStreams CommTCP CommTCP__Lin 2>&1 | tail -1
+	"$BB/tools64/go64.sh" PaketHttp PaketDocTools PaketObxHttp PaketModel PaketFeed \
+		PaketFiles PaketReader PaketView PaketController 2>&1 | tail -1
+fi
+if [ -d "$BB/Crypto/Mod" ]; then
+	"$BB/tools64/go64.sh" CryptoAosCompat CryptoAosRandom CryptoAosRealConversions \
+		CryptoAosStreams CryptoAosBigNumbers CryptoAosBIT CryptoAosClock \
+		CryptoAosCommStreams CryptoAosStrings CryptoAosDates CryptoAosFileStreams \
+		CryptoAosIP CryptoAosPipes CryptoAosTCP CryptoUtils CryptoCiphers CryptoHashes \
+		CryptoMD5 CryptoBase64 CryptoPrimes CryptoRSA CryptoAES CryptoARC4 CryptoASN1 \
+		CryptoBlowfish CryptoDES CryptoDES3 CryptoSHA256 CryptoFortuna CryptoFortunaRng \
+		CryptoHMAC CryptoIDEA CryptoKeccakF1600 CryptoKeccakSponge CryptoPKCS1 CryptoSHA1 \
+		CryptoSHA3 CryptoCAST CryptoX509 CryptoFieldElement CryptoX25519 CryptoGcm \
+		CryptoTLS CryptoTestX25519 CryptoTLSStream CryptoTestCiphers CryptoDiffieHellman \
+		CryptoTCPServices CryptoTestBigNumbers CryptoTestDH CryptoTestHashes \
+		CryptoTestHMAC CryptoTestRSA 2>&1 | tail -1
+fi
+
 # долинковать portable .osf из bbcp (см. link-sym.sh)
 "$BB/tools64/link-sym.sh"

@@ -1081,3 +1081,14 @@ untracked, без -f не попадут в коммит. Подтвержден
     ECDHE-RSA-AES128-GCM-SHA256+x25519 успешен), и наш TLSStream тоже
     подключается (ObxProbe68: GET / -> HTTP/1.0 302 Found). Пуш: 5c078e4 +
     bd0df79 (Docu .odc).
+89. Batteries included (2026-08-19): Paket и Crypto включены в bbcp как
+    VENDORED копии (bbcp/Paket, bbcp/Crypto). Upstream: bbext/Paket и
+    bbext/Crypto64 (там фид для Paket). Решение — копия, не submodule: клон
+    собирается без submodule-действий, папка обязана зваться Crypto (имена
+    модулей), а репа — Crypto64. test64.sh теперь добирает Comm* + Paket
+    (9 модулей) + Crypto (53 модуля, упорядоченный список, AllTests —
+    launcher, не компилируется); mkworld64.sh: +Crypto Paket в скелете.
+    В bbcp64use Paket/Crypto перелинкованы на bbcp. Smoke: MD5/X25519 ok.
+    Sync bbext->bbcp: rsync Mod/Docu (+Paket/Rsrc), коммит. ВНИМАНИЕ:
+    Paket self-update в мире пишет через симлинк Mod -> bbcp working tree
+    (изменения видны в git diff — ревьюить и коммитить или откатывать).

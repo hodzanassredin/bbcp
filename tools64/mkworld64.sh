@@ -6,7 +6,7 @@
 . "$(dirname "$0")/env64.sh"
 mkdir -p "$USE"
 ln -sfn "$BB/Docu" "$USE/Docu"
-for sub in Comm Cons Fig Form Lin Obx Odc Std System Text; do
+for sub in Comm Cons Crypto Fig Form Lin Obx Odc Paket Std System Text; do
 	mkdir -p "$USE/$sub/Code" "$USE/$sub/Sym"
 	for part in Mod Docu Rsrc; do
 		[ -e "$BB/$sub/$part" ] && ln -sfn "$BB/$sub/$part" "$USE/$sub/$part"

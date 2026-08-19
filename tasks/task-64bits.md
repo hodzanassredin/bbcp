@@ -1039,3 +1039,14 @@ untracked, без -f не попадут в коммит. Подтвержден
       PaketController, PaketDocTools, PaketObxHttp.
     - Грабля: Grep по каталогу молча пропускает *.odc.txt (.gitignore) —
       include_ignored=true.
+86. ИСПРАВЛЕН второй корневой кодген-баг (KB/Const64ShortcutBug.md): Int64-
+    константы с нулевыми младшими 32 битами (0x1000000000000000 = hexLimit в
+    StringToLInt) обнулялись shortcut'ами эмиттера — XOR r,r в GenMove смотрел
+    только offset (младшее слово), игнорируя scale (старшее). TRAP 139 (idiv
+    по 0) при парсинге hex-LONGINT -> падала chunked-загрузка Paket (размер
+    чанка — hex). Починен весь класс shortcut'ов в CPLamd64: GenMove (+a1-кэш),
+    GenComp, GenAnd/Or/Xor, GenMul — везде проверяется полное 64-битное значение
+    (offset И scale). Probe52. probes 28/28, Probe41 OK. Инвариант: любая
+    оптимизация над Con-итемом проверяет оба слова. Латентное: GenTest imm32
+    без fits-проверки для Int64 Con. Диагностика: ObxProbe51 (offset→proc
+    через GetRefProc).

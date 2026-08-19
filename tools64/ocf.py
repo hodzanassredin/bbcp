@@ -88,12 +88,14 @@ def main():
         cb = code_block(d, h)
         tmp = '/tmp/ocf_dis.bin'
         open(tmp, 'wb').write(cb)
-        procs = parse_refs(d, h)
+        try: procs = parse_refs(d, h)
+        except Exception: procs = []	# refs могут не парситься — дизасм всё равно отдаём
         out = subprocess.run(['objdump', '-D', '-b', 'binary', '-m', 'i386:x86-64',
                               '--start-address=%d' % off, '--stop-address=%d' % (off + n),
                               '-M', 'att', tmp], capture_output=True, text=True).stdout
-        adr, nm = owner(procs, off)
-        print('; %s+%#x' % (nm, off - adr))
+        if procs:
+            adr, nm = owner(procs, off)
+            print('; %s+%#x' % (nm, off - adr))
         print(out)
     elif cmd == 'bytes':
         off = int(sys.argv[3], 0)

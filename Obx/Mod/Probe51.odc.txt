@@ -1,0 +1,27 @@
+MODULE ObxProbe51;
+(** Маппинг code-офсета в имя процедуры через Kernel.GetRefProc.
+	Запуск: ObxProbe51.Go — ищет владельца офсета 10F3H в Strings. *)
+
+	IMPORT Console, Kernel, Strings, Utf;
+
+	PROCEDURE Go*;
+		VAR ref: LONGINT; adr, res, best, bestAdr: INTEGER;
+			name: Kernel.Utf8Name; s, bestName, num: ARRAY 256 OF CHAR;
+			m: Kernel.Module; target: INTEGER;
+	BEGIN
+		target := 10F3H;
+		m := Kernel.ThisMod("Strings");
+		IF m = NIL THEN Console.WriteStr("no module"); Console.WriteLn; RETURN END;
+		ref := m.refs; adr := -1; best := -1; bestName := "?"; bestAdr := 0;
+		WHILE adr # 0 DO
+			Kernel.GetRefProc(ref, adr, name);
+			IF adr # 0 THEN
+				Utf.Utf8ToString(name, s, res);
+				IF (adr <= target) & (adr > bestAdr) THEN bestAdr := adr; bestName := s END
+			END
+		END;
+		Console.WriteStr("owner="); Console.WriteStr(bestName);
+		num:=""; Strings.IntToString(target - bestAdr, num); Console.WriteStr("+"); Console.WriteStr(num); Console.WriteLn
+	END Go;
+
+END ObxProbe51.

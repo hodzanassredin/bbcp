@@ -1,0 +1,22 @@
+MODULE ObxProbe52;
+(** Регрессия: StringToLInt("3039H") — TRAP 139 (idiv по 0).
+	Корень: CPLamd64.GenMove XOR-обнулял Int64-константу 0x1000000000000000
+	(hexLimit в StringToLInt) по младшим 32 битам (offset=0, scale#0).
+	Бьёт chunked-загрузку Paket (размер чанка — hex). *)
+
+	IMPORT Console, Strings;
+
+	PROCEDURE Go*;
+		VAR x: LONGINT; res: INTEGER; ok: BOOLEAN;
+	BEGIN
+		Strings.StringToLInt("3039H", x, res);
+		ok := (res = 0) & (x = 3039H);
+		IF ok THEN
+			Strings.StringToLInt("100000000H", x, res);
+			ok := (res = 0) & (x = LONG(20000000H) * 8)
+		END;
+		IF ok THEN Console.WriteStr("Probe52 OK") ELSE Console.WriteStr("Probe52 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe52.

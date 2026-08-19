@@ -1,0 +1,17 @@
+MODULE ObxProbe50;
+(** Диагностика: IntToStringForm(hexadecimal) — idiv по константе 0
+	(Strings+0x10F3, TRAP 139 в GUI/Paket). Консольная репродукция. *)
+
+	IMPORT Console, Strings;
+
+	PROCEDURE Go*;
+		VAR s: ARRAY 32 OF CHAR;
+	BEGIN
+		Strings.IntToStringForm(12345, Strings.hexadecimal, 0, " ", FALSE, s);
+		Console.WriteStr("hex="); Console.WriteStr(s);
+		IF s = "3039" THEN Console.WriteStr(" Probe50 OK")
+		ELSE Console.WriteStr(" Probe50 FAIL") END;
+		Console.WriteLn
+	END Go;
+
+END ObxProbe50.

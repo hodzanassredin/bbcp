@@ -1092,3 +1092,9 @@ untracked, без -f не попадут в коммит. Подтвержден
     Sync bbext->bbcp: rsync Mod/Docu (+Paket/Rsrc), коммит. ВНИМАНИЕ:
     Paket self-update в мире пишет через симлинк Mod -> bbcp working tree
     (изменения видны в git diff — ревьюить и коммитить или откатывать).
+90. Paket speed garbage (TRAP-окно у репортёра): корень — Math.Exponent
+    возвращал 0 (x87 FSTPD -12[FP] не писал локал на amd64) -> весь
+    RealToStringForm мусорил. Переписан переносимо (IEEE-754 биты), SMath
+    аналогично. Коммит d82b5623. Пробы 70-77. Репортёру: git pull + go64.sh
+    Math SMath (или полный test64) — пересборки мира не нужно, интерфейс
+    не менялся.

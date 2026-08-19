@@ -1031,3 +1031,14 @@ Controls → StdCFrames (Std); StdDialog → TextModels/TextViews (Text).
      до ~1300 кластеров по 256KB -> GC квадратичен (InHeap O(n) на
      кандидата) -> "вечный" GC при открытии документа со вложенными
      view. Регресс vs FPU-мира. Консольная репродукция есть.
+
+## Math.Exponent — x87 FSTPD -12[FP] (2026-08-19)
+
+Симптом: Strings.RealToString* выдаёт мусор в целой части ("ы9.2..." вместо
+"10519.2"), у Paket "Speed: T.9 KB/s". Корень: Math.Exponent/SMath.Exponent
+писали результат через [code] FSTPDe = FSTPD -12[FP] — 32-битное смещение
+фрейма; на amd64 локал `e` не записывался → всегда 0. Фикс: переносимое
+извлечение битов IEEE-754 (SYSTEM.VAL + SYSTEM.LSH), коммит d82b5623.
+Остальной x87 [code] в Math/SMath (FXTRACT, TOP, FSQRT...) на amd64 РАБОТАЕТ —
+не трогать без нужды. Диагностика: ENTIER работал, RealToString мусорил ->
+разделение путей; пробы 70-77.

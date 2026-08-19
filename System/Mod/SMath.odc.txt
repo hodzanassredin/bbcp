@@ -390,14 +390,15 @@ MODULE SMath;
 		END
 	END Mantissa;
 	
-	PROCEDURE Exponent* (x: SHORTREAL): INTEGER;	(* COMPILER DEPENDENT *)
-		VAR e: INTEGER;	(* e is set by FSTPDe! *)
+	PROCEDURE Exponent* (x: SHORTREAL): INTEGER;
+		VAR b, e: INTEGER;
 	BEGIN
-		FLD(x); FXAM; WAIT;
-		CASE FSW() DIV 256 MOD 8 OF
-		| 4, 6: FXTRACT; FSTPst0; FSTPDe; WAIT; RETURN e
-		| 0, 2: FSTPst0; RETURN 0	(* zero *)
-		| 1, 3, 5, 7: FSTPst0; RETURN MAX(INTEGER)	(* inf or nan*)
+		(* 64-бит: переносимо, биты IEEE-754 вместо x87 FXTRACT+FSTPD -12[FP] *)
+		b := SYSTEM.VAL(INTEGER, x);
+		e := SYSTEM.LSH(b, -23) MOD 256;
+		IF e = 0 THEN RETURN 0	(* +/- zero, denormal *)
+		ELSIF e = 255 THEN RETURN MAX(INTEGER)	(* inf or nan *)
+		ELSE RETURN e - 127
 		END
 	END Exponent;
 	

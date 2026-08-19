@@ -60,3 +60,14 @@ X25519 Generate/Agreement/FromPrivateKey×3. Прогон: команды из
 - ClickHouse#56681: прогнать TLSStream против play.clickhouse.com
   (ECDHE-RSA-AES128-GCM-SHA256, group x25519) — см. tasks.
 - Пуш в GitHub после создания репы bbext/Crypto64.
+
+## ClickHouse#56681 — ЗАКРЫТО (2026-08-19)
+
+- Сервер уже чинится сам: openssl `ECDHE-RSA-AES128-GCM-SHA256 -tls1_2 -groups
+  x25519` против play.clickhouse.com:443 сейчас успешен (Let's Encrypt cert).
+- Наш клиент тоже: ObxProbe68 (CryptoTLSStream.NewStream -> GET /) получил
+  `HTTP/1.0 302 Found`. Handshake TLS1.2 прошёл, SNI отправлен.
+- Наши 5 default suites (TLS.InitDefaults): ECDHE_RSA_AES128_CBC_SHA256,
+  RSA_AES128_CBC_SHA, RSA_3DES_EDE_CBC_SHA, ECDHE_RSA_AES128_GCM_SHA256 —
+  достаточно для этого сервера. Расширение (CHACHA20/ECDSA/TLS1.3) — отдельная
+  история, не требуется.

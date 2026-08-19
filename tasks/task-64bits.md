@@ -1077,6 +1077,7 @@ untracked, без -f не попадут в коммит. Подтвержден
     трогать (L = hex в BB 2.0 = 2^32 = база A2); StdLog в консоли буферизован
     (крах = потеря вывода, бисектить через Console); sig=15 = SIGTERM таймаута
     (зависание); command error в консоли обрывает stdin. Подробности:
-    KB/Crypto64Port.md. ОТКРЫТО: TLSStream не прогнан против реального
-    сервера — ClickHouse#56681 (ECDHE-RSA-AES128-GCM-SHA256 + x25519,
-    play.clickhouse.com:443, upstream шлет sslv3 alert handshake failure).
+    KB/Crypto64Port.md. ClickHouse#56681 ЗАКРЫТО: сервер починен (openssl
+    ECDHE-RSA-AES128-GCM-SHA256+x25519 успешен), и наш TLSStream тоже
+    подключается (ObxProbe68: GET / -> HTTP/1.0 302 Found). Пуш: 5c078e4 +
+    bd0df79 (Docu .odc).

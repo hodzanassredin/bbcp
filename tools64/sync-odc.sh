@@ -22,10 +22,21 @@ for txt in "$BB"/Mod64/*.odc.txt "$BB"/*/Mod/*.odc.txt; do
 done
 if [ "$n" -gt 0 ]; then
 	if [ ! -f "$USE/Odc/Code/TextU.ocf" ]; then
-		echo "sync-odc: мир не собран (нет Odc/Code/TextU.ocf)." >&2
-		echo "  В git .odc всегда свежие: откатите .odc.txt (git checkout) или" >&2
-		echo "  соберите мир (test64.sh), затем повторите." >&2
+		# Мир мёртв (свежий клон или wipe в test64.sh). Если для каждого
+		# txt есть .odc — это безобидно (на чистом клоне txt лишь новее
+		# по mtime, содержимое то же): предупреждаем и выходим 0, чтобы
+		# go64.sh компилировал имеющиеся .odc. Отсутствующий .odc — фатально.
+		missing=0
+		while IFS= read -r line; do
+			odc="${line##*\" \"}"; odc="${odc%\"}"
+			[ -e "$odc" ] || { echo "sync-odc: мир мёртв и нет $odc" >&2; missing=1; }
+		done < "$BATCH"
 		rm -f "$BATCH"
+		if [ "$missing" -eq 0 ]; then
+			echo "sync-odc: мир не собран (нет Odc/Code/TextU.ocf) — использую имеющиеся .odc ($n шт. новее по mtime)" >&2
+			exit 0
+		fi
+		echo "sync-odc: мир не собран, а .odc отсутствуют — соберите мир (test64.sh)" >&2
 		exit 1
 	fi
 	out=$(cd "$USE" && echo 'OdcTextU.Batch' | BB_CONSOLE=1 BB_STANDARD_DIR="$USE" \

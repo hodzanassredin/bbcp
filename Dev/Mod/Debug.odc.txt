@@ -345,16 +345,28 @@ MODULE DevDebug;
 		len := LenOf(desc, ptr); eltyp := desc.base[0]; f := FormOf(eltyp); size := SizeOf(eltyp, ptr);
 		IF (f = 2X) OR (f = 3X) THEN	(* string *)
 			n := 0; m := len; high := FALSE;	(* 64-бит: SYSTEM.GET не принимает LONGINT-выражение — через ta *)
+			IF ~Kernel.IsReadable(a, a + size) THEN out.WriteString("?? unreadable ??"); RETURN END;	(* битый фрейм *)
 			IF f = 2X THEN
-				REPEAT ta := a + n; SYSTEM.GET(ta, vs); INC(n) UNTIL (n = 32) OR (n = len) OR (vs = 0);
-				REPEAT DEC(m); ta := a + m; SYSTEM.GET(ta, vs) UNTIL (m = 0) OR (vs # 0)
+				REPEAT ta := a + n;
+					IF Kernel.IsReadable(ta, ta + 1) THEN SYSTEM.GET(ta, vs) ELSE vs := 0 END;
+					INC(n)
+				UNTIL (n = 32) OR (n = len) OR (vs = 0);
+				IF m > 64 THEN m := 64 END;	(* не сканировать мусорный len назад *)
+				REPEAT DEC(m); ta := a + m;
+					IF Kernel.IsReadable(ta, ta + 1) THEN SYSTEM.GET(ta, vs) ELSE vs := 0; m := 0 END
+				UNTIL (m = 0) OR (vs # 0)
 			ELSE
 				REPEAT
-					ta := a + n * 2; SYSTEM.GET(ta, vi); INC(n);
+					ta := a + n * 2;
+					IF Kernel.IsReadable(ta, ta + 2) THEN SYSTEM.GET(ta, vi) ELSE vi := 0 END;
+					INC(n);
 					IF vi DIV 256 # 0 THEN high := TRUE END
 				UNTIL (n = len) OR (vi = 0);
 				n := MIN(n, 32);
-				REPEAT DEC(m); ta := a + m * 2; SYSTEM.GET(ta, vi) UNTIL (m = 0) OR (vi # 0)
+				IF m > 64 THEN m := 64 END;
+				REPEAT DEC(m); ta := a + m * 2;
+					IF Kernel.IsReadable(ta, ta + 2) THEN SYSTEM.GET(ta, vi) ELSE vi := 0; m := 0 END
+				UNTIL (m = 0) OR (vi # 0)
 			END;
 			WriteString(a, n, size, TRUE, TRUE);
 			INC(m, 2);

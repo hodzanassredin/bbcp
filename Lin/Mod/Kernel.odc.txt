@@ -32,7 +32,7 @@ MODULE LinKernel;
 	CONST
 		clusterSize = 65536 * 4;	(* heap cluster size *)
 		monoClusterSize = 1536 * 100000H;
-		sigStackSize = MAX(Libc.SIGSTKSZ, 65536);
+		sigStackSize = MAX(Libc.SIGSTKSZ, 1024 * 1024);	(* 64-бит: 64К не хватало — трап-вьювер (DevDebug) внутри обработчика переполнял alt-стек, nested SIGSEGV убивал процесс *)
 		
 		(* constants for the message boxes same for *)
 		mbClose = -1; mbOk = 0; mbCancel =1;
@@ -271,11 +271,15 @@ MODULE LinKernel;
 	END Start;
 
 	(* adimetrius, 2021.05 *)
-	
-	PROCEDURE [code] Below (a, b: ADDRESS): BOOLEAN
-		03BH, 004H, 024H, 058H, 0FH, 92H, 0C0H; 
-		(* CMP EAX, [ESP]; POP EAX; SETC AL *)
-	(** Below is unsigned '<' (less) - to be used with ADDRESS which are unsigned 32-bit integers *)
+
+	PROCEDURE Below (a, b: ADDRESS): BOOLEAN;
+	BEGIN
+		(* 64-бит: чистый CP; был x86-32 [code] (CMP EAX,[ESP] ломал стек на amd64).
+		   unsigned '<': при одинаковых знаках — обычное сравнение; иначе
+		   отрицательный (старший бит) беззнаково больше *)
+		IF (a < 0) = (b < 0) THEN RETURN a < b ELSE RETURN b < 0 END
+	END Below;
+	(** Below is unsigned '<' (less) - to be used with ADDRESS *)
 	
 	PROCEDURE (VAR p: Platform) InActivationStack (pc: ADDRESS): BOOLEAN;
 		VAR inMainStack, inSignalStack: BOOLEAN; hi: ADDRESS;
@@ -409,8 +413,7 @@ MODULE LinKernel;
 		VAR inSignalStack: BOOLEAN; oldpc, oldfp: ADDRESS;
 	BEGIN
 		IF isReadableCheck THEN
-			isReadableCheck := FALSE;
-			log.String("~IsReadable"); log.Ln;
+			isReadableCheck := FALSE;	(* probe-read faulted: тихо возвращаем FALSE *)
 			Libc.siglongjmp(isReadableContext, 1)
 		END;
 
@@ -430,7 +433,12 @@ MODULE LinKernel;
 
 		INC(trap.depth);
 		inSignalStack := ((sigStack = fp) OR Below(sigStack, fp)) & Below(fp, sigStack + sigStackSize);
-		IF inSignalStack THEN ASSERT(trap.top # -1) ELSE oldfp := trap.top; trap.top := fp END;
+		(* 64-бит: ASSERT(trap.top # -1) заменён на fallback — при вложенном трапе
+		   на сигнальном стеке trap.top мог быть -1, ASSERT порождал новый трап в
+		   этой же точке -> бесконечная рекурсия до исчерпания sigStack (core dump) *)
+		IF inSignalStack THEN
+			IF trap.top = -1 THEN trap.top := fp END
+		ELSE oldfp := trap.top; trap.top := fp END;
 		IF (pc = oldpc) & (trap.depth > 1) THEN
 			log.String("Recursive trap at the same PC="); log.Hex(oldpc); 
 			log.String(". Aborting immediately."); log.Ln;

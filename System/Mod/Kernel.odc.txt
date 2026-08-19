@@ -36,6 +36,7 @@ MODULE Kernel;
 
 	CONST
 		strictStackSweep = TRUE;
+		maxStackScan = 64 * 1024 * 1024;	(* 64-бит: предел сканирования стека в MarkLocals *)
 
 		nameLen* = 256;
 
@@ -1633,7 +1634,7 @@ MODULE Kernel;
 	PROCEDURE GetRefFrameDo (VAR fr: FrameDesc);				(* based on DefaultTrapView *)
 		VAR res, end: INTEGER; refs: LONGINT; name: Utf8Name; m: Module;
 	BEGIN
-		<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA1AMAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABOAwAAAAAAAAAARQIAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAMwAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAiAAAAAAAAAADXGwIAOgkCAILyAAAAAAAAAACtAQAADAAAAJMBAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAHUBAAAAAAAAAABNAQAAAILyCAAAAAAAAAAzAAAAAAAAABoAAAAAAPQqvAAAAAAAKgAY8AEAAAAAAJABAAAAAA0AAAAAAAAAANcbAgA6CQIAgvIAAAAAAAAAAKAAAAAMAAAAiwAAAAAAAAAAAAAAg@IDAAAAAAAAAAAAAAAPAAAAbQAAAAAAAAAAADYAAAAAgvIIAAAAAAAAAAAAAAAAAAAAGgAAAAAA9Cq8AAAAAAAqABjwAQAAAAAAkAEAAAAALQAAAP9BRDogaSB0aGluayB0aGlzIGlzIGEgdGF1dG9sb2d5IC0gYWx3YXlzIFRSVUUAAAAAANcbAgA6CQIAgvIAAAAAAAAAABoAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAA8AAAD@KGxvIDw9IGZyLmZwKQICICYgKGZyLmZwIDwgaGkpAEEAAAAAAAAAANcbAgA6CQIAgvIAAAAAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAAJoAAAD@aGkgOj0gYmFzZVN0YWNrOw0JCWluTWFpblN0YWNrIDo9IAIoKHRyYXAudG9wID0gZnIuZnApIE9SIEJlbG93KHRyYXAudG9wLCBmci5mcCkpICYgQmVsb3coZnIuZnAsIGhpKQI7DQkJaW5TaWduYWxTdGFjayA6PSAoKHNpZ1N0YWNrID0gZnIuZnApIE9SIEJlbG93KHNpZ1N0YWNrLCBmci5mcCkpICYgQmVsb3coZnIuZnAsIHNpZ1N0YWNrICsgc2lnU3RhY2tTaXplKTsNCQlmci5lb3MgOj0gfmluTWFpblN0YWNrICYgfmluU2lnbmFsU3RhY2s7DQkJ"/>fr.eos := ~platform.InActivationStack(fr.fp);<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
+		<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAA1AMAAAAAAAAAAQAAg@FUZXh0TW9kZWxzLlN0ZE1vZGVsRGVzYwDxVGV4dE1vZGVscy5Nb2RlbERlc2MA8UNvbnRhaW5lcnMuTW9kZWxEZXNjAPFNb2RlbHMuTW9kZWxEZXNjAPFTdG9yZXMuRWxlbURlc2MA8gIAAAAAAAAAAAAAAA8AAABOAwAAAAAAAAAARQIAAACC8VRleHRNb2RlbHMuQXR0cmlidXRlc0Rlc2MA8gIAAAAAAAAAMwAAAAAAAAAaAAAAAAAAf38AAAAAACoAGPABAAAAAACQAQAAAAAiAAAAAAAAAADXGwIAOgkCAILyAAAAAAAAAACtAQAADAAAAJMBAAAAAAAAAAAAAIPyAwAAAAAAAAAAAAAADwAAAHUBAAAAAAAAAABNAQAAAILyCAAAAAAAAAAzAAAAAAAAABoAAAAAAPQqvAAAAAAAKgAY8AEAAAAAAJABAAAAAA0AAAAAAAAAANcbAgA6CQIAgvIAAAAAAAAAAKAAAAAMAAAAiwAAAAAAAAAAAAAAg@IDAAAAAAAAAAAAAAAPAAAAbQAAAAAAAAAAADYAAAAAgvIIAAAAAAAAAAAAAAAAAAAAGgAAAAAA9Cq8AAAAAAAqABjwAQAAAAAAkAEAAAAALQAAAP9BRDogaSB0aGluayB0aGlzIGlzIGEgdGF1dG9sb2d5IC0gYWx3YXlzIFRSVUUAAAAAANcbAgA6CQIAgvIAAAAAAAAAABoAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAAYLyCAAAAAAAAAAAAAAAAAAAABoAAAAAAAB@fwAAAAAAKgAY8AEAAAAAAJABAAAAAA8AAAD@KGxvIDw9IGZyLmZwKQICICYgKGZyLmZwIDwgaGkpAEEAAAAAAAAAANcbAgA6CQIAgvIAAAAAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAAAAgAAAAAAAAAAAAJoAAAD@aGkgOj0gYmFzZVN0YWNrOw0JCWluTWFpblN0YWNrIDo9IAIoKHRyYXAudG9wID0gZnIuZnApIE9SIEJlbG93KHRyYXAudG9wLCBmci5mcCkpICYgQmVsb3coZnIuZnAsIGhpKQI7DQkJaW5TaWduYWxTdGFjayA6PSAoKHNpZ1N0YWNrID0gZnIuZnApIE9SIEJlbG93KHNpZ1N0YWNrLCBmci5mcCkpICYgQmVsb3coZnIuZnAsIHNpZ1N0YWNrICsgc2lnU3RhY2tTaXplKTsNCQlmci5lb3MgOj0gfmluTWFpblN0YWNrICYgfmluU2lnbmFsU3RhY2s7DQkJ"/>fr.eos := fr.eos OR ~platform.InActivationStack(fr.fp);	(* eos мог быть выставлен защищённым Step *)<odc-view type="StdFolds.Fold" w="176784" h="152400" data="gvFTdGRGb2xkcy5Gb2xkRGVzYwDxVmlld3MuVmlld0Rlc2MA8FN0b3Jlcy5TdG9yZURlc2MAAAAAAAAAAAAMAAAAEQAAAAAAAAEAAQAAgAAAAAAAAAAA"/>
 		IF fr.eos THEN fr.m := ''; fr.p := ''; fr.pos := undefined; fr.sentry := NIL
 		ELSE
 			m := modList; fr.modpc := fr.pc;
@@ -1662,6 +1663,7 @@ MODULE Kernel;
 		fr.sentry := sentry;
 		fr.depth := -1;
 		fr.pos := undefined;
+		fr.eos := FALSE;	(* 64-бит: обязательно — GetRefFrameDo теперь OR-ит eos от защищённого Step *)
 		fr.pc := pc;
 		fr.lo := fp;
 		fr.fp := fp;
@@ -1673,10 +1675,18 @@ MODULE Kernel;
 	
 	PROCEDURE GetRefFrame (VAR fr: FrameDesc);
 		PROCEDURE Step;	(* fr.pc := [fr.fp + 8]; fr.fp := [fr.fp] *)
-			VAR ar: AdrRef;
+			VAR ar: AdrRef; newfp: ADDRESS;
 		BEGIN
+			(* 64-бит: защита от битого FP — читаем только валидную память и
+			   требуем строгого роста FP (стек растёт вниз, caller выше);
+			   иначе битый фрейм уводил walker в мусор/цикл (cycle guard) *)
+			IF (fr.fp MOD 8 # 0) OR ~IsReadable(fr.fp, fr.fp + 2 * SIZE(ADDRESS)) THEN
+				fr.eos := TRUE; RETURN
+			END;
 			ar := S.VAL(AdrRef, fr.fp + SIZE(ADDRESS)); fr.pc := ar.a; DEC(fr.pc);
-			ar := S.VAL(AdrRef, fr.fp); fr.fp := ar.a
+			ar := S.VAL(AdrRef, fr.fp); newfp := ar.a;
+			IF newfp <= fr.fp THEN fr.eos := TRUE; RETURN END;
+			fr.fp := newfp
 		END Step;
 	BEGIN 
 		IF fr.sentry = NIL THEN 
@@ -1885,10 +1895,17 @@ MODULE Kernel;
 	END CheckCandidates;
 
 	PROCEDURE MarkLocals;
-		VAR sp, p, min, max: LONGINT; c: Cluster; ar: AdrRef;
+		VAR stk, p, min, max: LONGINT; c: Cluster; ar: AdrRef;
 	BEGIN
-		S.GETREG(FP, sp);
-		INC(sp, 3); sp := sp DIV 4 * 4;	(* 64-бит: шаг 4, а не 8! Компилятор ПАКУЕТ 8-байтные поля
+		S.GETREG(FP, stk);
+		(* 64-бит: GC во время трапа выполняется на сигнальном стеке — его диапазон
+		   [FP, baseStack) огромен, сканирование читает незамапленные страницы и
+		   каскадит трапы (137 stack overflow в MarkLocals до бесконечности).
+		   В таком случае сканируем основной стек от sp трапа (глобаль Kernel.sp).
+		   Если и он вне диапазона — пропускаем скан (лучше, чем падение). *)
+		IF (stk > baseStack) OR (baseStack - stk > maxStackScan) THEN stk := sp END;
+		IF (stk > baseStack) OR (baseStack - stk > maxStackScan) THEN RETURN END;
+		INC(stk, 3); stk := stk DIV 4 * 4;	(* 64-бит: шаг 4, а не 8! Компилятор ПАКУЕТ 8-байтные поля
 			без 8-выравнивания (Cluster.next@4), поэтому указатели на стеке (поля записей-
 			локалов, напр. Stores.Reader) бывают на адресах ≡ 4 (mod 8). Скан с шагом 8
 			(любой фазы) пропускал половину слотов → живые объекты собирались Sweep
@@ -1896,13 +1913,13 @@ MODULE Kernel;
 		nofcand := 0; c := root;
 		WHILE c.next # NIL DO c := c.next END;
 		min := S.VAL(LONGINT, root); max := S.VAL(LONGINT, c) + c.size;
-		WHILE sp < baseStack DO
-			ar := S.VAL(AdrRef, sp); p := ar.a;
+		WHILE stk < baseStack DO
+			ar := S.VAL(AdrRef, stk); p := ar.a;
 			IF (p > min) & (p < max) & (~strictStackSweep OR (p MOD 16 = 0)) THEN
 				candidates[nofcand] := p; INC(nofcand);
 				IF nofcand = LEN(candidates) - 1 THEN CheckCandidates; nofcand := 0 END
 			END;
-			INC(sp, 4)
+			INC(stk, 4)
 		END;
 		candidates[nofcand] := max; INC(nofcand);	(* ensure complete scan for interface mark*)
 		IF nofcand > 0 THEN CheckCandidates END
@@ -2566,6 +2583,7 @@ MODULE Kernel;
 		IF static THEN INCL(opts, init) END;
 		platform.id := -1;
 		platform.physicalMemory := MAX(INTEGER);
+		IF baseStack = 0 THEN S.GETREG(SP, baseStack) END;	(* 64-бит: иначе platform получает 0 и InActivationStack всегда FALSE *)
 		platform.Setup(baseStack, opts, platform.id, platform.eoln, monoClusterMem, platform.gradualCommit, platform.physicalMemory, platform.Try);
 		ASSERT(platform.id # -1, 22);
 		ASSERT(platform.eoln # '', 23);

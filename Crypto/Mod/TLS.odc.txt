@@ -1,0 +1,2648 @@
+MODULE CryptoTLS;(** AUTHOR "F.N."; PURPOSE "RFC 2246: Transport Layer Security v1.0"; *)
+(*
+	05.2014 -- Timothée Martiel -- Implemented TLS client connection.
+*)
+
+	IMPORT IP := CryptoAosIP, TCP := CryptoAosTCP, Streams := CryptoAosStreams, Files := CryptoAosFileStreams, StdLog, Kernel, BIT:= CryptoAosBIT, Dates:= CryptoAosDates, Strings := CryptoAosStrings, Ciphers := CryptoCiphers, HMAC := CryptoHMAC, Rng := CryptoFortunaRng, CryptoHashes, CryptoMD5, CryptoSHA1, CryptoRSA, AosBigNumbers := CryptoAosBigNumbers, PKCS1 := CryptoPKCS1, X509 := CryptoX509, AO := CryptoAosCompat, Pipes := CryptoAosPipes, Services, X25519 := CryptoX25519, Gcm := CryptoGcm, U := CryptoUtils; 
+
+	CONST
+	(* debugging *)
+		Trace = FALSE;
+	(** tlsStates *)
+		ServerHandshake* = 12;
+		ClientHandshake* = 13;
+	(* client and server common handshake states *)
+		NotAValidHandshakeState = 100;
+		HandshakeFinished = 101;
+		GenerateChangeCipherSpec = 102;
+		AwaitFinished = 103;
+	(* server-side handshake states *)
+		AwaitClientHello = 201;
+		GenerateServerHello = 202;
+		GenerateServerHelloDone = 203;
+		AwaitClientKeyExchange = 204;
+		AwaitChangeSpec = 205;
+		GenerateHelloWithResumption = 210;
+		AwaitChangeSpecWithResumption = 211;
+		AwaitFinishedWithResumption = 212;
+	(* client-side handshake states *)
+		GenerateClientHello = 300;
+		AwaitServerHello = 301;
+		AwaitCertificate = 302;
+		AwaitServerKeyExchange = 303;
+		AwaitServerHelloDone = 304;
+		GenerateClientKeyExchange = 305;
+
+	(** available cipher suites *)
+		TlsRsaWithNullMd5* = 1H;
+		TlsRsaWithNullSha* = 2H;
+		TlsRsaWithRc4128Md5* = 4H;
+		TlsRsaWithRc4128Sha* = 5H;
+		TlsRsaWithIdeaCbcSha* = 7H;
+		TlsRsaWithDesCbcSha* = 9H;
+		TlsRsaWith3DesEdeCbcSha* = 0AH;
+				(* not supported
+				TlsDhDssWithDesCbcSha* = 000CH; 
+				TlsDhDssWith3DesEdeCbcSha* = 000DH;
+				TlsDhRsaWithDesCbcSha* = 000FH; 
+				TlsDhRsaWith3DesEdeCbcSha* = 0010H;
+				TlsDhAnonWithRc4128Md5* = 0018H; 
+				TlsDhAnonWithDesCbcSha* = 001AH; 
+				TlsDhAnonWith3DesEdeCbcSha* = 001BH;
+				*)
+	(* TLS 1.2 cipher suites *)
+		TlsRsaWithAes128CbcSha* = 2FH;
+				(* not supported
+				TlsDhDssWithAes128CbcSha* = 0030H; 
+				TlsDhRsaWithAes128CbcSha* = 0031H;
+				TlsDheDssWithAes128CbcSha* = 0032H; 
+				TlsDheRsaWithAes128CbcSha* = 0033H;
+				TlsDhAnonWithAes128CbcSha* = 0034H;
+				*)
+		TlsRsaWithAes256CbcSha* = 35H; (*TLS_RSA_WITH_AES_256_CBC_SHA*)
+
+				TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256  = 0C027H;(*49191*)
+				TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256  = 0C02FH;
+				
+				(* not supported
+				TlsDhDssWithAes256CbcSha* = 0036H; 
+				TlsDhRsaWithAes256CbcSha* = 0037H;
+				TlsDheDssWithAes256CbcSha* = 0038H; 
+				TlsDheRsaWithAes256CbcSha* = 0039H;
+				TlsDhAnonWithAes256CbcSha* = 003AH;
+				*)
+
+				(** record layer content type *)
+		ChangeCipherSpec* = 20;
+		Alert* = 21;
+		Handshake* = 22;
+		ApplicationData* = 23;
+		SSLv2ClientHello* = 128;
+		HelloRequest* = 0;
+		ClientHello* = 1;
+		ServerHello* = 2;
+		Certificate* = 11;
+		ServerKeyExchange* = 12;
+		CertificateRequest* = 13;
+		ServerHelloDone* = 14;
+		CertificateVerify* = 15;
+		ClientKeyExchange* = 16;
+		Finished* = 20;
+		V2ClientHello* = 30;
+		Warning = 1;
+		Fatal = 2;
+		NoError = (-1);
+		CloseNotify = 0;
+		UnexpectedMessage = 10;
+		BadRecordMac = 20;
+		DecryptionFailed = 21;
+		RecordOverflow = 22;
+		DecompressionFailure = 30;
+		HandshakeFailure = 40;
+		NoCertificate = 41;
+		BadCertificate = 42;
+		UnsupportedCertificate = 43;
+		CertificateRevoked = 44;
+		CertificateExpired = 45;
+		CertificateUnknown = 46;
+		IllegalParameter = 47;
+		UnknownCA = 48;
+		AccessDenied = 49;
+		DecodeError = 50;
+		DecryptError = 51;
+		ExportRestriction = 60;
+		ProtocolVersion = 70;
+		InsufficientSecurity = 71;
+		InternalError = 80;
+		UserCancelled = 90;
+		NoRenegotiation = 100;
+		UnsupportedExtension = 110;
+		Ok* = 0;
+		TLSHandshakeAborted* = 2;
+		Suites* = 20;
+		Buflen = 18500;
+		MaxPHashKernelLogput = 1024;
+		MaxKeyBlock = 144;
+		MaxPHashSeed = 128;
+		MaxPlaintextLength = 16384;
+		MaxCompressedLength = 17408;
+		MaxCiphertextLength = 18432;
+		SessionIdLength = 16;
+		SessionHashtableSize = 1023;
+		SessionCleanUpInterval = 60;
+		DefaultSessionLifetime = 3600;
+		DefaultSuitesNbr = 5;
+
+	TYPE
+		SecurityParameters = POINTER TO EXTENSIBLE RECORD
+			cipherSuite, cipherKeySize : AO.SIGNED32;
+			clientRandom, serverRandom : ARRAY 32 OF SHORTCHAR;
+			PRFAlgorithm : ARRAY 32 OF SHORTCHAR
+		END;
+		ConnectionState = POINTER TO EXTENSIBLE RECORD
+			cipher : Ciphers.Cipher;
+			aeadCipher : Gcm.GcmMode;
+			mac : HMAC.HMac;
+			recordSeq : DoubleLong;
+			cipherKey : ARRAY 32 OF SHORTCHAR;
+			iv : ARRAY 16 OF SHORTCHAR;
+			macSecret : ARRAY 32 OF SHORTCHAR
+		END;
+		DoubleLong = POINTER TO EXTENSIBLE RECORD
+			numH, numL : AO.SIGNED32
+		END;
+		PHash = POINTER TO EXTENSIBLE RECORD
+			hMac : HMAC.HMac
+		END;
+		PRF = POINTER TO EXTENSIBLE RECORD
+			pMD5, pSHA : PHash;
+			pHash : PHash
+		END;
+		Policy* = POINTER TO EXTENSIBLE RECORD
+			cipherSuites : ARRAY Suites OF AO.SIGNED32;
+			nofCipherSuites : AO.SIZE;
+			sessionResumptionEnabled : BOOLEAN;
+			sessionLifetime : AO.SIGNED32;
+			version : ARRAY 2 OF SHORTCHAR
+		END;
+		Session = POINTER TO EXTENSIBLE RECORD
+			id : ARRAY 32 OF SHORTCHAR;
+			idLength : AO.SIZE;
+			resumable : BOOLEAN;
+			cipherSuite : AO.SIGNED32;
+			preMasterSecret, masterSecret : ARRAY 48 OF SHORTCHAR;
+			preMasterSecretLen:INTEGER;
+			lifetime : AO.SIGNED32;
+			next : Session;
+			sessionInvalidator : SessionInvalidator;
+		END;
+		Context* = POINTER TO EXTENSIBLE RECORD
+			policy : Policy;
+			rsaCertificate : ARRAY 10000 OF SHORTCHAR;
+			rsaPrivateKey, rsaPublicKey : CryptoRSA.Key;
+			lengthOfRsaCertificate : AO.SIZE;
+			sessionCache : ARRAY SessionHashtableSize OF Session;
+			active : BOOLEAN;
+			sessionCacheCleaner : SessionCacheCleaner;
+		END;
+		Connection* = POINTER TO EXTENSIBLE RECORD(TCP.Connection)
+			conn : TCP.Connection;
+			(* "in", "out" are tcp stream reader writers, decoded data from "in" stream pushes into appdatawriter and finaly to applicationDataPipe, cosumers read decoded data directly from  applicationDataPipe, appDataReader unused, consumers send raw data by Send and write encoded data into out *)
+			in, appDataReader : Streams.Reader;
+			out, appDataWriter : Streams.Writer;
+			(* async bounded buffer*)
+			applicationDataPipe : Pipes.Pipe; 
+			context : Context;
+			session : Session;
+			tlsErrorCause : AO.SIGNED32;
+			handshakeState : AO.SIGNED32;
+			outbuf, inbuf : ARRAY Buflen OF SHORTCHAR;
+			hsMD5send, hsMD5verify : CryptoMD5.Hash;
+			hsSHAsend, hsSHAverify : CryptoSHA1.Hash;
+			hsHashSend, hsHashVerify : CryptoHashes.Hash;
+			pendingSecurityParameters : SecurityParameters;
+			currentWriteState, pendingWriteState, currentReadState, pendingReadState : ConnectionState;
+			version : ARRAY 2 OF SHORTCHAR;
+			client, trapped : BOOLEAN;
+			asyncWriter : AsyncWriter;
+			serverName : ARRAY 256 OF SHORTCHAR;
+			x25519 : X25519.X25519KeyPair;
+			x25519Shared : ARRAY 32 OF SHORTCHAR;
+		END;
+		
+		ConnectionReceiver = POINTER TO RECORD(Streams.Receiver) conn: Connection END;
+		ConnectionSender = POINTER TO RECORD(Streams.Sender) conn: Connection END;
+		AsyncWriter = POINTER TO RECORD(Pipes.AsyncAction);conn: Connection END;
+		SessionInvalidator = POINTER TO RECORD(Services.Action) session:Session END;
+		SessionCacheCleaner = POINTER TO RECORD(Services.Action) ctx:Context END;
+		
+	VAR
+		defaultCipherPolicy: Policy;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: DoubleLong) Init , NEW;
+	BEGIN
+		SELF.numH := (-1);
+		SELF.numL := (-1)
+	END Init;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: ConnectionState) Init* , NEW;
+
+	BEGIN
+		NEW(SELF.recordSeq);SELF.recordSeq.Init();
+	END Init;
+
+	PROCEDURE (SELF: DoubleLong) Inc , NEW;
+
+	BEGIN
+		IF SELF.numL # (-1) THEN
+			INC(SELF.numL)
+		ELSIF SELF.numH = (-1) THEN
+			SELF.numH := 0;
+			SELF.numL := 0
+		ELSE
+			INC(SELF.numH);
+			SELF.numL := 0
+		END
+	END Inc;
+
+	PROCEDURE (SELF: DoubleLong) GetBytes (VAR buf : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+		VAR
+			p: AO.SIZE;
+			val: AO.SIGNED32;
+
+
+	BEGIN
+		p := ofs + 7;
+		val := SELF.numL;
+		REPEAT
+			buf[p] := (*WARN CONV CAST*)SHORT(CHR(val MOD 256));
+			IF p = ofs + 4 THEN
+				val := SELF.numH
+			ELSE
+				val := val DIV 256
+			END;
+			DEC(p)
+		UNTIL p < ofs
+	END GetBytes;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: PHash) Init* (hashname : ARRAY OF SHORTCHAR), NEW;
+
+	BEGIN
+		NEW(SELF.hMac); SELF.hMac.Init(hashname)
+	END Init;
+
+	PROCEDURE (SELF: PHash) Expand (VAR secret, seed, outbuf : ARRAY OF SHORTCHAR; secretLen, seedLen, outLen : AO.SIZE), NEW;
+		VAR
+			a: ARRAY 2 * MaxPHashSeed OF SHORTCHAR;
+			i, iterations: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(seedLen <= (MaxPHashSeed));
+		ASSERT(outLen <= (MaxPHashKernelLogput));
+		SELF.hMac.Initialize(secret, secretLen);
+		SELF.hMac.Update(seed, 0, seedLen);
+		SELF.hMac.GetMac(a, 0);
+		FOR i := 0 TO seedLen - 1 DO
+			a[SELF.hMac.size + i] := seed[i]
+		END;
+		iterations := (outLen DIV SELF.hMac.size) + 1;
+		FOR i := 0 TO iterations - 1 DO
+			SELF.hMac.Initialize(secret, secretLen);
+			SELF.hMac.Update(a, 0, SELF.hMac.size + seedLen);
+			SELF.hMac.GetMac(outbuf, i * SELF.hMac.size);
+			SELF.hMac.Initialize(secret, secretLen);
+			SELF.hMac.Update(a, 0, SELF.hMac.size);
+			SELF.hMac.GetMac(a, 0)
+		END
+	END Expand;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: PRF) Init* (IN algorithm : ARRAY OF SHORTCHAR), NEW;
+
+	BEGIN
+		IF algorithm = "SHA1 XOR MD5" THEN
+			NEW(SELF.pMD5);SELF.pMD5.Init("CryptoMD5");
+			NEW(SELF.pSHA); SELF.pSHA.Init("CryptoSHA1")
+		ELSE
+			NEW(SELF.pHash); SELF.pHash.Init(algorithm)
+		END
+	END Init;
+
+	PROCEDURE (SELF: PRF) GetBytes (VAR secret, seed, outbuf : ARRAY OF SHORTCHAR; IN label : ARRAY OF SHORTCHAR; secretLen, seedLen, outLen : AO.SIZE), NEW;
+		VAR
+			md5Result, shaResult: ARRAY MaxKeyBlock OF SHORTCHAR;
+			seedBuf, s1, s2: ARRAY 140 OF SHORTCHAR;
+			hashResult: ARRAY 256 OF SHORTCHAR;
+			i, j, labelLen: AO.SIZE;
+
+
+	BEGIN
+		labelLen := Strings.Length(label);
+		FOR i := 0 TO labelLen - 1 DO
+			seedBuf[i] := label[i]
+		END;
+		FOR i := 0 TO seedLen - 1 DO
+			seedBuf[labelLen + i] := seed[i]
+		END;
+		IF SELF.pHash = NIL THEN
+			j := secretLen DIV 2 + secretLen MOD 2;
+			FOR i := 0 TO j - 1 DO
+				s1[i] := secret[i]
+			END;
+			FOR i := secretLen - j TO secretLen - 1 DO
+				s2[i + j - secretLen] := secret[i]
+			END;
+			SELF.pMD5.Expand(s1, seedBuf, md5Result, j, seedLen + labelLen, outLen);
+			SELF.pSHA.Expand(s2, seedBuf, shaResult, j, seedLen + labelLen, outLen);
+			FOR i := 0 TO outLen - 1 DO
+				outbuf[i] := BIT.CXOR(md5Result[i], shaResult[i])
+			END
+		ELSE
+			SELF.pHash.Expand(secret, seedBuf, hashResult, secretLen, seedLen + labelLen, outLen);
+			FOR i := 0 TO outLen - 1 DO
+				outbuf[i] := hashResult[i]
+			END
+		END
+	END GetBytes;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: Policy) Init* , NEW;
+
+	BEGIN
+		SELF.sessionResumptionEnabled := TRUE;
+		SELF.sessionLifetime := DefaultSessionLifetime
+	END Init;
+
+	PROCEDURE (SELF: Policy) SetCipherSuites* (VAR s : ARRAY OF AO.SIGNED32; n : AO.SIZE), NEW;
+		VAR
+			i: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(n <= Suites);
+		FOR i := 0 TO n - 1 DO
+			SELF.cipherSuites[i] := s[i]
+		END;
+		SELF.nofCipherSuites := n
+	END SetCipherSuites;
+
+	PROCEDURE (SELF: Policy) IsSupported* (s : AO.SIGNED32): BOOLEAN, NEW;
+		VAR
+			i: AO.SIZE;
+
+
+	BEGIN
+		FOR i := 0 TO SELF.nofCipherSuites - 1 DO
+			IF SELF.cipherSuites[i] = s THEN
+				RETURN TRUE
+			END
+		END;
+		RETURN FALSE
+	END IsSupported;
+
+	PROCEDURE (SELF: Policy) EnableSessionResumption* (enable : BOOLEAN), NEW;
+
+	BEGIN
+		SELF.sessionResumptionEnabled := enable
+	END EnableSessionResumption;
+
+	PROCEDURE (SELF: Policy) SetSessionLifetime* (t : AO.SIGNED32), NEW;
+
+	BEGIN
+		ASSERT(t >= 0);
+		SELF.sessionLifetime := t
+	END SetSessionLifetime;
+
+	PROCEDURE (SELF: Policy) SetVersion* (major, minor : AO.SIGNED32), NEW;
+
+	BEGIN
+		ASSERT(major = 1);
+		ASSERT(minor >= 0);
+		ASSERT(minor <= 2);
+		SELF.version[0] := (*WARN CONV CAST*)SHORT(CHR(3));
+		SELF.version[1] := (*WARN CONV CAST*)SHORT(CHR(1 + minor))
+	END SetVersion;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: Session) Init* (caching : BOOLEAN; VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE; lifetime : AO.SIGNED32), NEW;
+		VAR
+			i: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(ofs > (-1));
+		ASSERT(len > (-1));
+		ASSERT(ofs + len <= LEN(data));
+		ASSERT(lifetime > 0);
+		SELF.resumable := caching;
+		IF caching THEN
+			IF len = 0 THEN
+				SELF.idLength := SessionIdLength;
+				Rng.Generate(SELF.id, 0, SessionIdLength)
+			ELSE
+				SELF.idLength := len;
+				FOR i := 0 TO len - 1 DO
+					SELF.id[i] := data[ofs + i]
+				END
+			END
+		END;
+		SELF.cipherSuite := 0;
+		SELF.lifetime := lifetime;
+				
+				NEW(SELF.sessionInvalidator);SELF.sessionInvalidator.session := SELF;
+
+				
+				Services.DoLater(SELF.sessionInvalidator, Services.now + Services.resolution * lifetime);
+	END Init;
+
+	PROCEDURE (SELF: Session) Invalidate , NEW;
+
+	BEGIN
+		SELF.resumable := FALSE
+	END Invalidate;
+
+	PROCEDURE (SELF: Session) SetPreMasterSecret (data : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+		VAR
+			i: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(LEN(data) >= ofs + 48);
+		FOR i := 0 TO 47 DO
+			SELF.preMasterSecret[i] := data[ofs + i]
+		END
+	END SetPreMasterSecret;
+
+
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: Context) Init* (p : Policy), NEW;
+
+	BEGIN
+		SELF.policy := p;
+	     (*   NEW(SELF.timer); *)
+		SELF.active := TRUE;
+				NEW(SELF.sessionCacheCleaner);SELF.sessionCacheCleaner.ctx := SELF;
+				Services.DoLater(SELF.sessionCacheCleaner,Services.now + Services.resolution * SessionCleanUpInterval)
+	END Init;
+
+	PROCEDURE (SELF: Context) Dispose* , NEW;
+
+	BEGIN
+		SELF.active := FALSE;
+				Services.RemoveAction(SELF.sessionCacheCleaner);
+	END Dispose;
+
+	PROCEDURE (SELF: Context) PrintRsaCertificate* , NEW;
+
+	BEGIN
+		StdLog.String("Certificate [");
+		StdLog.Int(SELF.lengthOfRsaCertificate);
+		StdLog.String("]");
+		StdLog.Ln;
+		AO.LogBuffer(SELF.rsaCertificate, 6, SELF.lengthOfRsaCertificate)
+	END PrintRsaCertificate;
+
+	PROCEDURE (SELF: Context) LoadRsaCertificate* (filename : ARRAY OF SHORTCHAR): AO.SIGNED32, NEW;
+		VAR
+			f: Files.File;
+			r: Files.Reader;
+			i: AO.SIZE;
+
+
+	BEGIN
+		f := Files.Old(filename);
+		IF f # NIL THEN
+			Files.OpenReader(r, f, 0);
+			i := 0;
+			WHILE r.res # Streams.EOF DO
+				SELF.rsaCertificate[i + 6] := r.Get();
+				INC(i)
+			END;
+			SELF.lengthOfRsaCertificate := i - 1;
+			IF Trace THEN
+				SELF.PrintRsaCertificate()
+			END;
+			SELF.rsaCertificate[0] := (*WARN CONV CAST*)SHORT(CHR((SELF.lengthOfRsaCertificate + 3) DIV (256 * 256)));
+			SELF.rsaCertificate[1] := (*WARN CONV CAST*)SHORT(CHR((SELF.lengthOfRsaCertificate + 3) DIV 256 MOD 256));
+			SELF.rsaCertificate[2] := (*WARN CONV CAST*)SHORT(CHR((SELF.lengthOfRsaCertificate + 3) MOD 256));
+			SELF.rsaCertificate[3] := (*WARN CONV CAST*)SHORT(CHR((SELF.lengthOfRsaCertificate) DIV (256 * 256)));
+			SELF.rsaCertificate[4] := (*WARN CONV CAST*)SHORT(CHR((SELF.lengthOfRsaCertificate) DIV 256 MOD 256));
+			SELF.rsaCertificate[5] := (*WARN CONV CAST*)SHORT(CHR((SELF.lengthOfRsaCertificate) MOD 256));
+			INC(SELF.lengthOfRsaCertificate, 6);
+			RETURN Ok
+		ELSE
+			StdLog.String("RSA Certificate file not found");
+			StdLog.Ln;
+			RETURN (-1)
+		END
+	END LoadRsaCertificate;
+
+	PROCEDURE (SELF: Context) LoadRsaPrivateKey* (pHex, qHex, eHex : ARRAY OF SHORTCHAR; pLen, qLen, eLen : AO.SIGNED16), NEW;
+		VAR
+			p, q, e: AosBigNumbers.BigNumber;
+			dummy: CryptoRSA.Key;
+
+
+	BEGIN
+		AosBigNumbers.AssignHex(p, pHex, pLen);
+		AosBigNumbers.AssignHex(q, qHex, qLen);
+		AosBigNumbers.AssignHex(e, eHex, eLen);
+		NEW(SELF.rsaPrivateKey);
+		NEW(dummy);
+		CryptoRSA.MakeKeys(p, q, e, "AosTLS", dummy, SELF.rsaPrivateKey);
+		IF Trace THEN
+			StdLog.String("RSA-key loaded");
+			StdLog.Ln;
+			StdLog.String("   prime p:");
+			StdLog.Ln;
+			AosBigNumbers.Print(p);
+			StdLog.String("   prime q:");
+			StdLog.Ln;
+			AosBigNumbers.Print(q);
+			StdLog.String("   public exponent:");
+			StdLog.Ln;
+			AosBigNumbers.Print(e);
+			StdLog.String("   modulus:");
+			StdLog.Ln;
+			AosBigNumbers.Print(SELF.rsaPrivateKey.modulus);
+			StdLog.String("   private exponent:");
+			StdLog.Ln;
+			AosBigNumbers.Print(SELF.rsaPrivateKey.exponent)
+		END
+	END LoadRsaPrivateKey;
+
+	PROCEDURE (SELF: Context) GetRsaPublicKey* , NEW;
+		VAR
+			certificate: X509.Certificate;
+			reader: Streams.StringReader;
+
+
+	BEGIN
+		IF SELF.rsaPublicKey = NIL THEN
+			NEW(certificate);
+			NEW(reader); reader.InitStringReader(SELF.lengthOfRsaCertificate);
+			reader.SetRaw(SELF.rsaCertificate, 6, SELF.lengthOfRsaCertificate);
+			certificate := X509.Read(reader);
+			SELF.rsaPublicKey := certificate.publicKey
+		END
+	END GetRsaPublicKey;
+
+
+
+	PROCEDURE (SELF: Context) GetNewServerSession* (): Session, NEW;
+		VAR
+			dummy: ARRAY 1 OF SHORTCHAR;
+			s: Session;
+
+
+	BEGIN
+		NEW(s); s.Init( SELF.policy.sessionResumptionEnabled, dummy, 0, 0, SELF.policy.sessionLifetime);
+		RETURN s
+	END GetNewServerSession;
+
+	PROCEDURE (SELF: Context) EqualSessionID (VAR data1, data2 : ARRAY OF SHORTCHAR; ofs1, ofs2, len : AO.SIZE): BOOLEAN, NEW;
+		VAR
+			i: AO.SIZE;
+
+
+	BEGIN
+		FOR i := 0 TO len - 1 DO
+			IF data1[ofs1 + i] # data2[ofs2 + i] THEN
+				RETURN FALSE
+			END
+		END;
+		RETURN TRUE
+	END EqualSessionID;
+
+	PROCEDURE (SELF: Context) FindSessionByID* (VAR data : ARRAY OF SHORTCHAR; ofs, idLen : AO.SIZE): Session, NEW;
+		VAR
+			i: AO.SIZE;
+			current, previous: Session;
+
+
+	BEGIN
+		ASSERT(idLen = SessionIdLength);
+		ASSERT(idLen < 33);
+		ASSERT(idLen >= 2);
+		ASSERT(ofs > (-1));
+		ASSERT(LEN(data) >= ofs + idLen);
+		IF ~SELF.policy.sessionResumptionEnabled THEN
+			RETURN NIL
+		END;
+		i := (ORD(data[ofs]) + 256 * ORD(data[ofs + 1])) MOD SessionHashtableSize;
+		current := SELF.sessionCache[i];
+		previous := SELF.sessionCache[i];
+		WHILE current # NIL DO
+			IF SELF.EqualSessionID(current.id, data, 0, ofs, idLen) THEN
+				IF current.resumable THEN
+					IF current # previous THEN
+						previous.next := current.next;
+						current.next := SELF.sessionCache[i];
+						SELF.sessionCache[i] := current
+					END;
+					RETURN current
+				ELSE
+					RETURN NIL
+				END
+			ELSE
+				previous := current;
+				current := current.next
+			END
+		END;
+		RETURN NIL
+	END FindSessionByID;
+
+	PROCEDURE (SELF: Context) StoreSession (s : Session), NEW;
+		VAR
+			i: AO.SIGNED32;
+
+
+	BEGIN
+		ASSERT(s.resumable);
+		i := ORD(s.id[0]) + 256 * ORD(s.id[1]);
+		i := i MOD SessionHashtableSize;
+		s.next := SELF.sessionCache[i];
+		SELF.sessionCache[i] := s
+	END StoreSession;
+
+
+
+	PROCEDURE (SELF: Context) DeleteUnresumableSessions (s : Session): Session, NEW;
+
+	BEGIN
+		IF s = NIL THEN
+			RETURN NIL
+		END;
+		IF s.resumable THEN
+			s.next := SELF.DeleteUnresumableSessions(s.next);
+			RETURN s
+		ELSE
+			RETURN SELF.DeleteUnresumableSessions(s.next)
+		END
+	END DeleteUnresumableSessions;
+
+	PROCEDURE (SELF: Context) CleanUpSessionCache , NEW;
+		VAR
+			i: AO.SIGNED32;
+
+
+	BEGIN
+		FOR i := 0 TO SessionHashtableSize - 1 DO
+			SELF.sessionCache[i] := SELF.DeleteUnresumableSessions(SELF.sessionCache[i])
+		END
+	END CleanUpSessionCache;
+
+		PROCEDURE (SELF:SessionCacheCleaner) Do;
+		BEGIN
+			IF SELF.ctx.active THEN
+				IF Trace THEN
+					StdLog.String("TLS CleanUpSessionCache"); StdLog.Ln;
+				END;
+				SELF.ctx.CleanUpSessionCache;
+				Services.DoLater(SELF,Services.now + Services.resolution * SessionCleanUpInterval)
+			END
+		END Do;
+
+	PROCEDURE (*WARN CONV NOT SUPPORTED: &*)
+(SELF: Connection) Init* ;
+
+	BEGIN
+		SELF.state := TCP.Unused;
+		SELF.tlsErrorCause := NoError;
+
+				NEW(SELF.asyncWriter); SELF.asyncWriter.conn := SELF;
+		NEW(SELF.applicationDataPipe); SELF.applicationDataPipe.Init(1024 * 1024,SELF.asyncWriter);
+		NEW(SELF.appDataWriter);
+				SELF.appDataWriter.InitWriter(SELF.applicationDataPipe.sender, 1024 * 1024);
+		Streams.OpenReader(SELF.appDataReader, SELF.applicationDataPipe.receiver);
+		NEW(SELF.pendingWriteState);SELF.pendingWriteState.Init();
+		NEW(SELF.currentWriteState);SELF.currentWriteState.Init();
+		NEW(SELF.pendingReadState);SELF.pendingReadState.Init();
+		NEW(SELF.currentReadState);SELF.currentReadState.Init();
+		NEW(SELF.pendingSecurityParameters);
+				X25519.GenerateKeyPair(SELF.x25519);
+	END Init;
+
+	PROCEDURE (SELF: Connection) AwaitStateNotEqual* (s : AO.SIGNED32) : BOOLEAN, NEW;
+
+	BEGIN
+
+		RETURN ( SELF.state #  s);
+
+	END AwaitStateNotEqual;
+
+	PROCEDURE (SELF: Connection) AwaitStateEqual* (s : AO.SIGNED32) : BOOLEAN, NEW;
+
+	BEGIN
+
+		RETURN ( SELF.state =  s)
+
+	END AwaitStateEqual; 
+
+	PROCEDURE (SELF: Connection) SetState* (s : AO.SIGNED8), NEW;
+
+	BEGIN
+
+		SELF.state := s
+	END SetState;
+
+	PROCEDURE (SELF: Connection) ChangeWriteState , NEW;
+
+	BEGIN
+		SELF.currentWriteState := SELF.pendingWriteState;
+		NEW(SELF.pendingWriteState); SELF.pendingWriteState.Init();
+	END ChangeWriteState;
+
+	PROCEDURE (SELF: Connection) ChangeReadState , NEW;
+
+	BEGIN
+		SELF.currentReadState := SELF.pendingReadState;
+		NEW(SELF.pendingReadState);SELF.pendingReadState.Init();
+	END ChangeReadState;
+
+	PROCEDURE (SELF: Connection) SetContext* (ctx : Context), NEW;
+
+	BEGIN
+		ASSERT(SELF.conn = NIL);
+		SELF.context := ctx;
+		SELF.version[0] := ctx.policy.version[0];
+		SELF.version[1] := ctx.policy.version[1];
+		IF SELF.version[1] < 3X THEN
+			NEW(SELF.hsMD5send);
+			NEW(SELF.hsSHAsend);
+			NEW(SELF.hsMD5verify);
+			NEW(SELF.hsSHAverify);
+			SELF.hsMD5send.Initialize;
+			SELF.hsSHAsend.Initialize;
+			SELF.hsMD5verify.Initialize;
+			SELF.hsSHAverify.Initialize
+		ELSE
+			SELF.hsHashSend := CryptoHashes.NewHash("CryptoSHA256");
+			SELF.hsHashVerify := CryptoHashes.NewHash("CryptoSHA256");
+			SELF.hsHashSend.Initialize;
+			SELF.hsHashVerify.Initialize
+		END
+	END SetContext;
+
+	PROCEDURE (SELF: Connection) SetDefaultPolicy* , NEW;
+		VAR
+			ctx: Context;
+	BEGIN
+		NEW(ctx); ctx.Init(defaultCipherPolicy);
+		SELF.SetContext(ctx)
+	END SetDefaultPolicy;
+
+
+	PROCEDURE (SELF: Connection) Connect* , NEW;
+
+	BEGIN
+		Streams.OpenReader(SELF.in, SELF.conn. receiver);
+		Streams.OpenWriter(SELF.out, SELF.conn.sender);
+		SELF.SetState((*WARN CONV CAST*)SHORT(ClientHandshake));
+		SELF.handshakeState := GenerateClientHello
+	END Connect;
+
+
+		PROCEDURE (s: Connection) IsConnected* (): BOOLEAN;
+		BEGIN
+			RETURN s.conn.IsConnected();
+		END IsConnected;
+
+
+	PROCEDURE (SELF: Connection) SetConnection* (c : TCP.Connection), NEW;
+
+	BEGIN
+		ASSERT(SELF.conn = NIL);
+		ASSERT(SELF.State() = TCP.Unused);
+		SELF.conn := c;
+		Streams.OpenReader(SELF.in, SELF.conn.receiver);
+		Streams.OpenWriter(SELF.out, SELF.conn.sender);
+		SELF.SetState((*WARN CONV CAST*)SHORT(ServerHandshake));
+		SELF.handshakeState := AwaitClientHello
+	END SetConnection;
+
+	PROCEDURE (SELF: Connection) Accept* (VAR client : TCP.Connection; VAR res : INTEGER);
+		VAR
+			newTLSConn: Connection;
+			newTCPConn: TCP.Connection;
+
+
+	BEGIN
+		ASSERT(SELF.State() = TCP.Listen);
+		ASSERT(SELF.conn # NIL);
+		SELF.conn.Accept(newTCPConn, res);
+		IF res # TCP.Ok THEN
+			RETURN
+		END;
+		NEW(newTLSConn);
+		newTLSConn.SetContext(SELF.context);
+		newTLSConn.SetConnection(newTCPConn);
+		client := newTLSConn;
+		res := Ok
+	END Accept;
+
+
+	PROCEDURE (SELF: Connection) PrintDirection (send : BOOLEAN), NEW;
+
+	BEGIN
+		IF SELF.client & send THEN
+			StdLog.String("CLIENT: C > S ")
+		ELSIF SELF.client & ~send THEN
+			StdLog.String("CLIENT: S > C ")
+		ELSIF ~SELF.client & send THEN
+			StdLog.String("SERVER: S > C ")
+		ELSE
+			StdLog.String("SERVER: C > S ")
+		END
+	END PrintDirection;
+
+	PROCEDURE (SELF: Connection) SendRecord (VAR data : ARRAY OF SHORTCHAR; contentType, ofs, len : AO.SIZE), NEW;
+		VAR
+			macInput: ARRAY 13 OF SHORTCHAR;
+						additionalData: ARRAY 13 OF SHORTCHAR;
+						tag: ARRAY 16 OF SHORTCHAR;
+			iv: ARRAY 16 OF SHORTCHAR;
+			i, length, padLen, blocksize: AO.SIZE;
+			sendIV: BOOLEAN;
+
+
+	BEGIN
+				blocksize := 0;
+		ASSERT(len <= MaxPlaintextLength);
+		SELF.currentWriteState.recordSeq.Inc();
+		length := len;
+
+				(*IF Trace & (SELF.currentWriteState.aeadCipher# NIL) THEN
+					StdLog.String("AEAD MODE "); StdLog.Ln;
+					StdLog.String("Payload len:");StdLog.Int(len);StdLog.Ln;
+					StdLog.String("Payload:");AO.LogBuffer(data, ofs, len);StdLog.Ln;U.PrintHex(data, ofs, len); StdLog.Ln;
+				END;*)
+		IF (SELF.currentWriteState.mac # NIL) & (SELF.currentWriteState.aeadCipher = NIL) THEN
+			SELF.currentWriteState.recordSeq.GetBytes(macInput, 0);
+			macInput[8] := (*WARN CONV CAST*)SHORT(CHR(contentType));
+			macInput[9] := SELF.version[0];
+			macInput[10] := SELF.version[1];
+			macInput[11] := (*WARN CONV CAST*)SHORT(CHR(len DIV 256));
+			macInput[12] := (*WARN CONV CAST*)SHORT(CHR(len));
+			SELF.currentWriteState.mac.Initialize(SELF.currentWriteState.macSecret, SELF.currentWriteState.mac.size);
+			SELF.currentWriteState.mac.Update(macInput, 0, 13);
+			SELF.currentWriteState.mac.Update(data, ofs, len);
+			SELF.currentWriteState.mac.GetMac(data, ofs + len);
+			INC(length, SELF.currentWriteState.mac.size)
+		END;
+		IF (SELF.currentWriteState.cipher # NIL) & (SELF.currentWriteState.aeadCipher = NIL) THEN
+			blocksize := SELF.currentWriteState.cipher.blockSize;
+			IF blocksize > 1 THEN
+				sendIV := ORD(SELF.version[1]) >= 2;
+				IF sendIV THEN
+					Rng.Generate(iv, 0, blocksize);
+					SELF.currentWriteState.cipher.Encrypt(iv, 0, blocksize)
+				END;
+				padLen := (blocksize - ((length + 1) MOD blocksize)) MOD blocksize;
+				IF padLen > 0 THEN
+					ASSERT(padLen < 255);
+					FOR i := 0 TO padLen - 1 DO
+						data[ofs + length + i] := SHORT(CHR(padLen MOD 100H))
+					END
+				END;
+				data[ofs + length + padLen] := SHORT(CHR(padLen MOD 100H));
+				length := length + padLen + 1
+			END;
+			ASSERT(length MOD blocksize = 0);
+			SELF.currentWriteState.cipher.Encrypt(data, ofs, length)
+		END;
+				IF SELF.currentWriteState.aeadCipher # NIL THEN
+					(*additional_data = seq_num + TLSCompressed.type +
+			TLSCompressed.version + TLSCompressed.length;*)
+					SELF.currentWriteState.recordSeq.GetBytes(additionalData, 0);
+					additionalData[8] := SHORT(CHR(contentType));
+		    additionalData[9] := SELF.version[0];
+		    additionalData[10] := SELF.version[1];
+		    additionalData[11] := SHORT(CHR(len DIV 256));
+		    additionalData[12] := SHORT(CHR(len));
+					(*StdLog.String("additionalData:");StdLog.Ln;U.PrintHex(additionalData, 0, LEN(additionalData)); StdLog.Ln; *)
+					(*nonce implicit *)
+					iv[0] := SELF.currentWriteState.iv[0];
+					iv[1] := SELF.currentWriteState.iv[1];
+					iv[2] := SELF.currentWriteState.iv[2];
+					iv[3] := SELF.currentWriteState.iv[3];
+					(* nonce explicit *)
+					SELF.currentWriteState.recordSeq.GetBytes(iv, 4);
+					Rng.Generate(iv, 4, 8);
+					sendIV := TRUE;
+
+					SELF.currentWriteState.aeadCipher.Init(SELF.currentWriteState.cipher, iv, 12);
+					(*writing encrypted data, the same length as plaintext*)
+					SELF.currentWriteState.aeadCipher.Encrypt(data, additionalData, ofs, length, LEN(additionalData), LEN(tag) * 8, data, tag, ofs);
+				END;
+
+		IF sendIV THEN
+						IF SELF.currentWriteState.aeadCipher # NIL THEN
+							INC(length, 8);(*explicit nonce(IV) size*)
+							INC(length, LEN(tag));(*tag size*)
+						ELSE
+				INC(length, blocksize)
+						END;
+		END;
+		SELF.out.Char(SHORT(CHR(contentType)));
+		SELF.out.Char(SELF.version[0]);
+		SELF.out.Char(SELF.version[1]);
+		SELF.out.Char(SHORT(CHR(length DIV 256)));
+		SELF.out.Char(SHORT(CHR(length)));
+		IF sendIV THEN
+			
+						IF SELF.currentWriteState.aeadCipher # NIL THEN
+							SELF.out.Bytes(iv, 4, 8);
+		       	 DEC(length, 8);
+							DEC(length, LEN(tag));(*tag size*)
+						ELSE
+				SELF.out.Bytes(iv, 0, blocksize);
+				DEC(length, blocksize)
+						END;
+		END;
+		SELF.out.Bytes(data, ofs, length);
+				IF SELF.currentWriteState.aeadCipher # NIL THEN
+					SELF.out.Bytes(tag, 0, LEN(tag));
+				END;
+		SELF.out.Update;
+	END SendRecord;
+
+	PROCEDURE (SELF: Connection) SendWarning (alertType : AO.SIGNED32), NEW;
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("Warning");
+			StdLog.Ln;
+			StdLog.String("  alertType: ");
+			StdLog.Int(alertType);
+			StdLog.Ln
+		END;
+		SELF.outbuf[0] := (*WARN CONV CAST*)SHORT(CHR(1));
+		SELF.outbuf[1] := (*WARN CONV CAST*)SHORT(CHR(alertType));
+		SELF.SendRecord(SELF.outbuf, Alert, 0, 2)
+	END SendWarning;
+
+	PROCEDURE (SELF: Connection) Close* ;
+
+	BEGIN
+		IF Trace THEN
+			StdLog.String("Close");
+			StdLog.Ln
+		END;
+		ASSERT(SELF.conn # NIL);
+				IF (SELF.conn.State() = TCP.Established) THEN
+			IF (SELF.State() = TCP.Established) OR (SELF.State() = ServerHandshake) THEN
+		 	       SELF.SendWarning(CloseNotify)
+			END;
+				END;
+		SELF.conn.Close();
+				
+		SELF.applicationDataPipe.Close();
+		SELF.handshakeState := NotAValidHandshakeState;
+				SELF.context.Dispose();
+				IF SELF.session # NIL THEN
+					Services.RemoveAction(SELF.session.sessionInvalidator);
+				END;
+		SELF.SetState(TCP.Closed)
+	END Close;
+
+	PROCEDURE (SELF: Connection) Send* (IN data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE; propagate : BOOLEAN; VAR res : INTEGER), NEW;
+		VAR
+			i, size: AO.SIZE;
+	BEGIN
+				(*StdLog.String("TLS Client Send App Data: ");AO.LogBuffer(data, ofs, len);StdLog.Ln;*)
+				ASSERT (  (SELF.state =  TCP.Established) OR   (SELF.state =  TCP.Closed )); 
+		IF SELF.state = TCP.Established THEN
+			WHILE len > 0 DO
+				IF Trace THEN
+					SELF.PrintDirection(TRUE);
+					StdLog.String("Application Data");
+					StdLog.Ln
+				END;
+				size := len;
+				IF size > MaxPlaintextLength THEN
+					size := MaxPlaintextLength
+				END;
+				FOR i := 0 TO size - 1 DO
+					SELF.outbuf[i] := data[ofs + i]
+				END;
+								
+				SELF.SendRecord(SELF.outbuf, ApplicationData, 0, size);
+				INC(ofs, size);
+				DEC(len, size)
+			END
+		ELSE
+			res := Streams.EOF
+		END
+	END Send;
+
+	PROCEDURE (SELF: ConnectionSender) Send* (IN data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE; propagate : BOOLEAN; VAR res : INTEGER);
+
+	BEGIN
+				SELF.conn.Send(data, ofs, len,propagate, res);;
+	END Send;
+
+	PROCEDURE (SELF: Connection) Receive* (VAR data : ARRAY OF SHORTCHAR; ofs, size, min : AO.SIZE; VAR len : AO.SIZE; VAR res : INTEGER), NEW;
+
+	BEGIN
+		SELF.applicationDataPipe.Receive(data, ofs, size, min, len, res)
+	END Receive;
+
+
+	PROCEDURE (SELF: ConnectionReceiver) Receive* (VAR data : ARRAY OF SHORTCHAR; ofs, size, min : AO.SIZE; VAR len : AO.SIZE; VAR res : INTEGER);
+
+	BEGIN
+		SELF.conn.Receive(data, ofs, size, min, len, res)
+	END Receive;
+
+	PROCEDURE (SELF: Connection) GenerateMasterSecret , NEW;
+		VAR
+			prf: PRF;
+			seed: ARRAY 64 OF SHORTCHAR;
+			i: AO.SIZE;
+
+
+	BEGIN
+		FOR i := 0 TO 31 DO
+			seed[i] := SELF.pendingSecurityParameters.clientRandom[i];
+			seed[i + 32] := SELF.pendingSecurityParameters.serverRandom[i]
+		END;
+				ASSERT(SELF.session.preMasterSecretLen # 0);
+		NEW(prf); prf.Init(SELF.pendingSecurityParameters.PRFAlgorithm);
+		prf.GetBytes(SELF.session.preMasterSecret, seed, SELF.session.masterSecret, "master secret", SELF.session.preMasterSecretLen, 64, 48);
+		FOR i := 0 TO 47 DO
+			SELF.session.preMasterSecret[i] := SHORT(CHR(0))
+		END
+	END GenerateMasterSecret;
+
+	PROCEDURE (SELF: Connection) GenerateKeys , NEW;
+		VAR
+			prf: PRF;
+			keyBlock: ARRAY 136 OF SHORTCHAR;
+			seed: ARRAY 64 OF SHORTCHAR;
+			i, keyBlockLen, ofs, macSecretSize, cipherKeySize, cipherBlockSize: AO.SIZE;
+
+
+	BEGIN
+				
+		macSecretSize := SELF.pendingWriteState.mac.size;
+				IF SELF.pendingWriteState.aeadCipher # NIL THEN
+					macSecretSize := 0;
+				END;
+		cipherKeySize := SELF.pendingSecurityParameters.cipherKeySize;
+		IF SELF.pendingWriteState.cipher # NIL THEN
+						IF SELF.pendingWriteState.aeadCipher = NIL THEN
+				cipherBlockSize := SELF.pendingWriteState.cipher.blockSize
+						ELSE
+							cipherBlockSize := 4;(* fixed iv size *)
+						END
+		ELSE
+			cipherBlockSize := 0
+		END;
+		keyBlockLen := 2 * macSecretSize + 2 * cipherKeySize;
+		IF cipherBlockSize > 1 THEN
+			INC(keyBlockLen, 2 * cipherBlockSize)
+		END;
+				(*StdLog.String("keyBlockLen=");StdLog.Int(keyBlockLen);StdLog.Ln;*)
+		ASSERT(keyBlockLen <= 136);
+		FOR i := 0 TO 31 DO
+			seed[i] := SELF.pendingSecurityParameters.serverRandom[i];
+			seed[i + 32] := SELF.pendingSecurityParameters.clientRandom[i]
+		END;
+		NEW(prf); prf.Init(SELF.pendingSecurityParameters.PRFAlgorithm);
+		prf.GetBytes(SELF.session.masterSecret, seed, keyBlock, "key expansion", 48, 64, keyBlockLen);
+				(*StdLog.String("Key block key expansion:");StdLog.Ln;U.PrintHex(keyBlock, 0, keyBlockLen); StdLog.Ln;*)
+		FOR i := 0 TO macSecretSize - 1 DO
+			IF SELF.client THEN
+				SELF.pendingWriteState.macSecret[i] := keyBlock[i];
+				SELF.pendingReadState.macSecret[i] := keyBlock[macSecretSize + i]
+			ELSE
+				SELF.pendingReadState.macSecret[i] := keyBlock[i];
+				SELF.pendingWriteState.macSecret[i] := keyBlock[macSecretSize + i]
+			END
+		END;
+		ofs := 2 * macSecretSize;
+		FOR i := 0 TO cipherKeySize - 1 DO
+			IF SELF.client THEN
+				SELF.pendingWriteState.cipherKey[i] := keyBlock[ofs + i];
+				SELF.pendingReadState.cipherKey[i] := keyBlock[ofs + cipherKeySize + i]
+			ELSE
+				SELF.pendingReadState.cipherKey[i] := keyBlock[ofs + i];
+				SELF.pendingWriteState.cipherKey[i] := keyBlock[ofs + cipherKeySize + i]
+			END
+		END;
+		IF cipherBlockSize > 1 THEN
+						(*StdLog.String("Generation iv from key:"); StdLog.Int(cipherBlockSize); StdLog.Ln;*)
+			ofs := 2 * macSecretSize + 2 * cipherKeySize;
+			FOR i := 0 TO cipherBlockSize - 1 DO
+				IF SELF.client THEN
+					SELF.pendingWriteState.iv[i] := keyBlock[ofs + i];
+					SELF.pendingReadState.iv[i] := keyBlock[ofs + cipherBlockSize + i]
+				ELSE
+					SELF.pendingReadState.iv[i] := keyBlock[ofs + i];
+					SELF.pendingWriteState.iv[i] := keyBlock[ofs + cipherBlockSize + i]
+				END
+			END;
+						(*StdLog.String("Created iv for writing:");StdLog.Ln;U.PrintHex(SELF.pendingWriteState.iv, 0, cipherBlockSize); StdLog.Ln;*)
+						(*StdLog.String("Created iv for reading:");StdLog.Ln;U.PrintHex(SELF.pendingReadState.iv, 0, cipherBlockSize); StdLog.Ln;*)
+
+		END
+	END GenerateKeys;
+
+	PROCEDURE (SELF: Connection) InitializeConnectionState (state : ConnectionState; sp : SecurityParameters), NEW;
+
+	BEGIN
+		IF state.cipher # NIL THEN
+						(*StdLog.String('Cipher key: ');U.PrintHex(state.cipherKey, 0, sp.cipherKeySize); StdLog.Ln;*)
+			state.cipher.InitKey(state.cipherKey, 8 * sp.cipherKeySize);
+			IF (state.cipher.blockSize > 0) & (state.aeadCipher = NIL) THEN
+				state.cipher.SetIV(state.iv, Ciphers.CBC)
+			END
+		END;
+				
+	END InitializeConnectionState;
+
+	PROCEDURE (SELF: Connection) PrepareConnectionState (state : ConnectionState; cipherSuite : AO.SIGNED32; VAR res : INTEGER), NEW;
+
+	BEGIN
+		ASSERT(cipherSuite # 0);
+		res := Ok;
+		CASE cipherSuite OF
+			TlsRsaWithNullMd5 :	     
+							NEW(state.mac); state.mac.Init( "CryptoMD5");
+					state.cipher := NIL
+		|       TlsRsaWithNullSha :	     
+							NEW(state.mac); state.mac.Init( "CryptoSHA1");
+					state.cipher := NIL
+		|       TlsRsaWithRc4128Md5 :	  
+							NEW(state.mac); state.mac.Init( "CryptoMD5");
+					state.cipher := Ciphers.NewCipher("CryptoARC4")
+		|       TlsRsaWithRc4128Sha :	   
+							NEW(state.mac); state.mac.Init( "CryptoSHA1");
+					state.cipher := Ciphers.NewCipher("CryptoARC4")
+		|       TlsRsaWithIdeaCbcSha :	  
+							NEW(state.mac); state.mac.Init("CryptoSHA1");
+					state.cipher := Ciphers.NewCipher("CryptoIDEA")
+		|       TlsRsaWithDesCbcSha :	   
+							NEW(state.mac); state.mac.Init( "CryptoSHA1");
+					state.cipher := Ciphers.NewCipher("CryptoDES")
+		|       TlsRsaWith3DesEdeCbcSha :	       
+							NEW(state.mac); state.mac.Init(  "CryptoSHA1");
+					state.cipher := Ciphers.NewCipher("CryptoDES3")
+		|       TlsRsaWithAes128CbcSha,TlsRsaWithAes256CbcSha :		 
+							NEW(state.mac); state.mac.Init( "CryptoSHA1");
+					state.cipher := Ciphers.NewCipher("CryptoAES")
+		 		|       TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 :		 
+							NEW(state.mac); state.mac.Init( "CryptoSHA256");
+					state.cipher := Ciphers.NewCipher("CryptoAES")
+		 		|       TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 :		 
+							NEW(state.mac); state.mac.Init( "CryptoSHA256");
+							state.cipher := Ciphers.NewCipher("CryptoAES");
+					NEW(state.aeadCipher);
+							
+		ELSE
+			res := (-1)
+		END
+	END PrepareConnectionState;
+
+	PROCEDURE (SELF: Connection) PrepareSecurityParameters (sp : SecurityParameters; cipherSuite : AO.SIGNED32; VAR res : INTEGER), NEW;
+
+	BEGIN
+		ASSERT(cipherSuite # 0);
+		res := Ok;
+		sp.cipherSuite := cipherSuite;
+		CASE cipherSuite OF
+			TlsRsaWithNullMd5 :	     sp.cipherKeySize := 0
+		|       TlsRsaWithNullSha :	     sp.cipherKeySize := 0
+		|       TlsRsaWithRc4128Md5 :	   sp.cipherKeySize := 16
+		|       TlsRsaWithRc4128Sha :	   sp.cipherKeySize := 16
+		|       TlsRsaWithIdeaCbcSha :	 	sp.cipherKeySize := 16
+		|       TlsRsaWithDesCbcSha :	  sp.cipherKeySize := 8
+		|       TlsRsaWith3DesEdeCbcSha :    sp.cipherKeySize := 24
+		|       TlsRsaWithAes128CbcSha :      sp.cipherKeySize := 16
+		|       TlsRsaWithAes256CbcSha :      sp.cipherKeySize := 32
+				|       TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 :  sp.cipherKeySize := 16
+				|       TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 : sp.cipherKeySize := 16
+		ELSE
+			res := (-1)
+		END;
+
+		IF SELF.version[1] < 3X THEN
+			sp.PRFAlgorithm := "SHA1 XOR MD5"
+		ELSE
+			sp.PRFAlgorithm := "CryptoSHA256"
+		END
+	END PrepareSecurityParameters;
+
+
+	PROCEDURE (SELF: Connection) SendError (alertType : AO.SIGNED32), NEW;
+
+	BEGIN
+
+				ASSERT(alertType # HandshakeFailure);
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("Error");
+			StdLog.Ln;
+			StdLog.String("  alertType: ");
+			StdLog.Int(alertType);
+			StdLog.Ln
+		END;
+		SELF.outbuf[0] := (*WARN CONV CAST*)SHORT(CHR(2));
+		SELF.outbuf[1] := (*WARN CONV CAST*)SHORT(CHR(alertType));
+		SELF.SendRecord(SELF.outbuf, Alert, 0, 2);
+		IF SELF.session # NIL THEN
+			SELF.session.Invalidate()
+		END;
+		SELF.Close();
+
+	END SendError;
+
+	PROCEDURE (SELF: Connection) ReceiveChangeCipherSpec (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("ChangeCipherSpec");
+			StdLog.Ln
+		END;
+		IF ORD(data[ofs]) # 1 THEN
+			SELF.SendError(IllegalParameter)
+		ELSE
+			SELF.ChangeReadState()
+		END
+	END ReceiveChangeCipherSpec;
+
+
+	PROCEDURE (SELF: Connection) SendHandshake (VAR data : ARRAY OF SHORTCHAR; hsType : AO.SIGNED32; ofs, len : AO.SIZE), NEW;
+		VAR
+			l: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(len < 256 * 256 * 256);
+		l := len;
+		data[ofs] := (*WARN CONV CAST*)SHORT(CHR(hsType));
+		data[ofs + 3] := (*WARN CONV CAST*)SHORT(CHR(l MOD 256));
+		l := l DIV 256;
+		data[ofs + 2] := (*WARN CONV CAST*)SHORT(CHR(l MOD 256));
+		l := l DIV 256;
+		data[ofs + 1] := (*WARN CONV CAST*)SHORT(CHR(l MOD 256));
+		IF hsType # HelloRequest THEN
+			IF SELF.version[1] < 03X THEN
+				IF (hsType # Finished) OR (hsType # ClientHello) THEN
+					SELF.hsMD5send.Update(data, ofs, len + 4);
+					SELF.hsSHAsend.Update(data, ofs, len + 4)
+				END;
+				SELF.hsMD5verify.Update(data, ofs, len + 4);
+				SELF.hsSHAverify.Update(data, ofs, len + 4)
+			ELSE
+				IF (hsType # Finished) OR (hsType # ClientHello) THEN
+					SELF.hsHashSend.Update(data, ofs, len + 4)
+				END;
+				SELF.hsHashVerify.Update(data, ofs, len + 4)
+			END
+		END;
+		SELF.SendRecord(data, Handshake, ofs, len + 4)
+	END SendHandshake;
+
+	PROCEDURE (SELF: Connection) SendCertificate (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+		VAR
+			i: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(ofs > 3);
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("Certificate");
+			StdLog.Ln
+		END;
+		FOR i := 0 TO SELF.context.lengthOfRsaCertificate - 1 DO
+			data[ofs + i] := SELF.context.rsaCertificate[i]
+		END;
+		SELF.SendHandshake(data, Certificate, ofs - 4, SELF.context.lengthOfRsaCertificate)
+	END SendCertificate;
+
+
+	PROCEDURE (SELF: Connection) ReceiveClientHello (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE): AO.SIGNED32, NEW;
+		VAR
+			nofSuites, i, idLen, cipherSuite, major, minor: AO.SIGNED32;
+			idPos, pos: AO.SIZE;
+			res: INTEGER;
+
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("ClientHello");
+			StdLog.Ln
+		END;
+		pos := ofs;
+		major := ORD(data[pos]);
+		minor := ORD(data[pos + 1]);
+		IF Trace THEN
+			StdLog.String("  version: ");
+			StdLog.Int(major);
+			StdLog.String(".");
+			StdLog.Int(minor);
+			StdLog.Ln
+		END;
+		IF (major < 3) OR (minor < 1) THEN
+			SELF.SendError(ProtocolVersion);
+			RETURN (-1)
+		END;
+		INC(pos, 2);
+		FOR i := 0 TO 31 DO
+			SELF.pendingSecurityParameters.clientRandom[i] := data[pos + i]
+		END;
+		INC(pos, 32);
+		IF Trace THEN
+			StdLog.String("SERVER client random:");
+			StdLog.Ln;
+			AO.LogBuffer(SELF.pendingSecurityParameters.clientRandom, 0, 32);
+			StdLog.Ln
+		END;
+		idLen := ORD(data[pos]);
+		idPos := pos + 1;
+		INC(pos, idLen + 1);
+		nofSuites := (256 * ORD(data[pos]) + ORD(data[pos + 1])) DIV 2;
+		INC(pos, 2);
+		IF idLen = SessionIdLength THEN
+			SELF.session := SELF.context.FindSessionByID(data, idPos, idLen);
+			IF SELF.session # NIL THEN
+				FOR i := 0 TO nofSuites - 1 DO
+					cipherSuite := 256 * ORD(data[pos + 2 * i]) + ORD(data[pos + 2 * i + 1]);
+					IF cipherSuite = SELF.session.cipherSuite THEN
+						SELF.pendingSecurityParameters.cipherSuite := SELF.session.cipherSuite;
+						IF Trace THEN
+							StdLog.String("ciphersuite: ");
+							StdLog.Int(SELF.pendingSecurityParameters.cipherSuite);
+							StdLog.Ln
+						END;
+						RETURN GenerateHelloWithResumption
+					END
+				END
+			END
+		END;
+		SELF.session := SELF.context.GetNewServerSession();
+		i := 0;
+		LOOP
+			cipherSuite := 256 * ORD(data[pos + 2 * i]) + ORD(data[pos + 2 * i + 1]);
+			IF Trace THEN
+				StdLog.String("Server: client accepts cipher suite: ");
+				StdLog.Int(cipherSuite);
+				StdLog.Ln
+			END;
+			IF SELF.context.policy.IsSupported(cipherSuite) THEN
+				EXIT
+			END;
+			INC(i);
+			IF i = nofSuites THEN
+				EXIT
+			END
+		END;
+		IF cipherSuite = 0 THEN
+			IF Trace THEN
+				StdLog.String("Server: No common cipher suite found");
+				StdLog.Ln
+			END;
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+
+		IF Trace THEN
+			StdLog.String("cipherSuite:");AO.LogHex(cipherSuite, -4);StdLog.Ln;
+		END; 
+		SELF.session.cipherSuite := cipherSuite;
+		SELF.PrepareSecurityParameters(SELF.pendingSecurityParameters, cipherSuite, res);
+		IF res < 0 THEN
+			IF Trace THEN
+				StdLog.String("Server: Error preparing cipher suite");
+				StdLog.Ln
+			END;
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		SELF.PrepareConnectionState(SELF.pendingWriteState, cipherSuite, res);
+		IF res < 0 THEN
+			IF Trace THEN
+				StdLog.String("Server: Error preparing pending write state");
+				StdLog.Ln
+			END;
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		SELF.PrepareConnectionState(SELF.pendingReadState, cipherSuite, res);
+		IF res < 0 THEN
+			IF Trace THEN
+				StdLog.String("Server: Error preparing pending read state");
+				StdLog.Ln
+			END;
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		RETURN GenerateServerHello
+	END ReceiveClientHello;
+
+	PROCEDURE (SELF: Connection) ReceiveV2ClientHello (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE): AO.SIGNED32, NEW;
+		VAR
+			nofSuites, idLen, challengeLen, i, cipherSuite: AO.SIGNED32;
+			res: INTEGER;
+
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("SSLv2.0 ClientHello");
+			StdLog.Ln
+		END;
+		nofSuites := (256 * ORD(data[ofs + 3]) + ORD(data[ofs + 4])) DIV 3;
+		idLen := 256 * ORD(data[ofs + 5]) + ORD(data[ofs + 6]);
+		challengeLen := 256 * ORD(data[ofs + 7]) + ORD(data[ofs + 8]);
+		SELF.session := SELF.context.GetNewServerSession();
+		INC(ofs, 9);
+		i := 0;
+		LOOP
+			cipherSuite := 256 * 256 * ORD(data[ofs + 3 * i]) + 256 * ORD(data[ofs + 3 * i + 1]) + ORD(data[ofs + 3 * i + 2]);
+			IF SELF.context.policy.IsSupported(cipherSuite) THEN
+				EXIT
+			END;
+			INC(i);
+			IF (i = nofSuites) OR (ofs + 3 * i + 2 >= LEN(data)) THEN
+				EXIT
+			END
+		END;
+		IF cipherSuite = 0 THEN
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		SELF.session.cipherSuite := cipherSuite;
+		SELF.PrepareSecurityParameters(SELF.pendingSecurityParameters, cipherSuite, res);
+		IF res < 0 THEN
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		SELF.PrepareConnectionState(SELF.pendingWriteState, cipherSuite, res);
+		IF res < 0 THEN
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		SELF.PrepareConnectionState(SELF.pendingReadState, cipherSuite, res);
+		IF res < 0 THEN
+			SELF.SendError(HandshakeFailure);
+			RETURN (-1)
+		END;
+		INC(ofs, nofSuites * 3);
+		IF idLen = SessionIdLength THEN
+			SELF.session := SELF.context.FindSessionByID(data, ofs, idLen);
+			IF SELF.session # NIL THEN
+				RETURN GenerateHelloWithResumption
+			END
+		END;
+		INC(ofs, idLen);
+		FOR i := 0 TO 31 - challengeLen DO
+			SELF.pendingSecurityParameters.clientRandom[i] := SHORT(CHR(0))
+		END;
+		FOR i := 0 TO challengeLen - 1 DO
+			SELF.pendingSecurityParameters.clientRandom[32 - challengeLen + i] := data[ofs + i]
+		END;
+		RETURN GenerateServerHello
+	END ReceiveV2ClientHello;
+
+
+
+	PROCEDURE (SELF: Connection) Create32RandomBytes (VAR data : ARRAY OF SHORTCHAR), NEW;
+		VAR
+			i, timestamp, d, h, m: AO.SIGNED32;
+			unixEpoch, now: Dates.DateTime;
+
+
+	BEGIN
+		ASSERT(LEN(data) > 31);
+		Rng.Generate(data, 0, 32);
+				
+		unixEpoch.year := 1970;
+		unixEpoch.month := 1;
+		unixEpoch.day := 1;
+				unixEpoch.hour := 0;
+				unixEpoch.minute := 0;
+				unixEpoch.second := 0;
+		ASSERT(Dates.ValidDateTime(unixEpoch));
+				now := Dates.Now();
+		Dates.TimeDifference(now, unixEpoch, d, h, m, timestamp);
+
+		INC(timestamp, m * 60);
+		INC(timestamp, h * 3600);
+		INC(timestamp, d * 86400);
+
+		FOR i := 3 TO 0 BY (-1) DO
+			data[i] := (*WARN CONV CAST*)SHORT(CHR(timestamp));
+			timestamp := timestamp DIV 256
+		END
+	END Create32RandomBytes;
+
+	PROCEDURE (SELF: Connection) SendServerHello (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+		VAR
+			i, pos: AO.SIZE;
+
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("ServerHello");
+			StdLog.Ln
+		END;
+		ASSERT(ofs > 3);
+		pos := ofs;
+		data[pos] := SELF.version[0];
+		data[pos + 1] := SELF.version[1];
+		INC(pos, 2);
+		SELF.Create32RandomBytes(SELF.pendingSecurityParameters.serverRandom);
+		FOR i := 0 TO 31 DO
+			data[pos + i] := SELF.pendingSecurityParameters.serverRandom[i]
+		END;
+		INC(pos, 32);
+		data[pos] := (*WARN CONV CAST*)SHORT(CHR(SELF.session.idLength));
+		INC(pos);
+		FOR i := 0 TO SELF.session.idLength - 1 DO
+			data[pos + i] := SELF.session.id[i]
+		END;
+		INC(pos, SELF.session.idLength);
+		data[pos] := (*WARN CONV CAST*)SHORT(CHR(SELF.pendingSecurityParameters.cipherSuite DIV 250));
+		data[pos + 1] := (*WARN CONV CAST*)SHORT(CHR(SELF.pendingSecurityParameters.cipherSuite MOD 250));
+		INC(pos, 2);
+		data[pos] := (*WARN CONV CAST*)SHORT(CHR(0));
+		INC(pos);
+		SELF.SendHandshake(data, ServerHello, ofs - 4, pos - ofs)
+	END SendServerHello;
+
+	PROCEDURE (SELF: Connection) SendServerHelloDone (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+
+	BEGIN
+		ASSERT(ofs > 3);
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("ServerHelloDone");
+			StdLog.Ln
+		END;
+		SELF.SendHandshake(data, ServerHelloDone, ofs - 4, 0)
+	END SendServerHelloDone;
+
+	PROCEDURE (SELF: Connection) ReceiveClientKeyExchange (IN data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE), NEW;
+		VAR
+			encryptedPremasterSecret, premasterSecret: AosBigNumbers.BigNumber;
+			tmp: ARRAY 512 OF SHORTCHAR;
+			rnd: ARRAY 48 OF SHORTCHAR;
+			i: AO.SIZE;
+			error: BOOLEAN;
+
+
+	BEGIN
+		INC(ofs, 2);
+		DEC(len, 2);
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("ClientKeyExchange");
+			StdLog.Ln
+		END;
+		Rng.Generate(rnd, 0, 48);
+		AosBigNumbers.AssignBin(encryptedPremasterSecret, data, ofs, len);
+		premasterSecret := SELF.context.rsaPrivateKey.Decrypt(encryptedPremasterSecret);
+		IF premasterSecret = NIL THEN
+			IF Trace THEN
+				StdLog.String("Decryption of PreMasterSecret was NOT successful!");
+				StdLog.Ln
+			END;
+			error := TRUE
+		ELSE
+			AosBigNumbers.GetBinaryValue(premasterSecret, tmp, 0)
+		END;
+		error := (tmp[0] # CHR(0)) OR (tmp[1] # CHR(2)) OR error;
+		IF ~error THEN
+			i := 10;
+			WHILE tmp[i] # CHR(0) DO
+				INC(i)
+			END;
+			INC(i);
+			SELF.session.SetPreMasterSecret(tmp, i)
+		ELSE
+			SELF.session.SetPreMasterSecret(rnd, 0)
+		END;
+		SELF.GenerateMasterSecret();
+		SELF.GenerateKeys();
+		SELF.InitializeConnectionState(SELF.pendingWriteState, SELF.pendingSecurityParameters);
+		SELF.InitializeConnectionState(SELF.pendingReadState, SELF.pendingSecurityParameters)
+	END ReceiveClientKeyExchange;
+
+	PROCEDURE (SELF: Connection) ReceiveFinished (IN data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE), NEW;
+		VAR
+			seed: ARRAY 36 OF SHORTCHAR;
+			verifyData: ARRAY 12 OF SHORTCHAR;
+			prf: PRF;
+			i, seedSize: AO.SIZE;
+
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("Finished");
+			StdLog.Ln
+		END;
+		ASSERT(len = 12);
+		IF SELF.version[1] < 03X THEN
+			SELF.hsMD5verify.GetHash(seed, 0);
+			SELF.hsSHAverify.GetHash(seed, 16);
+			seedSize := 36
+		ELSE
+			ASSERT(LEN(seed) >= SELF.hsHashVerify.size);
+			SELF.hsHashVerify.GetHash(seed, 0);
+			seedSize := SELF.hsHashVerify.size
+		END;
+		NEW(prf); prf.Init(SELF.pendingSecurityParameters.PRFAlgorithm);
+		IF SELF.client THEN
+			prf.GetBytes(SELF.session.masterSecret, seed, verifyData, "server finished", 48, seedSize, 12)
+		ELSE
+			prf.GetBytes(SELF.session.masterSecret, seed, verifyData, "client finished", 48, seedSize, 12)
+		END;
+		FOR i := 0 TO 11 DO
+			IF verifyData[i] # data[ofs + i] THEN
+				SELF.SendError(DecryptError);
+				RETURN
+			END
+		END
+	END ReceiveFinished;
+
+	PROCEDURE (SELF: Connection) SendChangeCipherSpec , NEW;
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("ChangeCipherSpec");
+			StdLog.Ln
+		END;
+		SELF.outbuf[0] := (*WARN CONV CAST*)SHORT(CHR(1));
+		SELF.SendRecord(SELF.outbuf, ChangeCipherSpec, 0, 1);
+		SELF.ChangeWriteState()
+	END SendChangeCipherSpec;
+
+	PROCEDURE (SELF: Connection) SendFinished (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIZE), NEW;
+		VAR
+			seed: ARRAY 36 OF SHORTCHAR;
+			verifyData: ARRAY 12 OF SHORTCHAR;
+			i, seedSize: AO.SIZE;
+			prf: PRF;
+
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("Finished");
+			StdLog.Ln
+		END;
+		ASSERT(ofs > 3);
+		IF SELF.version[1] < 03X THEN
+			SELF.hsMD5send.GetHash(seed, 0);
+			SELF.hsSHAsend.GetHash(seed, 16);
+			seedSize := 36
+		ELSE
+			ASSERT(LEN(seed) >= SELF.hsHashSend.size);
+			SELF.hsHashSend.GetHash(seed, 0);
+			seedSize := SELF.hsHashSend.size
+		END;
+		NEW(prf); prf.Init(SELF.pendingSecurityParameters.PRFAlgorithm);
+		IF SELF.client THEN
+			prf.GetBytes(SELF.session.masterSecret, seed, verifyData, "client finished", 48, seedSize, 12)
+		ELSE
+			prf.GetBytes(SELF.session.masterSecret, seed, verifyData, "server finished", 48, seedSize, 12)
+		END;
+		FOR i := 0 TO 11 DO
+			data[ofs + i] := verifyData[i]
+		END;
+		SELF.SendHandshake(data, Finished, ofs - 4, 12)
+	END SendFinished;
+
+	PROCEDURE (SELF: Connection) ReceiveServerHello (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE): AO.SIGNED32, NEW;
+		VAR
+			major, minor, i, idLen, cipherSuite: AO.SIGNED32;
+			idPos, pos: AO.SIZE;
+			res: INTEGER;
+						
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("ServerHello");
+			StdLog.Ln
+		END;
+		pos := ofs;
+		major := ORD(data[pos]);
+		minor := ORD(data[pos + 1]);
+		IF (major < 3) OR (minor < 1) THEN
+			IF Trace THEN
+				StdLog.String("Incompatible protocol version");
+				StdLog.Ln
+			END;
+			RETURN (-1)
+		END;
+		INC(pos, 2);
+		FOR i := 0 TO 31 DO
+			SELF.pendingSecurityParameters.serverRandom[i] := data[pos + i]
+		END;
+		INC(pos, 32);
+		idLen := ORD(data[pos]);
+		idPos := pos + 1;
+		INC(pos, idLen + 1);
+		IF SELF.session # NIL THEN
+			SELF.session := SELF.context.FindSessionByID(data, idPos, idLen)
+		END;
+		IF SELF.session = NIL THEN
+			NEW(SELF.session); SELF.session.Init(TRUE, data, idPos, idLen, SELF.context.policy.sessionLifetime)
+		END;
+		cipherSuite := 256 * ORD(data[pos]) + ORD(data[pos + 1]);
+				IF Trace THEN
+			StdLog.String("remote cipherSuite:");AO.LogHex(cipherSuite, -4);StdLog.Ln;
+		END; 
+
+		SELF.session.cipherSuite := cipherSuite;
+		SELF.PrepareSecurityParameters(SELF.pendingSecurityParameters, cipherSuite, res);
+		IF res < 0 THEN
+			IF Trace THEN
+				StdLog.String("Failed to Prepare TLS security parameters");
+				StdLog.Ln
+			END;
+			RETURN (-1)
+		END;
+		SELF.PrepareConnectionState(SELF.pendingWriteState, cipherSuite, res);
+		IF res < 0 THEN
+			IF Trace THEN
+				StdLog.String("Failed to Prepare TLS pending write state");
+				StdLog.Ln
+			END;
+			RETURN (-1)
+		END;
+		SELF.PrepareConnectionState(SELF.pendingReadState, cipherSuite, res);
+		IF res < 0 THEN
+			IF Trace THEN
+				StdLog.String("Failed to Prepare TLS pending read state");
+				StdLog.Ln
+			END;
+			RETURN (-1)
+		END;
+		RETURN AwaitCertificate
+	END ReceiveServerHello;
+
+	PROCEDURE (SELF: Connection) SendClientHello (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIGNED32), NEW;
+		VAR
+			pos, i, sniLen, ecLen, keyShareLen, ecPointFormatsLen, signatureAlgorithmsLen: AO.SIZE;
+						
+						
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("ClientHello");
+			StdLog.Ln
+		END;
+		ASSERT(ofs > 3);
+		pos := ofs;
+		data[pos] := SELF.version[0];
+		data[pos + 1] := SELF.version[1];
+		INC(pos, 2);
+		SELF.Create32RandomBytes(SELF.pendingSecurityParameters.clientRandom);
+		FOR i := 0 TO 31 DO
+			data[pos + i] := SELF.pendingSecurityParameters.clientRandom[i]
+		END;
+		INC(pos, 32);
+		IF SELF.session # NIL THEN
+			data[pos] := (*WARN CONV CAST*)SHORT(CHR(SELF.session.idLength));
+			INC(pos);
+			FOR i := 0 TO SELF.session.idLength - 1 DO
+				data[pos + i] := SELF.session.id[i]
+			END;
+			INC(pos, SELF.session.idLength)
+		ELSE
+			data[pos] := 0X;
+			INC(pos)
+		END;
+		data[pos] := (*WARN CONV CAST*)SHORT(CHR((2 * SELF.context.policy.nofCipherSuites) DIV 256));
+		data[pos + 1] := (*WARN CONV CAST*)SHORT(CHR((2 * SELF.context.policy.nofCipherSuites) MOD 256));
+		INC(pos, 2);
+		FOR i := 0 TO SELF.context.policy.nofCipherSuites - 1 DO
+			data[pos] := (*WARN CONV CAST*)SHORT(CHR(SELF.context.policy.cipherSuites[i] DIV 256));
+			data[pos + 1] := (*WARN CONV CAST*)SHORT(CHR(SELF.context.policy.cipherSuites[i] MOD 256));
+			INC(pos, 2)
+		END;
+		data[pos] := 1X;
+		INC(pos);
+		data[pos] := 0X;
+		INC(pos);
+				
+				ecLen := 8;
+				keyShareLen := 42;
+				sniLen := LEN(SELF.serverName$) + 9;
+				ecPointFormatsLen := 6;
+				signatureAlgorithmsLen := 8;
+				(*extensions length*)
+				data[pos] := SHORT(CHR((sniLen+ ecLen + keyShareLen + ecPointFormatsLen + signatureAlgorithmsLen) DIV 256));
+		data[pos + 1] := SHORT(CHR((sniLen+ ecLen + keyShareLen + ecPointFormatsLen + signatureAlgorithmsLen) MOD 256));
+		INC(pos,2);
+
+				(*writing extension SNI. Need for correct certificate on virtual hosts*)
+				(*SNI type*)
+				data[pos] := 0X;
+				data[pos+1] := 0X;	(*00  = Type: server_name*)
+		INC(pos,2);
+				
+				(*SNI length*)
+				sniLen := sniLen - 4;
+				data[pos] := SHORT(CHR(sniLen DIV 256));
+		data[pos + 1] := SHORT(CHR(sniLen MOD 256));
+		INC(pos, 2);
+
+				(*server name list length*)
+				sniLen := sniLen - 2;
+				data[pos] := SHORT(CHR(sniLen DIV 256));
+		data[pos + 1] := SHORT(CHR(sniLen MOD 256));
+		INC(pos, 2);
+
+				(*server name type*)
+				data[pos] := 0X;
+		INC(pos, 1);
+				
+				(*server name length*)
+				sniLen := sniLen - 3;
+				data[pos] := SHORT(CHR(sniLen DIV 256));
+		data[pos + 1] := SHORT(CHR(sniLen MOD 256));
+		INC(pos, 2);
+				(*server name*)
+				FOR i := 0 TO sniLen - 1 DO
+			data[pos + i] := SELF.serverName[i]
+		END;
+				INC(pos, sniLen);
+				
+				(*EC type ext*)
+				data[pos] := 0X;
+				data[pos+1] := 0AX;	
+		INC(pos,2);
+
+				(*EC length*)
+				data[pos] := 0X;
+		data[pos + 1] := 4X;
+		INC(pos, 2);
+
+				(*EC list length*)
+				data[pos] := 0X;
+		data[pos + 1] := 2X;
+		INC(pos, 2);
+
+				(*EC x25519*)
+				data[pos] := 0X;
+				data[pos + 1] := 1DX;
+		INC(pos, 2);
+
+				(*EC_point_formats ext*)
+				data[pos] := 0X;
+				data[pos+1] := 0BX;	
+		INC(pos,2);
+
+				(*length*)
+				data[pos] := 0X;
+		data[pos + 1] := 2X;
+		INC(pos, 2);
+
+				(*EC_point_formats len*)
+				data[pos] := 1X;
+		INC(pos, 1);
+
+				(*uncompressed*)
+				data[pos] := 0X;
+		INC(pos, 1);
+
+				(*key_share ext*)
+				data[pos] := 0X;
+				data[pos+1] := 33X;	(*00  = Type: key_share*)
+		INC(pos,2);
+
+				DEC(keyShareLen,4);
+				(*key_share length*)
+				data[pos] := SHORT(CHR(keyShareLen DIV 256));
+		data[pos + 1] := SHORT(CHR(keyShareLen MOD 256));
+		INC(pos, 2);
+
+				DEC(keyShareLen,2);
+				
+				(*client key_share length*)
+				data[pos] := SHORT(CHR(keyShareLen DIV 256));
+		data[pos + 1] := SHORT(CHR(keyShareLen MOD 256));
+		INC(pos, 2);
+
+				(*EC x25519*)
+				data[pos] := 0X;
+				data[pos + 1] := 1DX;
+		INC(pos, 2);
+
+
+				(*Key exchange len*)
+				data[pos] := 0X;
+				data[pos + 1] := 20X;
+		INC(pos, 2);
+
+				FOR i:=0 TO 31 DO
+					data[pos] := SELF.x25519.PublicKey[i];
+					INC(pos);
+				END;
+				
+				
+				
+				(*signature_algorithms ext*)
+				data[pos] := 0X;
+				data[pos+1] := 0DX;	(* Type: signature_algorithms*)
+		INC(pos,2);
+
+				DEC(signatureAlgorithmsLen,4);
+				(*signature_algorithms length*)
+				data[pos] := SHORT(CHR(signatureAlgorithmsLen DIV 256));
+		data[pos + 1] := SHORT(CHR(signatureAlgorithmsLen MOD 256));
+		INC(pos, 2);
+
+				DEC(signatureAlgorithmsLen,2);
+				
+				(*hash signature_algorithms length*)
+				data[pos] := SHORT(CHR(signatureAlgorithmsLen DIV 256));
+		data[pos + 1] := SHORT(CHR(signatureAlgorithmsLen MOD 256));
+		INC(pos, 2);
+
+				(*HASH alg*)
+				data[pos] := 04X; (*SHA256*)
+		INC(pos, 1);
+
+				(*signature alg*)
+				data[pos] := 01X; (*RSA*)
+		INC(pos, 1);
+
+		SELF.SendHandshake(data, ClientHello, ofs - 4, pos - ofs)
+	END SendClientHello;
+
+	PROCEDURE (SELF: Connection) ReceiveCertificate (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE): AO.SIGNED32, NEW;
+		VAR
+			pos, length, lengthP3: AO.SIGNED32;
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("Certificate");
+			StdLog.Ln
+		END;
+		lengthP3 := ORD(data[ofs]) * 256 * 256 + ORD(data[ofs + 1]) * 256 + ORD(data[ofs + 2]);
+		length := ORD(data[ofs + 3]) * 256 * 256 + ORD(data[ofs + 4]) * 256 + ORD(data[ofs + 5]);
+		SELF.context.lengthOfRsaCertificate := length;
+		FOR pos := 0 TO length + 5 DO
+			SELF.context.rsaCertificate[pos] := data[pos + ofs]
+		END;
+				IF (SELF.pendingSecurityParameters.cipherSuite = TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256) OR 
+				(SELF.pendingSecurityParameters.cipherSuite = TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256) THEN
+					RETURN AwaitServerKeyExchange;
+				END;
+		RETURN AwaitServerHelloDone
+	END ReceiveCertificate;
+
+	PROCEDURE (SELF: Connection) ReceiveServerKeyExchange (IN data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE): AO.SIGNED32, NEW;
+			VAR
+				remotePubKey : ARRAY 32 OF SHORTCHAR;
+				signature : ARRAY 512 OF SHORTCHAR;
+		pos, length, lengthP3, sigLen: AO.SIGNED32;
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("ReceiveServerKeyExchange");
+			StdLog.Ln;
+
+		END;
+				ASSERT(data[ofs] = 03X);(*named curve*)
+
+				ASSERT(data[ofs+1] = 00X);(*x25519*)
+				ASSERT(data[ofs+2] = 1DX);(*x25519*)
+				
+				ASSERT(data[ofs+3] = 20X);(*len = 32*)
+				
+				FOR pos := 0 TO 31 DO
+			remotePubKey[pos] := data[pos + 4 + ofs]
+		END;
+				(*StdLog.String("Remote x25519 pub key:");
+				FOR pos:= 0 TO 31 DO
+					AO.LogHex(ORD(remotePubKey[pos]), -2);
+				END;
+		StdLog.Ln;*)
+
+				X25519.Agreement(SELF.x25519.PrivateKey, remotePubKey, SELF.x25519Shared);
+				
+				ASSERT(data[36 + ofs+0] = 04X);(*SHA256*)
+				ASSERT(data[36 + ofs+1] = 01X);(*RSA*)
+				
+				sigLen := 256 * ORD(data[36 + ofs+2]) + ORD(data[36 + ofs+3]);
+				ASSERT(sigLen <= 512);	(* 64-бит: удалённый bounds-check — иначе запись за пределы signature[] от вредоносного сервера *)
+
+
+				FOR pos := 0 TO sigLen - 1 DO
+			signature[pos] := data[36 + pos + 4 + ofs]
+		END;
+
+				(*  TODO CHECK SIGNATURE *)
+
+		RETURN AwaitServerHelloDone
+	END ReceiveServerKeyExchange;
+
+	PROCEDURE (SELF: Connection) ReceiveServerHelloDone (IN data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE): AO.SIGNED32, NEW;
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("ServerHelloDone");
+			StdLog.Ln
+		END;
+		RETURN GenerateClientKeyExchange
+	END ReceiveServerHelloDone;
+
+
+	PROCEDURE (SELF: Connection) ReceiveWarning (desc : AO.SIGNED32), NEW;
+
+	BEGIN
+		SELF.tlsErrorCause := desc;
+		SELF.SendError(CloseNotify)
+	END ReceiveWarning;
+
+	PROCEDURE (SELF: Connection) ReceiveError (alertType : AO.SIGNED32), NEW;
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(FALSE);
+			StdLog.String("Error");
+			StdLog.Ln;
+			StdLog.String("  alertType: ");
+			StdLog.Int(alertType);
+			StdLog.Ln
+		END;
+		IF SELF.session # NIL THEN
+			SELF.session.Invalidate()
+		END;
+		SELF.Close();
+
+
+	END ReceiveError;
+
+
+	PROCEDURE (SELF: Connection) ReceiveAlert (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE), NEW;
+		VAR
+			level, description: AO.SIGNED32;
+			ptr: AO.SIZE;
+
+
+	BEGIN
+		ptr := ofs;
+		WHILE ptr < ofs + len DO
+			level := ORD(data[ptr]);
+			description := ORD(data[ptr + 1]);
+			IF level = Warning THEN
+				SELF.ReceiveWarning(description)
+			ELSIF level = Fatal THEN
+				SELF.ReceiveError(description)
+			ELSE
+				SELF.SendError(IllegalParameter)
+			END;
+			INC(ptr, 2)
+		END
+	END ReceiveAlert;
+
+
+	PROCEDURE (SELF: Connection) SendClientKeyExchange (VAR data : ARRAY OF SHORTCHAR; ofs : AO.SIZE): AO.SIGNED32, NEW;
+		VAR
+			length: AO.SIZE;
+						i : INTEGER;
+
+	BEGIN
+		IF Trace THEN
+			SELF.PrintDirection(TRUE);
+			StdLog.String("Client Key Exchange");
+			StdLog.Ln
+		END;
+				IF (SELF.pendingSecurityParameters.cipherSuite = TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256) OR
+				(SELF.pendingSecurityParameters.cipherSuite = TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256) THEN
+					SELF.session.preMasterSecretLen := 32;
+
+	    		data[ofs] := SHORT(CHR(32 MOD 256));
+					FOR i:=0 TO 31 DO
+						SELF.session.preMasterSecret[i] := SELF.x25519Shared[i];
+						data[ofs + 1 + i] := SELF.x25519.PublicKey[i];
+					END;
+					length := 31;
+				ELSE
+					SELF.context.GetRsaPublicKey;
+					SELF.session.preMasterSecretLen := 48;
+			Rng.Generate(SELF.session.preMasterSecret, 0, SELF.session.preMasterSecretLen);
+			SELF.session.preMasterSecret[0] := SELF.version[0];
+			SELF.session.preMasterSecret[1] := SELF.version[1];
+			PKCS1.Encrypt(SELF.session.preMasterSecret, 0, SELF.session.preMasterSecretLen, SELF.context.rsaPublicKey, 2, data, ofs + 2, length);
+			ASSERT(length # 0);
+			data[ofs] := (*WARN CONV CAST*)SHORT(CHR(length DIV 256));
+			data[ofs + 1] := (*WARN CONV CAST*)SHORT(CHR(length MOD 256));
+			
+				END;
+		SELF.SendHandshake(data, ClientKeyExchange, ofs - 4, length + 2);
+		SELF.GenerateMasterSecret;
+		SELF.GenerateKeys;
+		SELF.InitializeConnectionState(SELF.pendingWriteState, SELF.pendingSecurityParameters);
+		SELF.InitializeConnectionState(SELF.pendingReadState, SELF.pendingSecurityParameters);
+		RETURN GenerateChangeCipherSpec
+	END SendClientKeyExchange;
+
+
+	PROCEDURE (SELF: Connection) Transition (VAR data : ARRAY OF SHORTCHAR; action, subAction : AO.SIGNED32; ofs, len : AO.SIZE), NEW;
+		VAR
+			dummy: ARRAY 1 OF SHORTCHAR;
+			res: INTEGER;
+
+
+	BEGIN
+		IF action = ChangeCipherSpec THEN
+			CASE SELF.handshakeState OF
+				AwaitChangeSpec :		       SELF.ReceiveChangeCipherSpec(data, ofs);
+			SELF.handshakeState := AwaitFinished
+			|       AwaitChangeSpecWithResumption :			 SELF.ReceiveChangeCipherSpec(data, ofs);
+			SELF.handshakeState := AwaitFinishedWithResumption
+			ELSE
+				SELF.SendError(UnexpectedMessage)
+			END
+		ELSIF action = Handshake THEN
+			IF SELF.State() = ServerHandshake THEN
+				CASE SELF.handshakeState OF
+					AwaitClientHello :			      IF subAction = ClientHello THEN
+					SELF.handshakeState := SELF.ReceiveClientHello(data, ofs, len);
+					SELF.Transition(dummy, Handshake, 0, 0, 0)
+				ELSIF subAction = V2ClientHello THEN
+					SELF.handshakeState := SELF.ReceiveV2ClientHello(data, ofs, len);
+					SELF.Transition(dummy, Handshake, 0, 0, 0)
+				ELSE
+					SELF.SendError(UnexpectedMessage)
+				END
+				|       GenerateServerHello :			   SELF.SendServerHello(SELF.outbuf, 4);
+				SELF.SendCertificate(SELF.outbuf, 4);
+				SELF.handshakeState := GenerateServerHelloDone;
+				SELF.Transition(dummy, Handshake, 0, 0, 0)
+				|       GenerateServerHelloDone :			       SELF.SendServerHelloDone(SELF.outbuf, 4);
+				SELF.handshakeState := AwaitClientKeyExchange
+				|       AwaitClientKeyExchange :				
+										IF subAction = ClientKeyExchange THEN
+						SELF.ReceiveClientKeyExchange(data, ofs, len);
+						SELF.handshakeState := AwaitChangeSpec
+						ELSE
+						SELF.SendError(UnexpectedMessage)
+	    				    END
+				|       AwaitFinished :				 
+										IF subAction = Finished THEN
+						SELF.ReceiveFinished(data, ofs, len);
+						SELF.handshakeState := GenerateChangeCipherSpec;
+						SELF.Transition(dummy, Handshake, 0, 0, 0)
+						ELSE
+						SELF.SendError(UnexpectedMessage)
+	    				    END
+				|       GenerateChangeCipherSpec :			      
+										SELF.SendChangeCipherSpec;
+						SELF.SendFinished(SELF.outbuf, 4);
+						SELF.handshakeState := HandshakeFinished;
+						SELF.SetState(TCP.Established);
+						IF SELF.context.policy.sessionResumptionEnabled THEN
+						SELF.context.StoreSession(SELF.session)
+						END
+				|       GenerateHelloWithResumption :			   			
+										SELF.SendServerHello(SELF.outbuf, 4);
+						SELF.PrepareSecurityParameters(SELF.pendingSecurityParameters, 			SELF.pendingSecurityParameters.cipherSuite, res);
+						IF res < 0 THEN
+						SELF.SendError(UnexpectedMessage)
+	    				    END;
+		    			    SELF.PrepareConnectionState(SELF.pendingWriteState, SELF.pendingSecurityParameters.cipherSuite, res);
+			    		    IF res < 0 THEN
+				    	    SELF.SendError(HandshakeFailure)
+						END;
+						SELF.PrepareConnectionState(SELF.pendingReadState, SELF.pendingSecurityParameters.cipherSuite, res);
+						IF res < 0 THEN
+						SELF.SendError(HandshakeFailure)
+						END;
+						SELF.GenerateKeys();
+						SELF.InitializeConnectionState(SELF.pendingWriteState, SELF.pendingSecurityParameters);
+						SELF.InitializeConnectionState(SELF.pendingReadState, SELF.pendingSecurityParameters);
+						SELF.SendChangeCipherSpec;
+						SELF.SendFinished(SELF.outbuf, 4);
+						SELF.handshakeState := AwaitChangeSpecWithResumption
+				|       AwaitFinishedWithResumption :			   
+										IF subAction = Finished THEN
+						SELF.ReceiveFinished(data, ofs, len);
+						SELF.handshakeState := HandshakeFinished;
+						SELF.SetState(TCP.Established)
+						ELSE
+						SELF.SendError(UnexpectedMessage)
+	    				    END
+				END
+			ELSIF SELF.State() = ClientHandshake THEN
+				CASE SELF.handshakeState OF
+					GenerateClientHello :			   
+											SELF.SendClientHello(SELF.outbuf, 4);
+							SELF.handshakeState := AwaitServerHello
+				|       AwaitServerHello :			      
+											SELF.handshakeState := SELF.ReceiveServerHello(data, ofs, len)
+				|       AwaitCertificate :			      
+											SELF.handshakeState := SELF.ReceiveCertificate(data, ofs, len)
+								|       AwaitServerKeyExchange :	  
+											ASSERT(subAction=0CH); (*HandshakeType = ServerKeyExchange *)		   
+											SELF.handshakeState := SELF.ReceiveServerKeyExchange(data, ofs, len)
+				|       AwaitServerHelloDone :			  
+											SELF.handshakeState := SELF.ReceiveServerHelloDone(data, ofs, len);
+							SELF.Transition(dummy, Handshake, 0, 0, 0)
+				|       GenerateClientKeyExchange :			     
+											SELF.handshakeState := SELF.SendClientKeyExchange(SELF.outbuf, 4);
+							SELF.Transition(dummy, Handshake, 0, 0, 0)
+				|       GenerateChangeCipherSpec :			      
+											SELF.SendChangeCipherSpec;
+							SELF.SendFinished(SELF.outbuf, 4);
+							SELF.handshakeState := AwaitChangeSpec
+				|       AwaitChangeSpec :			       
+											SELF.ReceiveChangeCipherSpec(data, ofs);
+							SELF.handshakeState := AwaitFinished
+				|       AwaitFinished :				 
+											SELF.ReceiveFinished(data, ofs, len);
+							SELF.SetState(TCP.Established)
+				END
+			ELSIF SELF.State() = TCP.Established THEN
+				IF subAction = ClientHello THEN
+					SELF.SetState((*WARN CONV CAST*)SHORT(ServerHandshake));
+					SELF.handshakeState := SELF.ReceiveClientHello(data, ofs, len);
+					SELF.Transition(dummy, Handshake, 0, 0, 0)
+				ELSE
+					SELF.SendError(UnexpectedMessage)
+				END
+			END
+		END
+	END Transition;
+
+	PROCEDURE (SELF: Connection) ReceiveV2Handshake (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE), NEW;
+
+	BEGIN
+		ASSERT(data[ofs] = CHR(1));
+		SELF.hsMD5send.Initialize();
+		SELF.hsSHAsend.Initialize();
+		SELF.hsMD5verify.Initialize();
+		SELF.hsSHAverify.Initialize();
+		SELF.hsMD5send.Update(data, ofs, len);
+		SELF.hsSHAsend.Update(data, ofs, len);
+		SELF.hsMD5verify.Update(data, ofs, len);
+		SELF.hsSHAverify.Update(data, ofs, len);
+		SELF.Transition(data, Handshake, V2ClientHello, ofs, len)
+	END ReceiveV2Handshake;
+
+
+	PROCEDURE (SELF: Connection) ReceiveHandshake (VAR data : ARRAY OF SHORTCHAR; ofs, len : AO.SIZE), NEW;
+		VAR
+			msgLen, hsType: AO.SIGNED32;
+			ptr: AO.SIZE;
+
+
+	BEGIN
+		ASSERT(LEN(data) >= ofs + len);
+		ptr := ofs;
+		WHILE ptr < ofs + len DO
+			hsType := ORD(data[ptr]);
+			msgLen := 256 * 256 * ORD(data[ptr + 1]) + 256 * ORD(data[ptr + 2]) + ORD(data[ptr + 3]);
+			IF SELF.version[1] < 3X THEN
+				SELF.hsMD5send.Update(data, ptr, msgLen + 4);
+				SELF.hsSHAsend.Update(data, ptr, msgLen + 4);
+				IF hsType # Finished THEN
+					SELF.hsMD5verify.Update(data, ptr, msgLen + 4);
+					SELF.hsSHAverify.Update(data, ptr, msgLen + 4)
+				END
+			ELSE
+				SELF.hsHashSend.Update(data, ptr, msgLen + 4);
+				IF hsType # Finished THEN
+					SELF.hsHashVerify.Update(data, ptr, msgLen + 4)
+				END
+			END;
+			SELF.Transition(data, Handshake, hsType, ptr + 4, msgLen);
+			ptr := ptr + 4 + msgLen
+		END
+	END ReceiveHandshake;
+
+	PROCEDURE (SELF: Connection) ReceiveRecord , NEW;
+		VAR
+			macInput: ARRAY 13 OF SHORTCHAR;
+			verify: ARRAY 32 OF SHORTCHAR;
+			i, padd, len, type, macSize, res, major, minor, ofs, length: AO.SIZE;
+			badRecordMac: BOOLEAN;
+						additionalData: ARRAY 13 OF SHORTCHAR;
+						tag: ARRAY 16 OF SHORTCHAR;
+						iv : ARRAY 12 OF SHORTCHAR;
+						aeadRes : INTEGER;
+	BEGIN
+				
+				badRecordMac := FALSE;
+				i := 0;
+				padd := 0;
+				len := 0;
+				type := 0;
+				macSize := 0;
+				res := 0;
+				major := 0;
+				minor := 0;
+				ofs := 0;
+				length := 0;
+				
+		SELF.currentReadState.recordSeq.Inc();
+		type := ORD(SELF.in.Get());
+		IF type = 128 THEN
+			len := ORD(SELF.in.Get());
+			SELF.in.Bytes(SELF.inbuf, 0, len, length);
+			IF len = length THEN
+				SELF.ReceiveV2Handshake(SELF.inbuf, 0, len);
+				RETURN
+			ELSE
+				SELF.SendError(InternalError);
+				RETURN
+			END
+		END;
+		major := ORD(SELF.in.Get());
+		minor := ORD(SELF.in.Get());
+		IF Trace THEN
+					(*	StdLog.String("TRACE server version:"); StdLog.Int(major);StdLog.Int(minor);StdLog.Ln;
+						StdLog.String("TRACE client version:");  StdLog.Int(ORD(SELF.version[0]));StdLog.Int(ORD(SELF.version[1]));StdLog.Ln;*)
+		(*		TRACE(major, minor, ORD(SELF.version[0]), ORD(SELF.version[1]))  *)
+		END;
+		
+		len := 256 * ORD(SELF.in.Get()) + ORD(SELF.in.Get());
+				IF (major < 3) OR (minor < 1) OR (major > ORD(SELF.version[0])) OR (minor > ORD(SELF.version[1])) THEN
+			SELF.SendError(ProtocolVersion);
+			RETURN
+		END;
+		IF len > MaxCiphertextLength THEN
+			SELF.SendError(RecordOverflow);
+			RETURN
+		END;
+		SELF.in.Bytes(SELF.inbuf, 0, len, length);
+		IF SELF.in.res # Streams.Ok THEN
+			IF Trace THEN
+				StdLog.String("Can't read record: supposed to read:");
+				StdLog.Int(len);
+				StdLog.String(" read: ");
+				StdLog.Int(length)
+			END;
+			RETURN
+		END;
+		IF (type = 128) OR (type < 20) OR (type > 23) THEN
+			RETURN
+		END;
+		IF length # len THEN
+			SELF.SendError(IllegalParameter);
+			RETURN
+		END;
+		IF (SELF.currentReadState.cipher # NIL) & (SELF.currentReadState.aeadCipher = NIL)  THEN
+			IF (SELF.currentReadState.cipher.blockSize > 1) & (len MOD SELF.currentReadState.cipher.blockSize # 0) THEN
+				badRecordMac := TRUE;
+				DEC(len, len MOD SELF.currentReadState.cipher.blockSize)
+			END;
+			SELF.currentReadState.cipher.Decrypt(SELF.inbuf, 0, len);
+			IF (minor >= 2) & (SELF.currentReadState.cipher.blockSize > 1) THEN
+				INC(ofs, SELF.currentReadState.cipher.blockSize);
+				DEC(len, ofs)
+			END;
+			IF res # Ciphers.Ok THEN
+				IF Trace THEN
+					StdLog.String("There was a Problem while decrypting record.");
+					StdLog.Ln
+				END;
+				badRecordMac := TRUE
+			END;
+			IF SELF.currentReadState.cipher.blockSize > 1 THEN
+				padd := ORD(SELF.inbuf[ofs + len - 1]);
+				FOR i := 0 TO padd DO
+					IF ofs + len - i - 1 < 0 THEN
+						badRecordMac := TRUE
+					ELSIF ORD(SELF.inbuf[ofs + len - i - 1]) # padd THEN
+						badRecordMac := TRUE
+					END
+				END;
+				IF len - padd - 1 < SELF.currentReadState.mac.size THEN
+					badRecordMac := TRUE
+				ELSE
+					len := len - padd - 1
+				END
+			END
+		END;
+				IF SELF.currentReadState.aeadCipher # NIL THEN
+					
+					DEC(len, LEN(tag));
+					FOR i := 0 TO LEN(tag) - 1 DO
+						tag[i] := SELF.inbuf[ofs + len + i];
+					END;
+					(*StdLog.String("Recieved tag:");StdLog.Ln;U.PrintHex(tag, 0, LEN(tag)); StdLog.Ln;*)
+					(*nonce implicit *)
+					iv[0] := SELF.currentReadState.iv[0];
+					iv[1] := SELF.currentReadState.iv[1];
+					iv[2] := SELF.currentReadState.iv[2];
+					iv[3] := SELF.currentReadState.iv[3];
+					(* nonce explicit *)
+					FOR i := 0 TO 7 DO
+						iv[4+i] := SELF.inbuf[ofs + i];
+					END;
+					(*StdLog.String("Recieved iv:");StdLog.Ln;U.PrintHex(iv, 4, 8); StdLog.Ln;*)
+					DEC(len, 8); (*nonce explicit len*)
+					SELF.currentReadState.aeadCipher.Init(SELF.currentReadState.cipher, iv, 12);
+					INC(ofs, 8);
+					
+					(*additional_data = seq_num + TLSCompressed.type +
+			TLSCompressed.version + TLSCompressed.length;*)
+					SELF.currentReadState.recordSeq.GetBytes(additionalData, 0);
+					additionalData[8] := SHORT(CHR(type));
+		    additionalData[9] := SHORT(CHR(major));
+		    additionalData[10] := SHORT(CHR(minor));
+		    additionalData[11] := SHORT(CHR(len DIV 256));
+		    additionalData[12] := SHORT(CHR(len));
+					(*StdLog.String("additionalData:");StdLog.Ln;U.PrintHex(additionalData, 0, LEN(additionalData)); StdLog.Ln;*)
+					
+					(*StdLog.String("Recieved c:");StdLog.Ln;U.PrintHex(SELF.inbuf, ofs, len); StdLog.Ln;*)
+					SELF.currentReadState.aeadCipher.Decrypt(SELF.inbuf, additionalData, tag, ofs, len, LEN(additionalData), LEN(tag)* 8, SELF.inbuf, ofs, aeadRes);
+					(*StdLog.String("Decrypted p:");AO.LogBuffer(SELF.inbuf, ofs, len);StdLog.Ln;U.PrintHex(SELF.inbuf, ofs, len); StdLog.Ln;*)
+					
+					IF aeadRes # 0 THEN
+						badRecordMac := TRUE
+					END;
+				END;
+		IF (SELF.currentReadState.mac # NIL) & (SELF.currentReadState.aeadCipher = NIL) THEN
+			macSize := SELF.currentReadState.mac.size;
+			len := len - macSize;
+			SELF.currentReadState.recordSeq.GetBytes(macInput, 0);
+			macInput[8] := (*WARN CONV CAST*)SHORT(CHR(type));
+			macInput[9] := (*WARN CONV CAST*)SHORT(CHR(major));
+			macInput[10] := (*WARN CONV CAST*)SHORT(CHR(minor));
+			macInput[11] := (*WARN CONV CAST*)SHORT(CHR(len DIV 256));
+			macInput[12] := (*WARN CONV CAST*)SHORT(CHR(len));
+			SELF.currentReadState.mac.Initialize(SELF.currentReadState.macSecret, macSize);
+			SELF.currentReadState.mac.Update(macInput, 0, 13);
+			SELF.currentReadState.mac.Update(SELF.inbuf, ofs, len);
+			SELF.currentReadState.mac.GetMac(verify, 0);
+			IF ~badRecordMac THEN
+				FOR i := 0 TO macSize - 1 DO
+					IF SELF.inbuf[ofs + len + i] # verify[i] THEN
+						badRecordMac := TRUE
+					END
+				END
+			END
+		END;
+		IF badRecordMac THEN
+			SELF.SendError(BadRecordMac);
+			RETURN
+		END;
+		CASE type OF
+			Handshake :	     
+							SELF.ReceiveHandshake(SELF.inbuf, ofs, len)
+		|       ApplicationData :	       
+						SELF.appDataWriter.Bytes(SELF.inbuf, ofs, len);
+    		    	SELF.appDataWriter.Update
+		|       Alert :		 
+						ASSERT(len = 2);
+				SELF.ReceiveAlert(SELF.inbuf, ofs, len)
+		|       ChangeCipherSpec :	     
+						ASSERT(len = 1);
+				SELF.Transition(SELF.inbuf, ChangeCipherSpec, 0, ofs, len)
+		ELSE
+			SELF.SendError(UnexpectedMessage);
+			RETURN
+		END
+	END ReceiveRecord;
+
+
+	PROCEDURE (SELF: Connection) StartHandshake , NEW;
+
+	BEGIN
+
+		Streams.OpenReader(SELF.in, SELF.conn.receiver);
+		Streams.OpenWriter(SELF.out, SELF.conn.sender);
+		SELF.SetState((*WARN CONV CAST*)SHORT(ClientHandshake));
+		SELF.handshakeState := GenerateClientHello;
+		SELF.Transition(SELF.outbuf, Handshake, 0, 0, 0)
+	END StartHandshake;
+
+	PROCEDURE GetConnection* (): Connection;
+		VAR
+			con: Connection;
+
+
+	BEGIN
+		NEW(con); con.Init();
+		RETURN con
+	END GetConnection;
+
+	PROCEDURE GetServerConnection* (IN certificate, pHex, qHex, eHex : ARRAY OF SHORTCHAR; pLen, qLen, eLen : AO.SIGNED32): Connection;
+		VAR
+			con: Connection;
+			ctx: Context;
+
+
+	BEGIN
+		NEW(ctx); ctx.Init(defaultCipherPolicy);
+		IF ctx.LoadRsaCertificate(certificate) # Ok THEN
+			RETURN NIL
+		END;
+		ctx.LoadRsaPrivateKey(pHex, qHex, eHex, SHORT(pLen), SHORT(qLen), SHORT(eLen));
+		NEW(con);
+		con.SetContext(ctx);
+		RETURN con
+	END GetServerConnection;
+
+	PROCEDURE InitDefaults ;
+		VAR
+			defaultSuites: ARRAY DefaultSuitesNbr OF AO.SIGNED32;
+	BEGIN
+		defaultSuites[0] := TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256;
+		defaultSuites[1] := TlsRsaWithAes128CbcSha;
+		defaultSuites[2] := TlsRsaWith3DesEdeCbcSha; 
+				defaultSuites[3] := TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256;
+				defaultSuites[4] := TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+		NEW(defaultCipherPolicy);defaultCipherPolicy.Init();
+		defaultCipherPolicy.SetCipherSuites(defaultSuites, DefaultSuitesNbr);
+		defaultCipherPolicy.SetVersion(1, 2)
+	END InitDefaults;
+
+	PROCEDURE (SELF: Connection) Open* (llocalAdr, remoteAdr: ARRAY OF CHAR;  VAR res : INTEGER);
+			VAR cr : ConnectionReceiver;
+					cs : ConnectionSender;
+					i : INTEGER;
+	BEGIN
+		ASSERT(SELF.conn = NIL);
+		IF SELF.context = NIL THEN
+			SELF.SetDefaultPolicy
+		END;
+		SELF.client := LEN(remoteAdr) # 0(*~IP.IsNilAdr(fip)*);
+		NEW(SELF.conn);SELF.conn.Init();
+		SELF.conn.Open(llocalAdr, remoteAdr, res);
+		IF res # TCP.Ok THEN
+						SELF.Close;
+			RETURN
+		END;
+				SELF.remoteAdr := SELF.conn.remoteAdr;
+				
+				i := 0;
+				WHILE (i < LEN(remoteAdr)) & (remoteAdr[i] # ':') DO
+					SELF.serverName[i] := SHORT(remoteAdr[i]);
+					INC(i)
+				END;
+				SELF.serverName[i] := 0X;
+				StdLog.String("Server name:");StdLog.String(LONG(SELF.serverName));
+				StdLog.Ln;
+				
+				NEW(cr);cr.conn := SELF; SELF.receiver := cr;
+				NEW(cs);cs.conn := SELF; SELF.sender := cs;
+		SELF.SetState(SELF.conn.state);
+		res := Ok;
+		IF SELF.client THEN
+			SELF.Connect
+		END;
+		ASSERT(SELF.conn # NIL);
+				IF SELF.client THEN
+					SELF.StartHandshake;
+					
+					REPEAT
+						SELF.ReceiveRecord
+					UNTIL (SELF.State() = TCP.Established) OR (SELF.State() = TCP.Closed);
+				ELSE
+					(* TODO *)
+					IF SELF.State() # TCP.Listen THEN
+						(* listen for incoming messages *)
+						REPEAT
+							SELF.ReceiveRecord( )
+						UNTIL (SELF.State() = TCP.Closed) OR (SELF.in.res # Streams.Ok);
+						SELF.Close();
+					END;
+				END
+	END Open;
+
+		PROCEDURE (SELF: AsyncWriter) Do* () : BOOLEAN;
+		BEGIN
+
+			IF (SELF.conn.State() = TCP.Closed) OR (SELF.conn.in.res # Streams.Ok)THEN
+				SELF.conn.Close;
+				RETURN FALSE;
+			ELSE
+				SELF.conn.ReceiveRecord;
+				RETURN TRUE;
+			END
+		END Do;
+		
+		PROCEDURE (SELF:SessionInvalidator) Do;
+		BEGIN
+			IF Trace THEN
+				StdLog.String("TLS session.Invalidate"); StdLog.Ln;
+			END;
+			SELF.session.Invalidate;
+		END Do;
+
+BEGIN
+	InitDefaults
+END CryptoTLS.
+
+ .\openssl.exe s_client -cipher 'ECDHE-RSA-AES128-GCM-SHA256' -connect www.microsoft.com:443 -tls1_2
+
+
+ .\openssl.exe req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes
+ .\openssl.exe s_server -key key.pem -cert cert.pem -accept 44330 -www -cipher 'ECDHE-RSA-AES128-GCM-SHA256' -tls1_2
+
+https://www.ssllabs.com/ssltest/index.html
+
+https://tls.dxdt.ru/tls.html#logic
+
+
+
+
+
+
+

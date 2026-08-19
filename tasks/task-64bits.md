@@ -1039,6 +1039,20 @@ untracked, без -f не попадут в коммит. Подтвержден
       PaketController, PaketDocTools, PaketObxHttp.
     - Грабля: Grep по каталогу молча пропускает *.odc.txt (.gitignore) —
       include_ignored=true.
+87. Paket Update РАБОТАЕТ (после п.84+86): список скачивается (100%),
+    chunked-парсинг живой. Остаточный TRAP 0 при установке Cuda — это
+    UPSTREAM-особенность Paket, не 64-битная регрессия: наша Cuda/Docu/
+    Quick-Start.odc содержит "Depends: System Lin Std", а таких пакетов
+    нет в репозитории -> FindPackageBy=NIL -> AddToList дерефит p.data
+    (TRAP 203) либо ASSERT(downloading # NIL) без кода (TRAP 0,
+    AssertTrap=0 по умолчанию в CPB). Прогрессия: NIL-guard в
+    PaketFiles.SetDependencies (пропуск NIL-зависимостей) и
+    PaketController.InstallPackage (deps.package # NIL), ASSERT получил
+    код 21. Источники Paket живут только в bbcp64use/Paket (не в git) —
+    при self-update Paket с сервера патчи перезапишутся! ОТКРЫТО: стек-
+    ходилка в репорте этого трапа стартовала с битого FP (0x000061DE...)
+    -> cycle guard, origin-фрейм не виден; разобрать раскладку фреймов на
+    пути Services-action (см. также консольный frame-walker).
 86. ИСПРАВЛЕН второй корневой кодген-баг (KB/Const64ShortcutBug.md): Int64-
     константы с нулевыми младшими 32 битами (0x1000000000000000 = hexLimit в
     StringToLInt) обнулялись shortcut'ами эмиттера — XOR r,r в GenMove смотрел
